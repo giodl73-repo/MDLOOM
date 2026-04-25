@@ -5,7 +5,8 @@
 ///   2. AI (fix-guide skill) reads rich.json → writes plan.json
 ///   3. `glint fix --plan plan.json` applies edits to files
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
@@ -92,6 +93,16 @@ impl std::fmt::Display for Confidence {
 pub struct FixOptions {
     pub dry_run: bool,
     pub min_confidence: Confidence,
+    /// Warn when non-whitespace content in old_string doesn't appear in new_string.
+    /// Pattern B (annotation removal) always triggers this — it requires confirmation
+    /// that the removed text was preserved elsewhere.
+    pub check_signal: bool,
+}
+
+impl Default for FixOptions {
+    fn default() -> Self {
+        Self { dry_run: false, min_confidence: Confidence::Low, check_signal: true }
+    }
 }
 
 #[derive(Debug)]
@@ -185,6 +196,34 @@ impl FixPlan {
                     continue;
                 }
 
+                // Signal-loss check: warn if non-whitespace content is removed
+                if opts.check_signal && !fix.edit.new_string.is_empty() {
+                    let lost = signal_loss(&fix.edit.old_string, &fix.edit.new_string);
+                    if !lost.is_empty() {
+                        eprintln!(
+                            "  {} [{}] signal loss warning — these words removed from line {}:",
+                            "WARN".yellow(),
+                            fix.id,
+                            fix.edit.line
+                        );
+                        for word in &lost {
+                            eprintln!("    {:?}", word);
+                        }
+                        eprintln!("  Verify this content was preserved elsewhere before applying.");
+                        if !opts.dry_run {
+                            // Skip the fix — signal loss requires confirmation
+                            skipped.push(SkipReason {
+                                id: fix.id.clone(),
+                                reason: format!(
+                                    "signal loss: words {:?} removed from old_string but absent from new_string",
+                                    lost
+                                ),
+                            });
+                            continue;
+                        }
+                    }
+                }
+
                 if opts.dry_run {
                     // Show the diff for this fix
                     print_fix_diff(&file_path, fix, &lines[line_idx]);
@@ -207,6 +246,41 @@ impl FixPlan {
         }
 
         Ok(FixResult { applied, skipped, files_modified })
+    }
+}
+
+/// Detect signal loss: words in old_string that don't appear in new_string.
+/// "Words" are non-whitespace tokens. Pure whitespace changes → no signal loss.
+/// Used to catch Pattern B removals (annotation after │) before they're applied.
+pub fn signal_loss(old: &str, new: &str) -> Vec<String> {
+    if old.trim() == new.trim() { return vec![]; } // whitespace-only change
+
+    let old_words: std::collections::HashSet<&str> = old
+        .split_whitespace()
+        .filter(|w| w.len() > 2) // skip short tokens (│, ←, spaces)
+        .collect();
+    let new_words: std::collections::HashSet<&str> = new
+        .split_whitespace()
+        .collect();
+
+    old_words.into_iter()
+        .filter(|w| !new_words.contains(*w))
+        .map(String::from)
+        .collect()
+}
+
+/// Classify a fix as Pattern B (annotation after closing │) vs. plain whitespace fix.
+/// Pattern B: old_string has meaningful text AFTER the last │/|
+pub fn is_pattern_b(old_string: &str) -> bool {
+    let trimmed = old_string.trim_end();
+    // Find the last │ or | in the line
+    if let Some(last_bar_pos) = trimmed.rfind(['│', '|']) {
+        let after = &trimmed[last_bar_pos + trimmed[last_bar_pos..].chars().next()
+            .map(|c| c.len_utf8()).unwrap_or(1)..];
+        // If there's non-whitespace content after the last bar → Pattern B
+        !after.trim().is_empty()
+    } else {
+        false
     }
 }
 
@@ -318,7 +392,7 @@ mod tests {
         };
 
         let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low },
+            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
             dir.path(),
         ).unwrap();
 
@@ -351,7 +425,7 @@ mod tests {
         };
 
         let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low },
+            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
             dir.path(),
         ).unwrap();
 
@@ -386,7 +460,7 @@ mod tests {
         };
 
         let _result = plan.apply(
-            &FixOptions { dry_run: true, min_confidence: Confidence::Low },
+            &FixOptions { dry_run: true, min_confidence: Confidence::Low, check_signal: false },
             dir.path(),
         ).unwrap();
 
@@ -428,7 +502,7 @@ mod tests {
         };
 
         let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low },
+            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
             dir.path(),
         ).unwrap();
 

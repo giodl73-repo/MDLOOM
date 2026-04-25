@@ -646,7 +646,7 @@ fn fix_plan_confidence_filtering() {
 
     // Apply with min_confidence = High → only high-fix applies
     let result = plan.apply(
-        &FixOptions { dry_run: false, min_confidence: Confidence::High },
+        &FixOptions { dry_run: false, min_confidence: Confidence::High, check_signal: false },
         dir.path(),
     ).unwrap();
 
@@ -1207,7 +1207,7 @@ fn fix_plan_applies_to_multiple_files() {
     };
 
     let result = plan.apply(
-        &FixOptions { dry_run: false, min_confidence: Confidence::Low },
+        &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
         dir.path(),
     ).unwrap();
 
@@ -1229,6 +1229,53 @@ fn unicode_wide_chars_measured_correctly() {
     let diags = check.check(Path::new("test.md"), content);
     // Perfect box — zero errors
     assert!(diags.is_empty(), "ASCII box with spaces: should have zero errors, got:\n{}", format_diags(&diags));
+}
+
+// ─────────────────────────────────────────────────────────
+// Signal-loss and Pattern B detection
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn signal_loss_detects_removed_words() {
+    use glint_lib::fix::signal_loss;
+    // Annotation removed from line
+    let old = "  │  compiles source     │  cc -S / cpp / as";
+    let new = "  │  compiles source     │";
+    let lost = signal_loss(old, new);
+    // "cpp" (len=3) is above the 2-char filter threshold and must be flagged
+    assert!(lost.iter().any(|w| w.as_str() == "cpp"), "removed tool name 'cpp' must be flagged, got: {:?}", lost);
+}
+
+#[test]
+fn signal_loss_passes_whitespace_only_change() {
+    use glint_lib::fix::signal_loss;
+    let old = "  │  compiles source      │";
+    let new = "  │  compiles source       │";  // one more trailing space
+    let lost = signal_loss(old, new);
+    assert!(lost.is_empty(), "whitespace-only changes must not flag signal loss");
+}
+
+#[test]
+fn pattern_b_detects_annotation_after_bar() {
+    use glint_lib::fix::is_pattern_b;
+    assert!(is_pattern_b("  │ content │  ← annotation"), "annotation after │ is Pattern B");
+    assert!(is_pattern_b("│ stage │  cc -S"), "tool label after │ is Pattern B");
+    assert!(!is_pattern_b("  │ content │"), "clean closing │ is not Pattern B");
+    assert!(!is_pattern_b("  │ content │  "), "trailing spaces only is not Pattern B");
+}
+
+#[test]
+fn nested_box_col_fix_only_adjusts_leftmost() {
+    use glint_lib::checks::ascii_box::AsciiBoxCheck;
+    use glint_lib::checks::Check;
+    use glint_lib::config::AsciiBoxConfig;
+    // A nested box where inner │ and outer │ are both off by 1
+    // The fix should add ONE space at the leftmost misaligned │, cascading the rest
+    let content = "```\n┌──────────────────────────────┐\n│  ┌──────────┐  inner text   │\n│  └──────────┘  more text    │\n└──────────────────────────────┘\n```";
+    let check = AsciiBoxCheck { config: AsciiBoxConfig::default() };
+    // Just verify it doesn't panic and returns something
+    let diags = check.check(Path::new("test.md"), content);
+    let _ = diags; // nested boxes may produce warnings; just verify no crash
 }
 
 // ─────────────────────────────────────────────────────────

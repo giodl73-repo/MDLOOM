@@ -63,6 +63,10 @@ enum Command {
         /// Skip re-running check after applying fixes
         #[arg(long)]
         no_verify: bool,
+        /// Skip signal-loss check (allow fixes that remove non-whitespace content)
+        /// Use only when you've confirmed the removed content is preserved elsewhere
+        #[arg(long)]
+        no_signal_check: bool,
     },
     /// Generate a pre-populated draft fix plan — AI fills in decisions inline
     Draft {
@@ -95,8 +99,8 @@ fn main() -> Result<()> {
         _ => {}
     }
     match cli.command {
-        Some(Command::Fix { plan, dry_run, min_confidence, no_verify }) => {
-            return cmd_fix(plan, dry_run, min_confidence, no_verify, &cli.config);
+        Some(Command::Fix { plan, dry_run, min_confidence, no_verify, no_signal_check }) => {
+            return cmd_fix(plan, dry_run, min_confidence, no_verify, no_signal_check, &cli.config);
         }
         Some(Command::Draft { paths, output }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
@@ -242,6 +246,7 @@ fn cmd_fix(
     dry_run: bool,
     min_confidence_str: String,
     no_verify: bool,
+    no_signal_check: bool,
     config_override: &Option<PathBuf>,
 ) -> Result<()> {
     let min_confidence = match min_confidence_str.as_str() {
@@ -267,7 +272,7 @@ fn cmd_fix(
         dry_run,
     );
 
-    let opts = FixOptions { dry_run, min_confidence };
+    let opts = FixOptions { dry_run, min_confidence, check_signal: !no_signal_check };
     let result = plan.apply(&opts, &root)?;
 
     eprintln!();

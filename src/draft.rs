@@ -11,6 +11,7 @@
 /// `glint fix --plan draft-plan.json` applies it.
 
 use crate::diagnostic::{Diagnostic, Severity};
+use crate::fix::is_pattern_b;
 use unicode_width::UnicodeWidthChar;
 use crate::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
 use anyhow::Result;
@@ -55,6 +56,12 @@ pub struct DraftFix {
     /// True = already computed, no AI needed.
     /// False = AI must supply new_string before applying.
     pub auto: bool,
+    /// True = this line has Pattern B (text after closing │/|).
+    /// The text after the bar must be preserved — move it inside the box
+    /// or to adjacent prose. glint fix will block this unless new_string
+    /// contains the removed words OR --no-signal-check is set.
+    #[serde(default)]
+    pub pattern_b: bool,
     /// Rich context for this line — border_line, expected_cols, actual_cols.
     /// Populated when available (box diagnostics always have it).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,7 +228,8 @@ fn build_group(
             .find(|d| d.span.line == line_no && d.rich.is_some())
             .and_then(|d| serde_json::to_value(d.rich.as_ref()?).ok());
 
-        fixes.push(DraftFix { line: line_no, old_string, new_string, auto, context });
+        let pattern_b = is_pattern_b(&old_string);
+        fixes.push(DraftFix { line: line_no, old_string, new_string, auto, pattern_b, context });
     }
 
     // Build description from diagnostics
@@ -500,49 +508,64 @@ fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
     None
 }
 
-/// Fix box column misalignment by adjusting trailing space in the misaligned cell.
-/// Only handles ±1 drift where the actual and expected columns differ by exactly 1.
-/// The fix: for each misaligned separator, find the cell immediately before it
-/// and add or remove one trailing space.
+/// Fix box column misalignment for nested and flat boxes.
+///
+/// Key insight for nested boxes: when multiple `│` positions all shift by the
+/// same amount (because an inner cell grew/shrank), fixing the LEFTMOST
+/// misaligned `│` cascades all subsequent positions automatically. Fixing each
+/// `│` independently would double-insert spaces. So we find the leftmost
+/// mismatch, fix only that one, and stop.
+///
+/// Only handles ±1 drift (single column off). Larger drifts need AI judgment.
 fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -> Option<String> {
-    // Find pairs where actual ≠ expected and the difference is exactly 1
-    let mismatches: Vec<(usize, usize)> = expected_cols.iter()
+    // Find ALL mismatches where drift == 1, sorted by actual column (leftmost first)
+    let mut mismatches: Vec<(usize, usize)> = expected_cols.iter()
         .filter_map(|&exp| {
-            // Find the closest actual column
             let closest = actual_cols.iter().min_by_key(|&&a| a.abs_diff(exp))?;
             let drift = closest.abs_diff(exp);
             if drift == 1 { Some((exp, *closest)) } else { None }
         })
         .collect();
+    mismatches.sort_by_key(|&(_, act)| act); // leftmost actual column first
 
     if mismatches.is_empty() { return None; }
 
-    // Build new line character by character, adjusting spaces before misaligned | chars
+    // All mismatches have the same drift direction?
+    let first_dir = if mismatches[0].0 > mismatches[0].1 { 1i32 } else { -1i32 };
+    let all_same_dir = mismatches.iter().all(|&(exp, act)| {
+        let dir = if exp > act { 1i32 } else { -1i32 };
+        dir == first_dir
+    });
+
+    // If all columns are off in the same direction by 1, fixing the leftmost cascades.
+    // If they diverge (some left, some right), AI judgment needed.
+    if !all_same_dir { return None; }
+
+    // Fix ONLY the leftmost misaligned │ — cascades to all subsequent positions
+    let (exp_first, act_first) = mismatches[0];
+    let need_insert = exp_first > act_first; // insert space before | to push it right
+    let need_remove = exp_first < act_first; // remove space before | to pull it left
+
     let chars: Vec<char> = line.chars().collect();
     let n = chars.len();
-    let mut result: Vec<char> = Vec::with_capacity(n + mismatches.len());
-    let mut col_0 = 0usize; // 0-based visual column
+    let mut result: Vec<char> = Vec::with_capacity(n + 1);
+    let mut col_0 = 0usize;
+    let mut fixed = false;
 
     let mut i = 0;
     while i < n {
         let c = chars[i];
         let cur_col_1 = col_0 + 1; // 1-based
 
-        // Check if this char is a | at a position that needs adjustment
         let is_vertical = matches!(c, '|' | '│' | '║');
 
-        if is_vertical {
-            // Is this one of our misaligned separators?
-            let mismatch = mismatches.iter().find(|&&(exp, act)| act == cur_col_1);
-            if let Some(&(exp, act)) = mismatch {
-                if exp > act {
-                    // Need to be 1 col further right — insert space before this |
-                    result.push(' ');
-                } else if exp < act && result.last() == Some(&' ') {
-                    // Need to be 1 col further left — remove trailing space before this |
-                    result.pop();
-                }
+        if is_vertical && !fixed && cur_col_1 == act_first {
+            if need_insert {
+                result.push(' ');
+            } else if need_remove && result.last() == Some(&' ') {
+                result.pop();
             }
+            fixed = true;
         }
 
         result.push(c);
