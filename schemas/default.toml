@@ -1,0 +1,75 @@
+# glint.toml — default schema
+# Run `glint init` to copy this into your project.
+
+[meta]
+name = "My Project"
+description = "Markdown validation schema"
+
+[files]
+include = ["**/*.md"]
+exclude = [
+    # Add paths to exclude:
+    # "CHANGELOG.md",
+    # "_archive/**",
+]
+
+# ─────────────────────────────────────────────
+# ASCII Art Checks
+# ─────────────────────────────────────────────
+
+[ascii_box]
+enabled = true
+
+# 0 = exact alignment required. Increase to allow minor off-by-one slop.
+tolerance = 0
+
+# Only check inside fenced code blocks (```). Recommended — avoids false
+# positives in prose that happens to contain + or | characters.
+code_blocks_only = true
+
+# Also validate Unicode box-drawing character boxes (┌─┐ style).
+check_unicode = true
+
+[ascii_flow]
+enabled = true
+
+# Detect flowchart arrows (──▶, ──►, -->, →) and check they form
+# straight horizontal or vertical lines without skips.
+check_arrow_alignment = true
+
+# Check that text inside box cells has consistent padding on both sides.
+# e.g. "| foo |" (1 space each side) vs "| foo|" (missing right space).
+check_cell_padding = true
+
+# Minimum spaces of padding required inside a cell: "| text |" = 1
+min_cell_padding = 1
+
+# ─────────────────────────────────────────────
+# Markdown Structure Checks
+# ─────────────────────────────────────────────
+
+[markdown]
+enabled = false
+
+# Uncomment and adjust as needed:
+
+# max_h1 = 1
+# required_h2_all = ["Overview", "Usage"]
+# max_lines = 800
+
+# [[markdown.required_patterns]]
+# pattern = "```"
+# description = "must contain at least one code block"
+# severity = "warning"
+
+# ─────────────────────────────────────────────
+# Custom Rules
+# ─────────────────────────────────────────────
+# Each rule applies a regex to every file and reports matches (or non-matches).
+
+# [[custom_rules]]
+# name = "no_todo"
+# description = "TODO comments should not remain in published guides"
+# pattern = "TODO|FIXME|HACK"
+# negate = true   # warn when pattern IS found
+# severity = "warning"

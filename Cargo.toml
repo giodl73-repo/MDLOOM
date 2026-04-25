@@ -1,0 +1,37 @@
+[package]
+name = "glint"
+version = "0.1.0"
+edition = "2021"
+description = "A fast, schema-driven markdown and ASCII art linter"
+license = "MIT"
+repository = "https://github.com/giodl73-repo/glint"
+keywords = ["markdown", "linter", "ascii-art", "validation"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "glint"
+path = "src/main.rs"
+
+[lib]
+name = "glint_lib"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "color"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+rayon = "1.10"
+walkdir = "2"
+colored = "2"
+unicode-width = "0.2"
+globset = "0.4"
+anyhow = "1"
+thiserror = "2"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

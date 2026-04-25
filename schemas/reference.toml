@@ -1,0 +1,136 @@
+# glint.toml for the MAXIM Reference Library
+# Copy to C:\src\maxim\glint.toml to activate.
+#
+# Cascade model:
+#   - This root schema applies to all files
+#   - Per-directory glint.toml files inherit and add section-specific rules
+
+[meta]
+name = "MAXIM Reference Library"
+description = "Validation schema for the MAXIM personal encyclopedia"
+
+[files]
+include = ["**/*.md"]
+exclude = [
+    # Root-level library management files — not content guides
+    "TRACKER.md",
+    "BILL-OF-MATERIALS.md",
+    "VOLUMES.md",
+    "EXPANSION.md",
+    "REVIEW.md",
+    "SCORECARD.md",
+    "HISTORY.md",
+    "CONCEPT-INDEX.md",
+    "READING-MAPS.md",
+    "PREREQUISITES.md",
+    "PROJECTS.md",
+    "COLOPHON.md",
+    "FOREWORD.md",
+    "DEDICATION.md",
+    "PUZZLE-HUNT.md",
+    "TO-SIGNAL.md",
+    "book.md",
+    "index.md",
+    # Archive and generated
+    "_archive/**",
+    # Section landing pages (different structure than guides)
+    "sections/**",
+    # Companion projects with their own structure
+    "atlas/**",
+    "naturalis/**",
+    "joker/**",
+    "cards/**",
+    "puzzle-hunt/**",
+    "read-this-first/**",
+    # Directory overview files
+    "*/00-OVERVIEW.md",
+    "*/STATUS.md",
+]
+root = true
+
+# ─────────────────────────────────────────────
+# ASCII Art
+# ─────────────────────────────────────────────
+
+[ascii_box]
+enabled = true
+tolerance = 0
+code_blocks_only = true
+check_unicode = true
+
+[ascii_flow]
+enabled = true
+check_arrow_alignment = true
+check_cell_padding = true
+min_cell_padding = 1
+
+# ─────────────────────────────────────────────
+# Universal Guide Rules (all content files)
+# ─────────────────────────────────────────────
+
+[markdown]
+enabled = true
+max_h1 = 1
+
+# Every guide must end with a Decision Cheat Sheet
+required_h2_all = ["Decision Cheat Sheet"]
+
+# Every guide must have at least one code block (the landscape diagram)
+[[markdown.required_patterns]]
+pattern = "```"
+description = "must contain at least one code block (landscape diagram)"
+severity = "warning"
+
+# Guides should not have @editor tags in published state
+[[custom_rules]]
+name = "no_editor_tags"
+description = "@editor review tags should be resolved before considering a guide complete"
+pattern = "@editor\\["
+negate = true
+severity = "warning"
+
+# ─────────────────────────────────────────────
+# Section-Specific Rules
+# ─────────────────────────────────────────────
+
+# Computing & Software — full engineering stack guides
+[[section_schemas]]
+paths = ["computing/**", "ai-engineering/**", "data-science/**", "os/**", "scripting/**",
+         "cryptography/**", "computer-architecture/**", "machine-learning-theory/**"]
+required_h2_all = ["The Big Picture", "Common Confusion Points"]
+
+# Languages — per-language reference guides
+[[section_schemas]]
+paths = ["languages/**", "query-languages/**"]
+required_h2_all = ["Decision Cheat Sheet"]
+# Note: 00-OVERVIEW.md is excluded above; individual language guides
+# (01-TYPESCRIPT.md etc.) should have Type System Snapshot + Syntax Reference Card
+
+# Mathematics & Physics — formal + applied math
+[[section_schemas]]
+paths = ["mathematics/**", "physics/**", "abstract-algebra/**", "topology/**",
+         "number-theory/**", "signal-processing/**", "information-theory/**",
+         "control-theory/**", "electronics/**", "materials/**", "quantum-computing/**",
+         "probability-statistics/**", "differential-geometry/**", "numerical-methods/**",
+         "complex-analysis/**", "fluid-dynamics/**", "statistical-mechanics/**",
+         "partial-differential-equations/**", "variational-calculus/**", "lie-groups/**"]
+required_h2_all = ["The Big Picture"]
+
+# Life Sciences — biology through pharmacology
+[[section_schemas]]
+paths = ["biology/**", "botany/**", "ecology/**", "human-biology/**", "neuroscience/**",
+         "cognitive-science/**", "disease/**", "medicine/**", "nutrition/**",
+         "genomics/**", "immunology/**", "microbiology/**", "evolutionary-biology/**",
+         "virology/**", "biophysics/**", "pharmacology/**", "developmental-biology/**",
+         "natural-sciences/**"]
+required_h2_all = ["Decision Cheat Sheet"]
+
+# People section — biographical guides have a different structure
+[[section_schemas]]
+paths = ["mathematicians-logicians/**", "physicists-astronomers/**",
+         "chemists-naturalists/**", "engineers-inventors/**", "computing-pioneers/**",
+         "explorers/**", "philosophers-thinkers/**", "artists-architects/**",
+         "writers-poets/**", "political-reformers/**", "social-reformers/**",
+         "visionaries/**"]
+required_h2 = ["Comparison Table", "Timeline and Intellectual Lineage", "Common Confusion Points"]
+# People guides need at least one of these — flexible on exact heading
