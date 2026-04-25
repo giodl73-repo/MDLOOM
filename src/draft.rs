@@ -277,13 +277,29 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
         }
     }
 
-    // --- NOT auto-fixable: md_table_cell_padding ---
-    // Requires AI judgment because:
-    //   1. GFM tables allow \| (escaped pipe) inside cells — simple split('|') breaks these
-    //   2. Backtick code spans can contain | — `A|B` is one cell, not two
-    //   3. Some cells contain || (SQL concat) or |> (F# pipeline) operators
-    // AI must understand which | is a cell delimiter vs. content.
-    // See pitfall AD-10 in design/pitfalls/pitfalls-ascii-detection.md
+    // --- Deterministic: table cell padding ---
+    // Now safe: uses escaped-pipe-aware parser that handles \|, code spans, ||, |>
+    if codes_on_line.iter().any(|&c| c == "md_table_cell_padding") {
+        if let Some(fixed) = fix_table_cell_padding(old_string) {
+            return (fixed, true);
+        }
+    }
+
+    // --- Deterministic: box width ±1 (trailing space) ---
+    // "row width N ≠ box width M (box opened at line L)"
+    // For ±1: add or remove a trailing space in the last cell before closing │/|
+    if codes_on_line.iter().any(|&c| c == "ascii_box_width") {
+        // Only handle ±1 cases — larger diffs need AI judgment
+        let all_width_diags: Vec<&&Diagnostic> = diags.iter()
+            .filter(|d| d.span.line == line_no && d.code == "ascii_box_width")
+            .collect();
+        // Get the diff from the first width diagnostic
+        if let Some(diag) = all_width_diags.first() {
+            if let Some(fixed) = fix_box_width_one(old_string, &diag.message) {
+                return (fixed, true);
+            }
+        }
+    }
 
     // --- Deterministic: bar chart scale (proportionality) ---
     // Parse "expected ~N chars" from the message
@@ -374,37 +390,102 @@ fn fix_barchart_scale(line: &str, message: &str) -> Option<String> {
     Some(format!("{}{}{}", before, new_bar, new_after))
 }
 
-/// Add exactly 1 space of padding inside each cell of a pipe table row.
-/// `|col|` → `| col |`   `| col |` → left alone (already padded)
-/// Preserves separator rows (`|---|---|`) — adds spaces around each cell.
+/// Add padding to table cells using the escaped-pipe-aware parser.
+/// Correctly handles \|, backtick code spans, and operator sequences.
 fn fix_table_cell_padding(line: &str) -> Option<String> {
     let trimmed = line.trim();
     if !trimmed.starts_with('|') || !trimmed.ends_with('|') { return None; }
 
-    // Strip outer pipes
-    let inner = &trimmed[1..trimmed.len()-1];
-    let mut fixed_cells: Vec<String> = Vec::new();
+    let cells = parse_table_cells(trimmed);
+    if cells.is_empty() { return None; }
 
-    for cell in inner.split('|') {
+    let mut any_fixed = false;
+    let fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
+        let content = cell.trim();
+        if content.is_empty() { return cell; }
         let leading = cell.len() - cell.trim_start().len();
         let trailing = cell.len() - cell.trim_end().len();
-        let content = cell.trim();
+        if leading >= 1 && trailing >= 1 { return cell; }
+        any_fixed = true;
+        format!("{}{}{}", " ".repeat(leading.max(1)), content, " ".repeat(trailing.max(1)))
+    }).collect();
 
-        if content.is_empty() {
-            // Empty cell — keep as-is (handles |  | style)
-            fixed_cells.push(cell.to_string());
-            continue;
-        }
+    if !any_fixed { return None; }
 
-        // Ensure at least 1 space on each side
-        let new_leading = leading.max(1);
-        let new_trailing = trailing.max(1);
-        fixed_cells.push(format!("{}{}{}", " ".repeat(new_leading), content, " ".repeat(new_trailing)));
-    }
-
-    // Restore leading indentation
     let indent = line.len() - line.trim_start().len();
     Some(format!("{}|{}|", " ".repeat(indent), fixed_cells.join("|")))
+}
+
+/// Escaped-pipe-aware cell splitter — used by the fix generator.
+/// Mirrors parse_row in markdown_table.rs but operates on the full line.
+fn parse_table_cells(line: &str) -> Vec<String> {
+    let trimmed = line.trim();
+    let inner = if trimmed.starts_with('|') { &trimmed[1..] } else { trimmed };
+    let inner = if inner.ends_with('|') { &inner[..inner.len()-1] } else { inner };
+
+    let mut cells = Vec::new();
+    let mut current = String::new();
+    let mut chars = inner.chars().peekable();
+    let mut in_code = false;
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                current.push('\\'); current.push('|'); chars.next();
+            }
+            '`' => { in_code = !in_code; current.push(c); }
+            '|' if !in_code => { cells.push(current.clone()); current = String::new(); }
+            other => { current.push(other); }
+        }
+    }
+    cells.push(current);
+    cells
+}
+
+/// Fix box content row width by ±1 trailing space.
+/// Only handles the exact ±1 case — larger diffs need AI judgment.
+/// "row width N ≠ box width M" — if diff == 1, adjust trailing space in last cell.
+fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
+    // Parse "row width N ≠ box width M"
+    let (actual, expected) = parse_width_diff(message)?;
+    let diff = actual.abs_diff(expected);
+    if diff != 1 { return None; } // only handle ±1
+
+    // Find the closing vertical bar (│ or |) at the end of the line
+    let trimmed = line.trim_end();
+    let last_char = trimmed.chars().last()?;
+    if last_char != '│' && last_char != '|' { return None; }
+
+    if actual > expected {
+        // Too wide by 1: remove one trailing space before the closing bar
+        // Find the space just before the closing bar
+        let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
+        if without_last.ends_with(' ') {
+            // Remove the space
+            let trimmed_inner = without_last.trim_end_matches(' ');
+            // Add back exactly the right number of spaces to make width correct
+            let extra = without_last.len() - trimmed_inner.len() - 1; // one fewer space
+            let preserved_trailing = " ".repeat(extra);
+            return Some(format!("{}{}{}", trimmed_inner, preserved_trailing, last_char));
+        }
+    } else {
+        // Too narrow by 1: add one trailing space before the closing bar
+        let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
+        return Some(format!("{} {}", without_last, last_char));
+    }
+
+    None
+}
+
+/// Parse "row width N ≠ box width M" or "bottom border width N ≠ top border width M"
+/// from a width diagnostic message. Returns (actual, expected).
+fn parse_width_diff(message: &str) -> Option<(usize, usize)> {
+    // Pattern: "... width N ≠ ... width M ..."
+    let parts: Vec<&str> = message.split("width").collect();
+    if parts.len() < 3 { return None; }
+    let actual: usize = parts[1].trim().split_whitespace().next()?.parse().ok()?;
+    let expected: usize = parts[2].trim().split_whitespace().next()?.parse().ok()?;
+    Some((actual, expected))
 }
 
 fn is_block_char(c: char) -> bool {
