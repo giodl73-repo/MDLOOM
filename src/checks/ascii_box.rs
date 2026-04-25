@@ -326,6 +326,8 @@ fn check_boxes(
         let abs_top = b.top_line + line_offset;
         let abs_bottom = b.bottom_line + line_offset;
         let border_line = lines[b.top_line].to_string();
+        // All errors from this box share a group_id so glint draft can cluster them
+        let group_id = format!("box-l{}", abs_top);
 
         // Helper: build rich context for a line in this box
         let box_context = |abs_line: usize, actual: Vec<usize>| -> RichContext {
@@ -361,7 +363,8 @@ fn check_boxes(
                     ),
                 )
                 .with_note(format!("top border at line {}", abs_top))
-                .with_rich(ctx),
+                .with_rich(ctx)
+                .with_group(group_id.clone()),
             );
         }
 
@@ -398,7 +401,8 @@ fn check_boxes(
                                 row_width, b.top_width, abs_top
                             ),
                         )
-                        .with_rich(ctx),
+                        .with_rich(ctx)
+                .with_group(group_id.clone()),
                     );
                 }
             }
@@ -449,7 +453,8 @@ fn check_boxes(
                             "ascii_box_col",
                             msg,
                         )
-                        .with_rich(ctx),
+                        .with_rich(ctx)
+                .with_group(group_id.clone()),
                     );
                 }
             }
@@ -479,7 +484,8 @@ fn check_boxes(
                             abs_top
                         ),
                     )
-                    .with_rich(ctx),
+                    .with_rich(ctx)
+                .with_group(group_id.clone()),
                 );
             }
         }

@@ -1,6 +1,7 @@
 pub mod checks;
 pub mod config;
 pub mod diagnostic;
+pub mod draft;
 pub mod fix;
 pub mod runner;
 

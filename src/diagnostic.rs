@@ -74,6 +74,12 @@ pub struct Diagnostic {
     /// Rich context — always computed by checks, only emitted in --format rich.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rich: Option<RichContext>,
+
+    /// Groups related diagnostics from the same source object (same box, table, chart).
+    /// Used by `glint draft` to cluster errors for AI review.
+    /// Format: "<type>-l<line>" e.g. "box-l38", "table-l12", "chart-l20"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
 }
 
 impl Diagnostic {
@@ -93,6 +99,7 @@ impl Diagnostic {
             message: message.into(),
             note: None,
             rich: None,
+            group_id: None,
         }
     }
 
@@ -112,6 +119,7 @@ impl Diagnostic {
             message: message.into(),
             note: None,
             rich: None,
+            group_id: None,
         }
     }
 
@@ -122,6 +130,11 @@ impl Diagnostic {
 
     pub fn with_rich(mut self, ctx: RichContext) -> Self {
         self.rich = Some(ctx);
+        self
+    }
+
+    pub fn with_group(mut self, group_id: impl Into<String>) -> Self {
+        self.group_id = Some(group_id.into());
         self
     }
 }

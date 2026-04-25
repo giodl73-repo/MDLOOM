@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use glint_lib::draft::build_draft_plan;
 use glint_lib::fix::{serialize_json, serialize_rich, FixOptions};
 use glint_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
 use std::path::PathBuf;
@@ -62,6 +63,13 @@ enum Command {
         #[arg(long)]
         no_verify: bool,
     },
+    /// Generate a pre-populated draft fix plan — AI fills in decisions inline
+    Draft {
+        paths: Vec<PathBuf>,
+        /// Output file for the draft plan (default: draft-plan.json)
+        #[arg(short = 'o', long, default_value = "draft-plan.json")]
+        output: PathBuf,
+    },
     /// Print the effective config for a path
     Config,
     /// Write a glint.toml to the current directory
@@ -81,9 +89,17 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    match cli.command.as_ref() {
+        Some(Command::Draft { .. }) => {}  // handled below
+        _ => {}
+    }
     match cli.command {
         Some(Command::Fix { plan, dry_run, min_confidence, no_verify }) => {
             return cmd_fix(plan, dry_run, min_confidence, no_verify, &cli.config);
+        }
+        Some(Command::Draft { paths, output }) => {
+            let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
+            return cmd_draft(paths, output, &cli.config);
         }
         Some(Command::Init) => {
             return cmd_init();
@@ -355,6 +371,50 @@ fn cmd_stats(
 // ─────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────
+
+fn cmd_draft(paths: Vec<PathBuf>, output: PathBuf, config_override: &Option<PathBuf>) -> Result<()> {
+    // Collect all diagnostics (same as check)
+    let mut all_diags: Vec<Diagnostic> = Vec::new();
+    let root = paths.first().map(|p| if p.is_dir() { p.clone() } else { p.parent().unwrap_or(p).to_path_buf() })
+        .unwrap_or_else(|| std::env::current_dir().unwrap());
+
+    for path in &paths {
+        let cfg = load_config(path, config_override);
+        let dir = if path.is_dir() { path.clone() } else { path.parent().unwrap_or(path).to_path_buf() };
+        let runner = Runner::new(&dir, cfg)?;
+        if path.is_file() {
+            all_diags.extend(runner.lint_file(path));
+        } else {
+            all_diags.extend(runner.run());
+        }
+    }
+
+    let error_count = all_diags.iter().filter(|d| d.severity == Severity::Error).count();
+    let warn_count = all_diags.iter().filter(|d| d.severity == Severity::Warning).count();
+
+    // Build the draft plan
+    let draft = build_draft_plan(&all_diags, &root)?;
+
+    let json = serde_json::to_string_pretty(&draft)?;
+    std::fs::write(&output, &json)?;
+
+    eprintln!(
+        "{} — {} errors, {} warnings across {} groups ({} auto-fixable, {} need review)",
+        "draft".cyan().bold(),
+        error_count, warn_count,
+        draft.summary.total_groups,
+        draft.summary.auto_fixable,
+        draft.summary.needs_review,
+    );
+    eprintln!("Draft plan written to {}", output.display().to_string().cyan());
+    eprintln!();
+    eprintln!("Next steps:");
+    eprintln!("  1. Open {} — AI fills in `decision` and `new_string` for non-auto groups", output.display());
+    eprintln!("  2. glint fix --plan {} --dry-run", output.display());
+    eprintln!("  3. glint fix --plan {}", output.display());
+
+    Ok(())
+}
 
 fn load_config(path: &std::path::Path, override_path: &Option<PathBuf>) -> GlintConfig {
     if let Some(ref cfg_path) = override_path {
