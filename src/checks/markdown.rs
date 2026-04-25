@@ -148,14 +148,21 @@ impl Check for MarkdownCheck {
                     ));
                 }
                 // Trailing `#` signs (e.g. `## Title ##`) are valid CommonMark but
-                // considered bad style in this library
+                // considered bad style in this library.
+                // IMPORTANT: Only flag when the trailing # is preceded by a space.
+                // `C#` and `F#` are language names, not markdown decoration —
+                // `## Gotchas from C#` must NOT be flagged.
                 let content = after_hashes.trim();
-                if content.ends_with('#') && !content.trim_end_matches('#').is_empty() {
-                    diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
-                        "md_heading_format",
-                        "trailing `#` in heading — omit closing hashes",
-                    ));
+                if content.ends_with('#') {
+                    let without_trailing = content.trim_end_matches('#');
+                    // Trailing # is markdown decoration only when preceded by whitespace
+                    if without_trailing.ends_with(' ') || without_trailing.ends_with('\t') {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(), ln, 1,
+                            "md_heading_format",
+                            "trailing `#` in heading — omit closing hashes (e.g. `## Title` not `## Title ##`)",
+                        ));
+                    }
                 }
             }
         }

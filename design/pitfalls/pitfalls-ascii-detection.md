@@ -132,6 +132,30 @@ as the TOP of a new box. A line whose first junction character is a bottom-left 
 
 ---
 
+## AD-09: Language names containing symbols trigger symbol-based heuristics
+
+**Pattern:** Language names like `C#`, `F#`, `C++`, and `Objective-C` contain `#` and `+`
+characters that are also used as markdown structural markers. A heuristic that checks
+"does this heading end with `#`?" will false-positive on `## Gotchas from C#` and
+`# Language: F#`. Similarly, a check for `++` would fire on headings about C++.
+
+**Domain:** Any check that uses symbol characters as structural markers in contexts
+where those same characters appear in human-readable identifiers.
+
+**Structural solution:** Require the structural character to be preceded by a space
+or appear at a specific structural position. For trailing `#` in headings: only flag
+when the char before the trailing `#` run is whitespace — `## Title ##` (space before
+`##`) is decoration, `## Gotchas from C#` (no space before `#`) is a language name.
+
+**Status:** SOLVED  
+**Discovered by:** Running `glint draft` on the languages/ directory — all 17
+`md_heading_format` warnings were false positives on C# and F# guide headings.  
+**Proved by:** Zero `md_heading_format` errors after fix; real trailing-hash headings
+(with space before `##`) still detected correctly.  
+**Test:** Add test: `## Title ##` → warning, `## Gotchas from C#` → clean.
+
+---
+
 ## AD-08: Fixture design must match reality — never create a "clean" fixture that has errors
 
 **Pattern:** Writing a fixture file intended to test "zero errors" but getting the widths
