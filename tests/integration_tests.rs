@@ -691,6 +691,313 @@ fn markdown_table_in_code_block_is_not_a_box() {
     );
 }
 
+// paths_exclude: overview file is excluded from generic rule, gets its own rules.
+// The schema is written to a real glint.toml in a temp dir — that's the correct
+// way to test cascade-resolved config (the runner discovers it from disk).
+#[test]
+fn section_schema_paths_exclude_skips_matching_files() {
+    use glint_lib::runner::Runner;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    // Write glint.toml — generic rule for all *.md EXCEPT 00-OVERVIEW.md,
+    // and a separate rule for 00-OVERVIEW.md only.
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+
+[markdown]
+enabled = true
+
+# All language guides: require these three sections
+[[section_schemas]]
+paths = ["*.md"]
+paths_exclude = ["00-OVERVIEW.md"]
+required_h2_all = ["Type System Snapshot"]
+
+# Overview: different structure entirely
+[[section_schemas]]
+paths = ["00-OVERVIEW.md"]
+required_h2_all = ["Language Genealogy"]
+"#).unwrap();
+
+    // 02-C.md: missing "Type System Snapshot" → should warn
+    let c_file = root.join("02-C.md");
+    std::fs::write(&c_file, "# C\n\n## Decision Cheat Sheet\n\ncontent\n").unwrap();
+
+    // 00-OVERVIEW.md: has "Language Genealogy", correctly exempt from "Type System Snapshot"
+    let ov_file = root.join("00-OVERVIEW.md");
+    std::fs::write(&ov_file, "# Overview\n\n## Language Genealogy\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+
+    // 02-C.md must report missing "Type System Snapshot"
+    let c_diags = runner.lint_file(&c_file);
+    assert!(
+        c_diags.iter().any(|d| d.message.contains("Type System Snapshot")),
+        "02-C.md must require 'Type System Snapshot'\ngot diagnostics: {}",
+        format_diags(&c_diags)
+    );
+    // 02-C.md must NOT require "Language Genealogy"
+    assert!(
+        !c_diags.iter().any(|d| d.message.contains("Language Genealogy")),
+        "02-C.md must NOT require 'Language Genealogy' (that's for the overview)"
+    );
+
+    // 00-OVERVIEW.md must NOT require "Type System Snapshot" (excluded by paths_exclude)
+    let ov_diags = runner.lint_file(&ov_file);
+    assert!(
+        !ov_diags.iter().any(|d| d.message.contains("Type System Snapshot")),
+        "00-OVERVIEW.md must NOT require 'Type System Snapshot'\ngot: {}",
+        format_diags(&ov_diags)
+    );
+}
+
+// paths_exclude with multiple exclusions
+#[test]
+fn paths_exclude_multiple_files_skipped() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+[[section_schemas]]
+paths = ["*.md"]
+paths_exclude = ["00-OVERVIEW.md", "01-CHEATSHEET.md"]
+required_h2_all = ["Type System Snapshot"]
+"#).unwrap();
+
+    // Regular guide — should require Type System Snapshot
+    let guide = root.join("02-C.md");
+    std::fs::write(&guide, "# C\n\ncontent\n").unwrap();
+
+    // Overview — excluded, should NOT require it
+    let overview = root.join("00-OVERVIEW.md");
+    std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
+
+    // Cheatsheet — also excluded
+    let cheat = root.join("01-CHEATSHEET.md");
+    std::fs::write(&cheat, "# Cheatsheet\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+
+    // Guide: requires it
+    assert!(runner.lint_file(&guide).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "02-C.md should require Type System Snapshot");
+    // Overview: excluded
+    assert!(!runner.lint_file(&overview).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "00-OVERVIEW.md should be excluded");
+    // Cheatsheet: excluded
+    assert!(!runner.lint_file(&cheat).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "01-CHEATSHEET.md should be excluded");
+}
+
+// paths_exclude with glob pattern (not just exact filename)
+#[test]
+fn paths_exclude_glob_pattern() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+[[section_schemas]]
+paths = ["*.md"]
+paths_exclude = ["0[0-1]-*.md"]
+required_h2_all = ["Type System Snapshot"]
+"#).unwrap();
+
+    let guide = root.join("02-C.md");
+    std::fs::write(&guide, "# C\n\ncontent\n").unwrap();
+    let overview = root.join("00-OVERVIEW.md");
+    std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
+    let cheat = root.join("01-CHEATSHEET.md");
+    std::fs::write(&cheat, "# Cheatsheet\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+
+    assert!(runner.lint_file(&guide).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "02-C.md matched by *.md, not in exclude → should require");
+    assert!(!runner.lint_file(&overview).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "00-OVERVIEW.md matched by 0[0-1]-*.md exclude → should skip");
+    assert!(!runner.lint_file(&cheat).iter().any(|d| d.message.contains("Type System Snapshot")),
+        "01-CHEATSHEET.md matched by 0[0-1]-*.md exclude → should skip");
+}
+
+// Directory-level glint.toml: paths are relative to that directory, not root
+#[test]
+fn directory_schema_paths_relative_to_its_dir() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    // Root glint.toml — universal rule
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+required_h2_all = ["Decision Cheat Sheet"]
+"#).unwrap();
+
+    // languages/ sub-directory with its own glint.toml
+    let langs = root.join("languages");
+    std::fs::create_dir_all(&langs).unwrap();
+    std::fs::write(langs.join("glint.toml"), r#"
+[markdown]
+enabled = true
+# paths here are relative to languages/ NOT to root
+[[section_schemas]]
+paths = ["*.md"]
+paths_exclude = ["00-OVERVIEW.md"]
+required_h2_all = ["Type System Snapshot"]
+"#).unwrap();
+
+    // A language guide — should require both Decision Cheat Sheet (root) AND Type System Snapshot (dir)
+    let guide = langs.join("02-C.md");
+    std::fs::write(&guide, "# C\n\ncontent without required sections\n").unwrap();
+
+    // Overview — should require Decision Cheat Sheet but NOT Type System Snapshot
+    let overview = langs.join("00-OVERVIEW.md");
+    std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+
+    let guide_diags = runner.lint_file(&guide);
+    assert!(guide_diags.iter().any(|d| d.message.contains("Type System Snapshot")),
+        "02-C.md must require Type System Snapshot from dir-level schema");
+    assert!(guide_diags.iter().any(|d| d.message.contains("Decision Cheat Sheet")),
+        "02-C.md must require Decision Cheat Sheet from root schema");
+
+    let ov_diags = runner.lint_file(&overview);
+    assert!(!ov_diags.iter().any(|d| d.message.contains("Type System Snapshot")),
+        "00-OVERVIEW.md excluded by paths_exclude in dir schema");
+    // Overview still gets root requirement
+    assert!(ov_diags.iter().any(|d| d.message.contains("Decision Cheat Sheet")),
+        "00-OVERVIEW.md still gets root Decision Cheat Sheet requirement");
+}
+
+// A file that matches BOTH overview rule and generic rule gets BOTH sets of requirements
+// (section_schemas are additive — no "first match wins")
+#[test]
+fn section_schemas_are_additive_not_first_match_wins() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+[[section_schemas]]
+paths = ["*.md"]
+required_h2_all = ["Section A"]
+
+[[section_schemas]]
+paths = ["*.md"]
+required_h2_all = ["Section B"]
+"#).unwrap();
+
+    let f = root.join("guide.md");
+    std::fs::write(&f, "# Guide\n\n## Section A\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+    let diags = runner.lint_file(&f);
+
+    // Has Section A but not Section B → should warn about B
+    assert!(diags.iter().any(|d| d.message.contains("Section B")),
+        "both schemas must apply — Section B missing should be flagged");
+    // Section A is present so no warning about it
+    assert!(!diags.iter().any(|d| d.message.contains("Section A")),
+        "Section A is present, must not be flagged");
+}
+
+// paths_exclude does not affect the base [markdown] config — only the section_schema
+#[test]
+fn paths_exclude_only_affects_its_own_schema() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+required_h2_all = ["Universal Section"]
+
+[[section_schemas]]
+paths = ["*.md"]
+paths_exclude = ["00-OVERVIEW.md"]
+required_h2_all = ["Guide Section"]
+"#).unwrap();
+
+    let overview = root.join("00-OVERVIEW.md");
+    std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+    let diags = runner.lint_file(&overview);
+
+    // Universal Section comes from base [markdown], not section_schema → must still apply
+    assert!(diags.iter().any(|d| d.message.contains("Universal Section")),
+        "paths_exclude only excludes from that section_schema, not from base [markdown] config");
+    // Guide Section is excluded for this file
+    assert!(!diags.iter().any(|d| d.message.contains("Guide Section")),
+        "Guide Section should be excluded for 00-OVERVIEW.md");
+}
+
+// Three-level cascade: root → languages/ → individual file picks up all levels
+#[test]
+fn three_level_cascade_all_rules_accumulate() {
+    use glint_lib::runner::Runner;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    std::fs::write(root.join("glint.toml"), r#"
+[files]
+root = true
+[markdown]
+enabled = true
+required_h2_all = ["Root Requirement"]
+"#).unwrap();
+
+    let langs = root.join("languages");
+    std::fs::create_dir_all(&langs).unwrap();
+    std::fs::write(langs.join("glint.toml"), r#"
+[markdown]
+enabled = true
+required_h2_all = ["Dir Requirement"]
+"#).unwrap();
+
+    let guide = langs.join("02-C.md");
+    std::fs::write(&guide, "# C\n\ncontent\n").unwrap();
+
+    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let runner = Runner::new(root, cfg).unwrap();
+    let diags = runner.lint_file(&guide);
+
+    // Both root and dir requirements must be enforced
+    assert!(diags.iter().any(|d| d.message.contains("Root Requirement")),
+        "root required section must apply in subdirectory");
+    assert!(diags.iter().any(|d| d.message.contains("Dir Requirement")),
+        "directory required section must also apply");
+}
+
 // Config cascade: two glint.toml files in a hierarchy produce additive required_h2_all
 #[test]
 fn config_cascade_additive_required_sections() {

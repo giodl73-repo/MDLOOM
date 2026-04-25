@@ -41,6 +41,30 @@ with their include patterns.
 
 ---
 
+## SC-04: `paths_exclude` not prefixed alongside `paths` in directory configs
+
+**Pattern:** When a directory-level `glint.toml` defines a `section_schema` with both
+`paths` and `paths_exclude`, the path-prefix logic (which makes `languages/*.md` from `*.md`)
+applies to `paths` but forgets to apply the same prefix to `paths_exclude`. The result:
+`paths_exclude = ["00-OVERVIEW.md"]` stays as-is while `paths` becomes `"languages/*.md"`.
+When matching `languages/00-OVERVIEW.md`, include fires (it matches `languages/*.md`) but
+exclude misses (its pattern is still bare `"00-OVERVIEW.md"`, not `"languages/00-OVERVIEW.md"`).
+The section schema applies to the overview file when it should be excluded.
+
+**Domain:** Any directory-level `glint.toml` that uses `paths_exclude` to carve out special
+files from a generic `paths = ["*.md"]` rule.
+
+**Structural solution:** The prefix loop must iterate over both `schema.paths` and
+`schema.paths_exclude` and apply the same prefix transform to both. A single closure
+`prefix_glob` applied to both fields ensures they stay in sync.
+
+**Status:** SOLVED
+**Proved by:** `directory_schema_paths_relative_to_its_dir` and `paths_exclude_glob_pattern`
+in `tests/integration_tests.rs`
+**Test:** `tests/integration_tests.rs::section_schema_paths_exclude_skips_matching_files`
+
+---
+
 ## SC-03: Custom rules with `negate = true` cause confusion
 
 **Pattern:** A custom rule with `negate = true` warns when the pattern IS found. A user reads

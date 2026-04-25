@@ -29,8 +29,20 @@ pub struct GlintConfig {
 /// Merged additively on top of the root markdown config.
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct SectionSchema {
-    /// Glob patterns relative to the root (e.g. `["languages/**"]`)
+    /// Glob patterns — files matching ANY of these are candidates.
+    /// In a directory-level glint.toml, paths are relative to that directory.
+    /// In the root glint.toml, paths are relative to the root.
+    /// Example: `["*.md"]` matches all markdown files in the directory.
     pub paths: Vec<String>,
+
+    /// Exclusion globs — files matching any of these are skipped even if
+    /// they match `paths`. Use this to carve out special cases without
+    /// listing every other file explicitly.
+    /// Example: `paths_exclude = ["00-OVERVIEW.md"]` skips the overview
+    /// while `paths = ["*.md"]` catches everything else.
+    #[serde(default)]
+    pub paths_exclude: Vec<String>,
+
     /// Additional required H2 headings (all must be present)
     #[serde(default)]
     pub required_h2_all: Vec<String>,
@@ -194,15 +206,40 @@ impl GlintConfig {
     /// Resolve the effective config for a file at `file_path` by cascading up
     /// the directory tree. Configs are merged: parent first, then child overrides.
     ///
-    /// Cascade stops when:
-    ///   - We reach `root_dir`
-    ///   - A config has `files.root = true`
-    ///   - We hit the filesystem root
+    /// section_schemas paths are automatically prefixed with the config file's
+    /// directory relative to root_dir. This means a `languages/glint.toml` can
+    /// write `paths = ["02-*.md"]` instead of `paths = ["languages/02-*.md"]`.
+    ///
+    /// Cascade stops when a config has `files.root = true` or we hit root_dir.
     pub fn resolve_for(file_path: &Path, root_dir: &Path) -> Self {
         let dir = file_path.parent().unwrap_or(file_path);
-        let mut configs = collect_configs_up(dir, root_dir);
-        configs.reverse(); // root first, nearest-to-file last
-        configs.into_iter().fold(GlintConfig::default(), |acc, cfg| merge(acc, cfg))
+        let mut configs_with_origin = collect_configs_up_with_origin(dir, root_dir);
+        configs_with_origin.reverse(); // root first, nearest-to-file last
+
+        // Prefix each config's section_schema paths with that config's
+        // directory relative to root, so directory-level configs can use
+        // simple names like "02-*.md" rather than "languages/02-*.md".
+        let prefixed = configs_with_origin.into_iter().map(|(origin_dir, mut cfg)| {
+            let prefix = origin_dir
+                .strip_prefix(root_dir)
+                .unwrap_or(Path::new(""))
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            if !prefix.is_empty() {
+                for schema in &mut cfg.section_schemas {
+                    let prefix_glob = |p: &String| -> String {
+                        if p.starts_with('/') { p.clone() } // root-absolute — leave it
+                        else { format!("{}/{}", prefix, p) }
+                    };
+                    schema.paths = schema.paths.iter().map(prefix_glob).collect();
+                    schema.paths_exclude = schema.paths_exclude.iter().map(prefix_glob).collect();
+                }
+            }
+            cfg
+        });
+
+        prefixed.fold(GlintConfig::default(), |acc, cfg| merge(acc, cfg))
     }
 
     pub fn load_or_default(dir: &Path) -> Self {
@@ -220,37 +257,37 @@ impl GlintConfig {
 }
 
 /// Walk from `dir` up to `root_dir`, collecting every glint.toml found.
-/// Returns configs ordered nearest-first (dir's config first, root last).
+/// Returns (origin_directory, config) pairs ordered nearest-first.
 ///
-/// If a config has `extends = "path/to/parent.toml"`, that file is loaded and
-/// inserted immediately after the current config (lower priority, higher in chain).
-/// This allows explicit parenting that overrides the auto-cascade direction.
-fn collect_configs_up(dir: &Path, root_dir: &Path) -> Vec<GlintConfig> {
-    let mut configs = Vec::new();
+/// The origin_directory is the directory where each glint.toml was found.
+/// It is used by resolve_for() to prefix section_schema paths so that a
+/// `languages/glint.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
+fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, GlintConfig)> {
+    let mut configs: Vec<(PathBuf, GlintConfig)> = Vec::new();
     let mut current = dir.to_path_buf();
 
     loop {
         if let Some(cfg) = try_load_config(&current) {
             let is_root = cfg.files.root;
 
-            // Resolve `extends` before pushing — extends acts as an explicit parent,
-            // inserted at lower priority (further from the file) than the current config.
+            // Handle explicit `extends` — load and insert at lower priority
             if let Some(ref parent_rel) = cfg.extends.clone() {
                 let parent_abs = current.join(parent_rel);
+                let parent_dir = parent_abs.parent()
+                    .unwrap_or(Path::new("."))
+                    .to_path_buf();
                 match GlintConfig::load(&parent_abs) {
                     Ok(parent_cfg) => {
-                        // Push current first (nearest → highest priority after reversal)
-                        configs.push(cfg);
-                        // Then push extends (will end up at lower priority)
-                        configs.push(parent_cfg);
+                        configs.push((current.clone(), cfg));
+                        configs.push((parent_dir, parent_cfg));
                     }
                     Err(e) => {
                         eprintln!("glint: warning: extends {:?} failed: {}", parent_abs, e);
-                        configs.push(cfg);
+                        configs.push((current.clone(), cfg));
                     }
                 }
             } else {
-                configs.push(cfg);
+                configs.push((current.clone(), cfg));
             }
 
             if is_root { break; }

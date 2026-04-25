@@ -140,11 +140,15 @@ fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> Markdow
     let mut md = config.markdown.clone();
 
     for schema in &config.section_schemas {
-        let globset = match build_globset(&schema.paths) {
+        let include = match build_globset(&schema.paths) {
             Ok(gs) => gs,
-            Err(_) => continue,
+            Err(e) => { eprintln!("glint: invalid glob in section_schema paths: {}", e); continue; }
         };
-        if globset.is_match(&*rel_str) {
+        let exclude = match build_globset(&schema.paths_exclude) {
+            Ok(gs) => gs,
+            Err(e) => { eprintln!("glint: invalid glob in section_schema paths_exclude: {}", e); continue; }
+        };
+        if include.is_match(&*rel_str) && !exclude.is_match(&*rel_str) {
             apply_section_schema(&mut md, schema);
         }
     }
