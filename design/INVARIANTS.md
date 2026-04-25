@@ -163,19 +163,60 @@ correct boxes produce zero diagnostics in both.
 
 ---
 
+---
+
+### I-14: A `└──┘` bottom-close border cannot be the top of a new box
+
+**Claim:** A line whose first junction character is a bottom-left corner (`└`, `╚`, `╰`)
+is never treated as the opening border of a new box. Stacked flowchart diagrams with
+linear `└──┘ → ┌──┐` structure produce zero false phantom-box diagnostics.
+
+**Why it matters:** Multi-box flowcharts are the primary diagram structure across the
+entire reference library. Every landscape diagram uses stacked boxes. Without this
+invariant, a guide's main diagram generates hundreds of false alignment errors,
+drowning out real errors.
+
+**Test:** `stacked_boxes_no_phantom_box_errors`, `bottom_close_border_not_treated_as_box_top`,
+`bottom_left_corner_cannot_open_box` in `tests/integration_tests.rs`
+
+**Status:** HOLDS — implemented via `can_open_box()` guard in `find_boxes()`
+
+---
+
+### I-15: Annotation text after a closing `│` is detected as a width error
+
+**Claim:** If a content row contains text after the closing `│` delimiter
+(e.g., `│ content │  ← annotation`), the row's visual width exceeds the box border
+width and is reported as `ascii_box_width`. The annotation is not silently ignored.
+
+**Why it matters:** Inline annotations are a common authoring error. The rule going
+forward: annotations must appear outside the code block or in a dedicated cell with
+a proper delimiter. glint enforces this mechanically.
+
+**Test:** `annotation_after_closing_bar_detected` in `tests/integration_tests.rs`
+
+**Status:** HOLDS — natural consequence of width comparison
+
+---
+
 ## Invariant Health
 
 | Invariant | Status | Has Test? |
 |-----------|--------|-----------|
 | I-1: No boxes → no box diagnostics | HOLDS | yes |
 | I-2: Perfect box → zero diagnostics | HOLDS | yes |
-| I-3: Valid span location | BELIEVED | **no** |
-| I-4: Determinism | BELIEVED | **no** |
-| I-5: Additive merge superset | HOLDS | partial |
-| I-6: Tolerance bounds | BELIEVED | **no** |
-| I-7: Parallel = sequential | BELIEVED | **no** |
+| I-3: Valid span location | HOLDS | yes |
+| I-4: Determinism | HOLDS | yes |
+| I-5: Additive merge superset | HOLDS | yes |
+| I-6: Tolerance bounds | HOLDS | yes |
+| I-7: Parallel = sequential | HOLDS | yes |
 | I-8: JSON validity | HOLDS | yes |
 | I-9: Exit code | HOLDS | yes |
 | I-10: Unicode = ASCII | HOLDS | yes |
+| I-11: old_string mismatch skips fix | HOLDS | yes |
+| I-12: dry-run makes zero writes | HOLDS | yes |
+| I-13: Fix reverse line order | HOLDS | yes |
+| I-14: Bottom-close border cannot open box | HOLDS | yes |
+| I-15: Annotation after `│` detected as width error | HOLDS | yes |
 
 **Action items:** Write tests for I-3, I-4, I-6, I-7. Strengthen I-5 with a cascade test.

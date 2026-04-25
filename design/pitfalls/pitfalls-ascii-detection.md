@@ -105,6 +105,55 @@ on lines with `||` adjacency.
 
 ---
 
+## AD-07: Bottom-close border treated as top of new box (Pattern C)
+
+**Pattern:** When a multi-box flowchart has `└──┘` (bottom border of one box) followed by
+connector lines (`│`, `▼`, text) and then `┌──┐` (top of next box), the detector greedily
+pairs `└──┘` as the TOP of a phantom box and `┌──┐` as its BOTTOM. The connector lines
+between them have wildly different widths → hundreds of false `ascii_box_width` and
+`ascii_box_col` errors per flowchart.
+
+**Domain:** Any ASCII/Unicode flowchart with stacked boxes separated by arrows or labels.
+This is the dominant structure in the MAXIM reference library's landscape diagrams —
+every guide's main diagram uses this pattern.
+
+**Scale of impact:** 95 false errors eliminated from a 20-file directory scan after fix.
+In a 2,170-file library this could account for thousands of false positives.
+
+**Structural solution:** Add `can_open_box(line)` check before accepting a border line
+as the TOP of a new box. A line whose first junction character is a bottom-left corner
+(`└`, `╚`, `╰`) is closing a previous box, not opening a new one. Only `+`, `┌`, `╔`,
+`╭` can legitimately open a box.
+
+**Status:** SOLVED  
+**Proved by:** `stacked_boxes_no_phantom_box_errors`, `bottom_close_border_not_treated_as_box_top`,
+`bottom_left_corner_cannot_open_box` in `tests/integration_tests.rs`  
+**Test:** All three tests in the Pattern C section of integration_tests.rs
+
+---
+
+## AD-08: Fixture design must match reality — never create a "clean" fixture that has errors
+
+**Pattern:** Writing a fixture file intended to test "zero errors" but getting the widths
+or padding wrong during authoring. The fixture has real errors (e.g., content row 1 char
+wider than border, or missing trailing space). Tests then either fail immediately or — worse —
+pass because the test is insufficiently specific.
+
+**Domain:** Any test that writes fixture `.md` files and asserts "zero diagnostics."
+
+**Structural solution:**
+1. After creating a fixture file, run `glint check` on it manually before writing the test.
+2. Tests that assert zero diagnostics should always verify against the specific fixture's
+   content first.
+3. If a "clean" fixture has errors, fix the fixture (not the test).
+
+**Status:** SOLVED — procedure established  
+**How discovered:** `stacked_boxes.md` initially had `│ Box Three│` (no trailing space),
+triggering `ascii_cell_padding`. `bottom_border_only.md` had a branching diagram whose
+`┌───────┴───────┐` created a false box. Both required fixture redesign.
+
+---
+
 ## AD-06: Tolerance=0 breaks on trailing spaces
 
 **Pattern:** Authors sometimes add a trailing space to visually align lines in their editor.

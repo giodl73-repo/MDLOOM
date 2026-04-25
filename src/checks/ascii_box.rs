@@ -102,6 +102,27 @@ fn is_border_junction(c: char) -> bool {
     )
 }
 
+/// True if this line can open a box (has a top-left or top-joining corner).
+/// A line that starts with only bottom-closing corners (`└ ╚ ╰`) cannot be
+/// the TOP of a new box — it's the bottom of a previous one.
+/// Without this check, flowcharts like:
+///   └──────┘   ← real bottom border
+///   ▼ text ▼   ← glint would treat these as "content" of a phantom box
+///   ┌──────┐   ← glint would treat this as the "bottom"
+/// generate hundreds of false width/column errors.
+fn can_open_box(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() { return false; }
+    // A `+` is ambiguous — it can be both top and bottom. Allow it.
+    // `|` or `│` as first char: partial border, allow it.
+    // Otherwise: the first junction char must NOT be exclusively a bottom corner.
+    let first_junction = trimmed.chars().find(|c| is_border_junction(*c));
+    match first_junction {
+        None => true, // no junction found, fall through to other checks
+        Some(c) => !matches!(c, '└' | '╚' | '╰'),
+    }
+}
+
 /// True if char is a vertical box-drawing separator.
 fn is_vertical(c: char) -> bool {
     matches!(c, '|' | '│' | '║' | '╎' | '┆' | '┊')
@@ -182,7 +203,7 @@ fn find_boxes(lines: &[&str]) -> Vec<BoxRegion> {
     let mut i = 0;
 
     while i < lines.len() {
-        if is_border_line(lines[i]) {
+        if is_border_line(lines[i]) && can_open_box(lines[i]) {
             let expected_cols = junction_columns(lines[i]);
             let top_width = visual_width(lines[i]);
             let top_line = i;

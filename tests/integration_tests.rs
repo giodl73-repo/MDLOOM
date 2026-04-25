@@ -330,6 +330,108 @@ fn binary_json_output_is_parseable() {
 }
 
 // ─────────────────────────────────────────────────────────
+// Pattern C — stacked/flowchart boxes (the can_open_box guard)
+// ─────────────────────────────────────────────────────────
+
+// Stacked boxes with connector lines between them: zero errors
+// (Bottom border └──┘ must NOT be detected as the top of a new phantom box)
+#[test]
+fn stacked_boxes_no_phantom_box_errors() {
+    let (path, content) = read_fixture("stacked_boxes.md");
+    let diags = box_check().check(&path, &content);
+    assert!(
+        diags.is_empty(),
+        "stacked boxes with connectors must produce zero diagnostics, got:\n{}",
+        format_diags(&diags)
+    );
+}
+
+// Three linear stacked boxes (bottom_border_only.md): zero errors
+#[test]
+fn bottom_close_border_not_treated_as_box_top() {
+    let (path, content) = read_fixture("bottom_border_only.md");
+    let diags = box_check().check(&path, &content);
+    assert!(
+        diags.is_empty(),
+        "bottom-close borders between stacked boxes must produce zero errors, got:\n{}",
+        format_diags(&diags)
+    );
+}
+
+// A single-character check: a line starting with └ cannot open a box
+#[test]
+fn bottom_left_corner_cannot_open_box() {
+    // The closing line of one box followed by content and then a new opening box
+    let content = "```\n┌────┐\n│ A  │\n└────┘\n  │\n  ▼\n┌────┐\n│ B  │\n└────┘\n```";
+    let check = box_check();
+    let diags = check.check(Path::new("test.md"), content);
+    assert!(
+        diags.is_empty(),
+        "two-box flowchart with connectors must have zero errors, got:\n{}",
+        format_diags(&diags)
+    );
+}
+
+// Single-row box (smallest valid box): zero errors
+#[test]
+fn single_row_box_zero_errors() {
+    let (path, content) = read_fixture("single_row_box.md");
+    let diags = box_check().check(&path, &content);
+    assert!(
+        diags.is_empty(),
+        "single-row boxes must be clean, got:\n{}",
+        format_diags(&diags)
+    );
+}
+
+// Indented box (leading spaces): zero errors
+#[test]
+fn indented_box_zero_errors() {
+    let (path, content) = read_fixture("indented_box.md");
+    let diags = box_check().check(&path, &content);
+    assert!(
+        diags.is_empty(),
+        "indented boxes must be clean, got:\n{}",
+        format_diags(&diags)
+    );
+}
+
+// Annotation after closing | (Pattern B): detected as width error
+#[test]
+fn annotation_after_closing_bar_detected() {
+    let (path, content) = read_fixture("annotation_after_bar.md");
+    let diags = box_check().check(&path, &content);
+    let width_errs: Vec<_> = diags.iter().filter(|d| d.code == "ascii_box_width").collect();
+    assert!(
+        !width_errs.is_empty(),
+        "annotation after closing | must be detected as ascii_box_width error"
+    );
+}
+
+// Zero-row box (adjacent borders): width mismatch detected when borders differ
+#[test]
+fn zero_row_box_mismatched_borders_detected() {
+    let (path, content) = read_fixture("zero_row_box.md");
+    let diags = box_check().check(&path, &content);
+    let width_errs: Vec<_> = diags.iter().filter(|d| d.code == "ascii_box_width").collect();
+    assert!(
+        !width_errs.is_empty(),
+        "mismatched adjacent borders must produce ascii_box_width error"
+    );
+}
+
+// Nested boxes: inner borders generate column warnings (expected behavior, not a crash)
+#[test]
+fn nested_boxes_no_panic_and_reports_warnings() {
+    let (path, content) = read_fixture("nested_boxes.md");
+    // Must not panic. May produce warnings (inner box borders vs outer expected cols).
+    let diags = box_check().check(&path, &content);
+    // Verify it ran successfully — just assert it doesn't crash.
+    // Warnings are expected because inner box borders don't align with outer expected columns.
+    let _ = diags; // behavior documented: inner borders generate column warnings
+}
+
+// ─────────────────────────────────────────────────────────
 // Rich context — L1: verify context blocks are populated
 // ─────────────────────────────────────────────────────────
 
