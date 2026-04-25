@@ -20,6 +20,8 @@ pub struct GlintConfig {
     pub ascii_flow: AsciiFlowConfig,
     #[serde(default)]
     pub markdown: MarkdownConfig,
+    #[serde(default)]
+    pub markdown_table: MarkdownTableConfig,
     /// Per-directory schema overrides. Each entry applies to files matching `paths`.
     #[serde(default)]
     pub section_schemas: Vec<SectionSchema>,
@@ -57,6 +59,63 @@ pub struct SectionSchema {
     /// Override max_lines for matching files
     pub max_lines: Option<usize>,
 }
+
+/// GFM pipe table validator configuration.
+#[derive(Debug, Deserialize, Clone)]
+pub struct MarkdownTableConfig {
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+    /// Minimum number of dashes in each separator cell (GFM requires ≥ 3)
+    #[serde(default = "default_sep_dashes")]
+    pub min_separator_dashes: usize,
+    /// Check cell padding
+    #[serde(default = "bool_true")]
+    pub check_cell_padding: bool,
+    #[serde(default = "default_min_padding")]
+    pub min_cell_padding: usize,
+    /// Minimum number of pipe tables per file
+    pub required_tables: Option<usize>,
+    /// Named table schemas with structural requirements
+    #[serde(default)]
+    pub table_schemas: Vec<TableSchema>,
+}
+
+impl Default for MarkdownTableConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_separator_dashes: 3,
+            check_cell_padding: true,
+            min_cell_padding: 1,
+            required_tables: None,
+            table_schemas: Vec::new(),
+        }
+    }
+}
+
+/// Schema for a required table — structural constraints that a table must satisfy.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct TableSchema {
+    /// Table must appear under this exact ## heading text (without the `##`).
+    /// If None, applies to any table in the file.
+    pub heading: Option<String>,
+    /// All of these column headers must be present (exact match)
+    #[serde(default)]
+    pub required_columns: Vec<String>,
+    /// At least one of these column headers must be present
+    #[serde(default)]
+    pub required_columns_any: Vec<String>,
+    /// Minimum body rows (excluding header + separator)
+    pub min_body_rows: Option<usize>,
+    /// Values that must appear in the first (key) column of body rows
+    #[serde(default)]
+    pub required_row_keys: Vec<String>,
+    /// Allowed values per column: { "ColumnName": ["allowed1", "allowed2"] }
+    #[serde(default)]
+    pub column_allowed_values: std::collections::HashMap<String, Vec<String>>,
+}
+
+fn default_sep_dashes() -> usize { 3 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct MetaConfig {
@@ -362,6 +421,8 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
         ascii_box: child.ascii_box,   // scalars: child wins entirely
         ascii_char: child.ascii_char,
         ascii_flow: child.ascii_flow,
+        // markdown_table: child wins (schemas are per-directory, not additive)
+        markdown_table: child.markdown_table,
         markdown: merge_markdown(parent.markdown, child.markdown),
         section_schemas: {
             let mut v = parent.section_schemas;

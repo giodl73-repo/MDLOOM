@@ -230,18 +230,147 @@ natural use case for this library. They are expected and supported.
 
 ---
 
+---
+
+## Markdown Table Rules (GFM §4.10)
+
+Tables are the primary format for comparison data and decision guides.
+These rules apply to GFM pipe tables in prose (outside code blocks).
+See `specs/gfm-tables.md` for the full GFM spec.
+
+---
+
+### Rule S-09 — Separator row required, well-formed
+
+**Constraint:** Every pipe table must have a delimiter row in position 2.
+Each delimiter cell must contain ≥ 3 dashes (plus optional `:` for alignment).
+
+```
+CORRECT:
+| Axis | Value |
+|------|-------|    ← valid separator (≥ 3 dashes)
+| x    | y     |
+
+WRONG (2 dashes):
+| Axis | Value |
+|--|--|            ← invalid separator
+| x | y |
+
+WRONG (no separator):
+| Axis | Value |
+| x    | y     |   ← second row is body, not separator → not a GFM table
+```
+
+**glint check:** `md_table_separator_invalid` (warning)
+
+---
+
+### Rule S-10 — Consistent column count
+
+**Constraint:** All rows (header, separator, body) must have the same number of
+columns. Mismatches are rendering-ambiguous — different markdown parsers
+handle them differently (truncate vs. pad).
+
+```
+CORRECT:
+| A | B |
+|---|---|
+| x | y |
+
+WRONG:
+| A | B |
+|---|---|
+| x | y | extra |   ← 3 cols in body, 2 in header
+```
+
+**glint check:** `md_table_col_mismatch` (error)
+
+---
+
+### Rule S-11 — Cell padding in tables
+
+Same as S-04 for ASCII art boxes: every table cell must have ≥ 1 space of
+padding on each side.
+
+```
+CORRECT:  | content |
+WRONG:    |content|     ← no padding
+WRONG:    | content|    ← missing right padding
+```
+
+**glint check:** `md_table_cell_padding` (warning)
+
+---
+
+### Rule S-12 — Every guide must contain at least one comparison table
+
+**Constraint:** Every content guide must have at least one GFM pipe table.
+The style contract requires tables for comparisons and cheat sheets.
+
+```toml
+[markdown_table]
+required_tables = 1
+```
+
+**glint check:** `md_missing_table` (warning)
+
+---
+
+### Rule S-13 — Named tables must exist under their headings
+
+**Constraint:** When a table schema specifies `heading = "## Section Name"`,
+that section must contain a pipe table. If the heading exists but has no table,
+glint warns.
+
+```toml
+[[markdown_table.table_schemas]]
+heading = "## Decision Cheat Sheet"
+min_body_rows = 2
+```
+
+**glint check:** `md_missing_table` (warning)
+
+---
+
+### Rule S-14 — Table schema: required columns, row keys, allowed values
+
+**Constraint:** For sections with a formal schema (like Type System Snapshot),
+the table must have the required column headers and required first-column values.
+Allowed value sets can also be enforced per column.
+
+```toml
+[[markdown_table.table_schemas]]
+heading = "## Type System Snapshot"
+required_columns = ["Axis"]
+required_row_keys = ["Binding", "Typing", "Strength", "Type system", "Type inference", "Memory model"]
+min_body_rows = 4
+
+[[markdown_table.table_schemas.column_allowed_values]]
+# Future: constrain what values are valid for specific columns
+```
+
+**glint check:** `md_table_schema` (warning)
+
+---
+
 ## Enforcement Summary
 
 | Rule | glint Code | Severity | Status |
 |------|-----------|----------|--------|
-| S-01: alignment-safe chars only | `ascii_char_range` | warning | Planned |
+| S-01: alignment-safe chars only | `ascii_char_range` | error/warn | ✅ Enforced |
 | S-02: consistent border width | `ascii_box_width` | error | ✅ Enforced |
 | S-03: column separator alignment | `ascii_box_col` | error | ✅ Enforced |
 | S-04: cell padding ≥ 1 space | `ascii_cell_padding` | warning | ✅ Enforced |
-| S-05: no text after closing `\|` | `ascii_box_width` | error | ✅ Enforced (caught as width error) |
-| S-06: use connectors between boxes | — | — | Not enforced (visual quality) |
+| S-05: no text after closing `\|` | `ascii_box_width` | error | ✅ Enforced |
+| S-06: connectors between stacked boxes | — | — | Not enforced (visual quality) |
 | S-07: side-by-side width agreement | `ascii_box_width` | error | ✅ Enforced |
 | S-08: one structure per block | — | — | Not enforced (recommendation) |
+| S-09: table separator required + ≥ 3 dashes | `md_table_separator_invalid` | warning | ✅ Enforced |
+| S-10: consistent column count | `md_table_col_mismatch` | error | ✅ Enforced |
+| S-11: table cell padding | `md_table_cell_padding` | warning | ✅ Enforced |
+| S-12: ≥ 1 table per guide | `md_missing_table` | warning | ✅ Enforced (config) |
+| S-13: named table must exist under heading | `md_missing_table` | warning | ✅ Enforced |
+| S-14: table schema (columns, row keys, values) | `md_table_schema` | warning | ✅ Enforced |
 
 ---
 

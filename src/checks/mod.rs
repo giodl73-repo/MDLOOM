@@ -2,6 +2,7 @@ pub mod ascii_box;
 pub mod ascii_char;
 pub mod ascii_flow;
 pub mod markdown;
+pub mod markdown_table;
 
 use crate::diagnostic::Diagnostic;
 use std::path::Path;
