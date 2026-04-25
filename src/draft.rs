@@ -54,6 +54,10 @@ pub struct DraftFix {
     /// True = already computed, no AI needed.
     /// False = AI must supply new_string before applying.
     pub auto: bool,
+    /// Rich context for this line — border_line, expected_cols, actual_cols.
+    /// Populated when available (box diagnostics always have it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -211,7 +215,12 @@ fn build_group(
         // Try to compute a deterministic fix
         let (new_string, auto) = compute_auto_fix(diags, line_no, &old_string);
 
-        fixes.push(DraftFix { line: line_no, old_string, new_string, auto });
+        // Include rich context from the first diagnostic on this line (if available)
+        let context = diags.iter()
+            .find(|d| d.span.line == line_no && d.rich.is_some())
+            .and_then(|d| serde_json::to_value(d.rich.as_ref()?).ok());
+
+        fixes.push(DraftFix { line: line_no, old_string, new_string, auto, context });
     }
 
     // Build description from diagnostics
