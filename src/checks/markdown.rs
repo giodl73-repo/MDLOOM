@@ -118,8 +118,150 @@ impl Check for MarkdownCheck {
             }
         }
 
+        // ── Heading quality checks ───────────────────────────────────────────
+
+        // Collect all ATX headings outside code blocks
+        let atx_headings: Vec<(usize, usize, &str)> = lines.iter().enumerate()
+            .filter(|(i, l)| !in_code_block[*i] && l.starts_with('#'))
+            .filter_map(|(i, l)| {
+                let level = l.chars().take_while(|&c| c == '#').count();
+                if level == 0 { return None; }
+                Some((i + 1, level, *l))  // (1-based line, level, raw line)
+            })
+            .collect();
+
+        if self.config.check_heading_format {
+            for &(ln, _level, raw) in &atx_headings {
+                let after_hashes = raw.trim_start_matches('#');
+                // Must start with exactly one space (not zero, not two+)
+                if !after_hashes.is_empty() && !after_hashes.starts_with(' ') {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_heading_format",
+                        format!("heading missing space after `#` — use `# Title` not `#Title`"),
+                    ));
+                } else if after_hashes.starts_with("  ") {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_heading_format",
+                        "heading has extra space after `#` — use exactly one space",
+                    ));
+                }
+                // Trailing `#` signs (e.g. `## Title ##`) are valid CommonMark but
+                // considered bad style in this library
+                let content = after_hashes.trim();
+                if content.ends_with('#') && !content.trim_end_matches('#').is_empty() {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_heading_format",
+                        "trailing `#` in heading — omit closing hashes",
+                    ));
+                }
+            }
+        }
+
+        if self.config.check_empty_headings {
+            for &(ln, _level, raw) in &atx_headings {
+                let after_hashes = raw.trim_start_matches('#');
+                if after_hashes.trim().is_empty() {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_empty_heading",
+                        "empty heading — must have content after `#`",
+                    ));
+                }
+            }
+        }
+
+        if self.config.check_heading_hierarchy {
+            let mut prev_level = 0usize;
+            for &(ln, level, _raw) in &atx_headings {
+                if prev_level > 0 && level > prev_level + 1 {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_heading_hierarchy",
+                        format!(
+                            "heading level skips from H{} to H{} — expected H{}",
+                            prev_level, level, prev_level + 1
+                        ),
+                    ));
+                }
+                prev_level = level;
+            }
+        }
+
+        if self.config.check_duplicate_headings {
+            let mut seen: std::collections::HashMap<(usize, String), usize> = std::collections::HashMap::new();
+            for &(ln, level, raw) in &atx_headings {
+                let text = raw.trim_start_matches('#').trim().to_lowercase();
+                let key = (level, text.clone());
+                if let Some(&first_ln) = seen.get(&key) {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), ln, 1,
+                        "md_duplicate_heading",
+                        format!(
+                            "duplicate H{} heading {:?} — first appeared at line {}",
+                            level, raw.trim_start_matches('#').trim(), first_ln
+                        ),
+                    ));
+                } else {
+                    seen.insert(key, ln);
+                }
+            }
+        }
+
+        // ── Document style checks ─────────────────────────────────────────────
+
+        if let Some(ref required_style) = self.config.thematic_break_style {
+            for (i, &line) in lines.iter().enumerate() {
+                if in_code_block[i] { continue; }
+                let trimmed = line.trim();
+                // Thematic break: line of only `-`, `*`, or `_` (with optional spaces), ≥3 chars
+                if is_thematic_break(trimmed) && !required_style.is_empty() {
+                    let char_used = trimmed.chars().find(|&c| c != ' ').unwrap_or('-').to_string();
+                    let expected_char = required_style.trim_matches('-').trim_matches('*').trim_matches('_');
+                    let _ = expected_char; // compare the repeated char vs required style
+                    if !trimmed.replace(' ', "").chars().all(|c| required_style.contains(c)) {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(), i + 1, 1,
+                            "md_break_style",
+                            format!(
+                                "thematic break uses {:?} — project style requires {:?}",
+                                char_used, required_style
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+
+        if self.config.check_blockquote_spacing {
+            for (i, &line) in lines.iter().enumerate() {
+                if in_code_block[i] { continue; }
+                // `>text` without space is valid CommonMark but bad style
+                if line.starts_with('>') && line.len() > 1 {
+                    let after = &line[1..];
+                    if !after.starts_with(' ') && !after.starts_with('>') {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(), i + 1, 1,
+                            "md_blockquote_spacing",
+                            "block quote missing space after `>` — use `> text` not `>text`",
+                        ));
+                    }
+                }
+            }
+        }
+
         diags
     }
+}
+
+fn is_thematic_break(trimmed: &str) -> bool {
+    if trimmed.len() < 3 { return false; }
+    let without_spaces: String = trimmed.chars().filter(|&c| c != ' ').collect();
+    if without_spaces.len() < 3 { return false; }
+    let first = without_spaces.chars().next().unwrap();
+    matches!(first, '-' | '*' | '_') && without_spaces.chars().all(|c| c == first)
 }
 
 /// Returns a boolean mask where `mask[i]` is true if line `i` is inside a

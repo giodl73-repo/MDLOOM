@@ -1,10 +1,11 @@
+use crate::checks::ascii_barchart::AsciiBarchartCheck;
 use crate::checks::ascii_box::AsciiBoxCheck;
 use crate::checks::ascii_char::AsciiCharCheck;
 use crate::checks::ascii_flow::AsciiFlowCheck;
 use crate::checks::markdown::MarkdownCheck;
 use crate::checks::markdown_table::MarkdownTableCheck;
 use crate::checks::Check;
-use crate::config::{AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
+use crate::config::{AsciiBarchartConfig, AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
@@ -110,6 +111,12 @@ impl Runner {
 /// Applies section_schemas additively for files that match their path globs.
 fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn Check>> {
     let mut checks: Vec<Box<dyn Check>> = Vec::new();
+
+    if config.ascii_barchart.enabled {
+        checks.push(Box::new(AsciiBarchartCheck {
+            config: config.ascii_barchart.clone(),
+        }));
+    }
 
     if config.ascii_box.enabled {
         checks.push(Box::new(AsciiBoxCheck {

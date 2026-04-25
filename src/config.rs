@@ -15,6 +15,8 @@ pub struct GlintConfig {
     #[serde(default)]
     pub ascii_box: AsciiBoxConfig,
     #[serde(default)]
+    pub ascii_barchart: AsciiBarchartConfig,
+    #[serde(default)]
     pub ascii_char: AsciiCharConfig,
     #[serde(default)]
     pub ascii_flow: AsciiFlowConfig,
@@ -78,6 +80,12 @@ pub struct MarkdownTableConfig {
     /// Named table schemas with structural requirements
     #[serde(default)]
     pub table_schemas: Vec<TableSchema>,
+    /// Warn when a column header cell is empty
+    #[serde(default = "bool_true")]
+    pub check_empty_headers: bool,
+    /// Warn when a table has more than this many columns (0 = no limit)
+    #[serde(default)]
+    pub max_columns: usize,
 }
 
 impl Default for MarkdownTableConfig {
@@ -89,6 +97,8 @@ impl Default for MarkdownTableConfig {
             min_cell_padding: 1,
             required_tables: None,
             table_schemas: Vec::new(),
+            check_empty_headers: true,
+            max_columns: 0,
         }
     }
 }
@@ -115,6 +125,66 @@ pub struct TableSchema {
     pub column_allowed_values: std::collections::HashMap<String, Vec<String>>,
 }
 
+/// ASCII bar chart validator.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AsciiBarchartConfig {
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+    /// Minimum consecutive bar characters to count as a bar (default 3)
+    #[serde(default = "default_min_bar_width")]
+    pub min_bar_width: usize,
+    /// Minimum number of consecutive bar rows to count as a chart (default 2)
+    #[serde(default = "default_min_chart_rows")]
+    pub min_chart_rows: usize,
+    /// Characters that form the bar body. Empty = use defaults (█▓▒░#=)
+    #[serde(default)]
+    pub bar_chars: Vec<String>,
+    /// Minimum spaces between label text and bar start
+    #[serde(default = "default_one")]
+    pub min_label_padding: usize,
+    /// Minimum spaces between bar end and value
+    #[serde(default = "default_one")]
+    pub min_value_padding: usize,
+    /// Warn when value formats differ across rows (% vs integer vs float)
+    #[serde(default = "bool_true")]
+    pub check_value_format: bool,
+    /// Warn when value column is not aligned across rows
+    #[serde(default = "bool_true")]
+    pub require_value_alignment: bool,
+    /// Tolerance in columns for value alignment (default 1)
+    #[serde(default = "default_one")]
+    pub alignment_tolerance: usize,
+    /// Warn when bar widths are not proportional to their numeric values.
+    /// e.g. a bar at 78% that fills 100% of the max bar width is disproportionate.
+    #[serde(default = "bool_true")]
+    pub check_proportionality: bool,
+    /// Tolerance in bar characters for proportionality (default 2 — rounding errors)
+    #[serde(default = "default_prop_tolerance")]
+    pub proportionality_tolerance: usize,
+}
+
+impl Default for AsciiBarchartConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_bar_width: 3,
+            min_chart_rows: 2,
+            bar_chars: Vec::new(),
+            min_label_padding: 1,
+            min_value_padding: 1,
+            check_value_format: true,
+            require_value_alignment: true,
+            alignment_tolerance: 1,
+            check_proportionality: true,
+            proportionality_tolerance: 2,
+        }
+    }
+}
+
+fn default_min_bar_width() -> usize { 3 }
+fn default_min_chart_rows() -> usize { 2 }
+fn default_one() -> usize { 1 }
+fn default_prop_tolerance() -> usize { 2 }
 fn default_sep_dashes() -> usize { 3 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -226,7 +296,7 @@ impl Default for AsciiFlowConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MarkdownConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -243,6 +313,49 @@ pub struct MarkdownConfig {
     pub required_patterns: Vec<RequiredPattern>,
     /// Max file length in lines
     pub max_lines: Option<usize>,
+
+    // ── Heading quality checks ──────────────────────────────────────────────
+
+    /// Warn on headings missing the required space after `#` (e.g. `##heading`)
+    #[serde(default = "bool_true")]
+    pub check_heading_format: bool,
+    /// Warn on empty headings (`## ` with no content)
+    #[serde(default = "bool_true")]
+    pub check_empty_headings: bool,
+    /// Warn when heading levels skip (H1 → H3 without H2)
+    #[serde(default = "bool_true")]
+    pub check_heading_hierarchy: bool,
+    /// Warn on duplicate heading text at the same level within a file
+    #[serde(default)]
+    pub check_duplicate_headings: bool,
+
+    // ── Document style checks ────────────────────────────────────────────────
+
+    /// Enforce a consistent thematic break style: "---" | "***" | "___" | "" (any)
+    #[serde(default)]
+    pub thematic_break_style: Option<String>,
+    /// Warn when `>` block quotes are missing the required space (`>text` vs `> text`)
+    #[serde(default)]
+    pub check_blockquote_spacing: bool,
+}
+
+impl Default for MarkdownConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_h1: None,
+            required_h2: Vec::new(),
+            required_h2_all: Vec::new(),
+            required_patterns: Vec::new(),
+            max_lines: None,
+            check_heading_format: true,
+            check_empty_headings: true,
+            check_heading_hierarchy: true,
+            check_duplicate_headings: false,
+            thematic_break_style: None,
+            check_blockquote_spacing: false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -419,6 +532,7 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
         meta: if child.meta.name.is_some() { child.meta } else { parent.meta },
         files: merge_files(parent.files, child.files),
         ascii_box: child.ascii_box,   // scalars: child wins entirely
+        ascii_barchart: child.ascii_barchart,
         ascii_char: child.ascii_char,
         ascii_flow: child.ascii_flow,
         // markdown_table: child wins (schemas are per-directory, not additive)
@@ -483,5 +597,12 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
             v.extend(child.required_patterns);
             v
         },
+        // Scalar style checks: child wins
+        check_heading_format: child.check_heading_format,
+        check_empty_headings: child.check_empty_headings,
+        check_heading_hierarchy: child.check_heading_hierarchy,
+        check_duplicate_headings: child.check_duplicate_headings,
+        thematic_break_style: child.thematic_break_style.or(parent.thematic_break_style),
+        check_blockquote_spacing: child.check_blockquote_spacing,
     }
 }

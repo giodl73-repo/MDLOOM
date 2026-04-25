@@ -42,6 +42,31 @@ impl Check for MarkdownTableCheck {
             diags.extend(validate_structure(path, table, &self.config));
         }
 
+        // Table quality checks — empty headers, max columns
+        for table in &tables {
+            if self.config.check_empty_headers {
+                for (ci, header) in table.headers.iter().enumerate() {
+                    if header.trim().is_empty() {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(), table.line, ci + 1,
+                            "md_table_empty_header",
+                            format!("column {} has an empty header — all columns should be named", ci + 1),
+                        ));
+                    }
+                }
+            }
+            if self.config.max_columns > 0 && table.col_count() > self.config.max_columns {
+                diags.push(Diagnostic::warning(
+                    path.to_path_buf(), table.line, 1,
+                    "md_table_too_wide",
+                    format!(
+                        "table has {} columns, exceeds max of {} — consider splitting or rotating",
+                        table.col_count(), self.config.max_columns
+                    ),
+                ));
+            }
+        }
+
         // Count tables per heading for required_tables check
         if let Some(min) = self.config.required_tables {
             if tables.len() < min {
