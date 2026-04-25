@@ -11,6 +11,7 @@
 /// `glint fix --plan draft-plan.json` applies it.
 
 use crate::diagnostic::{Diagnostic, Severity};
+use unicode_width::UnicodeWidthChar;
 use crate::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
 use anyhow::Result;
 use std::collections::HashMap;
@@ -301,6 +302,28 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
         }
     }
 
+    // --- Deterministic: box col ±1 (shift trailing space in correct cell) ---
+    // "column separator at col N (expected col M) — off by 1"
+    // Only auto-fix when:
+    //   - drift == 1 (single column off)
+    //   - No width error on the same line (width errors are fixed by box_width logic)
+    //   - The rich context has expected_cols and actual_cols
+    if codes_on_line.iter().any(|&c| c == "ascii_box_col")
+        && !codes_on_line.iter().any(|&c| c == "ascii_box_width")
+    {
+        let col_diag = diags.iter()
+            .find(|d| d.span.line == line_no && d.code == "ascii_box_col");
+        if let Some(diag) = col_diag {
+            if let Some(ctx) = &diag.rich {
+                if let (Some(expected), Some(actual)) = (&ctx.expected_cols, &ctx.actual_cols) {
+                    if let Some(fixed) = fix_box_col_one(old_string, expected, actual) {
+                        return (fixed, true);
+                    }
+                }
+            }
+        }
+    }
+
     // --- Deterministic: bar chart scale (proportionality) ---
     // Parse "expected ~N chars" from the message
     if codes_on_line.iter().any(|&c| c == "ascii_barchart_scale") {
@@ -475,6 +498,64 @@ fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Fix box column misalignment by adjusting trailing space in the misaligned cell.
+/// Only handles ±1 drift where the actual and expected columns differ by exactly 1.
+/// The fix: for each misaligned separator, find the cell immediately before it
+/// and add or remove one trailing space.
+fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -> Option<String> {
+    // Find pairs where actual ≠ expected and the difference is exactly 1
+    let mismatches: Vec<(usize, usize)> = expected_cols.iter()
+        .filter_map(|&exp| {
+            // Find the closest actual column
+            let closest = actual_cols.iter().min_by_key(|&&a| a.abs_diff(exp))?;
+            let drift = closest.abs_diff(exp);
+            if drift == 1 { Some((exp, *closest)) } else { None }
+        })
+        .collect();
+
+    if mismatches.is_empty() { return None; }
+
+    // Build new line character by character, adjusting spaces before misaligned | chars
+    let chars: Vec<char> = line.chars().collect();
+    let n = chars.len();
+    let mut result: Vec<char> = Vec::with_capacity(n + mismatches.len());
+    let mut col_0 = 0usize; // 0-based visual column
+
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        let cur_col_1 = col_0 + 1; // 1-based
+
+        // Check if this char is a | at a position that needs adjustment
+        let is_vertical = matches!(c, '|' | '│' | '║');
+
+        if is_vertical {
+            // Is this one of our misaligned separators?
+            let mismatch = mismatches.iter().find(|&&(exp, act)| act == cur_col_1);
+            if let Some(&(exp, act)) = mismatch {
+                if exp > act {
+                    // Need to be 1 col further right — insert space before this |
+                    result.push(' ');
+                } else if exp < act && result.last() == Some(&' ') {
+                    // Need to be 1 col further left — remove trailing space before this |
+                    result.pop();
+                }
+            }
+        }
+
+        result.push(c);
+        let char_width = match c {
+            '\t' => { let ns = ((col_0 / 4) + 1) * 4; ns - col_0 }
+            _ => c.width().unwrap_or(1),
+        };
+        col_0 += char_width;
+        i += 1;
+    }
+
+    let new_line: String = result.into_iter().collect();
+    if new_line == line { None } else { Some(new_line) }
 }
 
 /// Parse "row width N ≠ box width M" or "bottom border width N ≠ top border width M"
