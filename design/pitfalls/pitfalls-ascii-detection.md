@@ -132,6 +132,37 @@ as the TOP of a new box. A line whose first junction character is a bottom-left 
 
 ---
 
+## AD-10: GFM table rows contain `\|`, code spans, and operators — split('|') is wrong
+
+**Pattern:** A simple `split('|')` on a GFM table row treats ALL pipe characters as column
+separators. But GFM tables allow three contexts where `|` is content, not structure:
+1. `\|` — escaped pipe (e.g. `catch (A\|B)`, `T \| null`)
+2. Backtick code spans — `` `A|B` `` contains a literal pipe
+3. Multi-char operators — `||` (SQL concat), `|>` (F# pipeline)
+
+When an auto-fix based on simple splitting is applied to these rows, it inserts spaces
+INSIDE escaped pipes (`\|` → `\ |`), inside code spans (`` `A | B` ``), and into operators
+(`|>` → `| >`), producing corrupted markdown.
+
+**Domain:** Any parser or transformer that processes GFM table rows character-by-character
+or splits on `|` without handling escaping rules.
+
+**Structural solution:** Walk the row character-by-character, tracking:
+- `\\` before `|` → escaped pipe, treat as content
+- Opening/closing backtick → inside code span, `|` is content
+- Unescaped `|` outside code spans → column separator
+
+A simple `split('|')` is never correct for GFM table rows.
+
+**Status:** SOLVED in `parse_row()` in `markdown_table.rs`  
+**Auto-fix NOT enabled:** `md_table_cell_padding` auto-fix remains disabled in `draft.rs`
+until the fix generator itself uses the correct escaped-pipe-aware parser.  
+**Discovered by:** Running `glint fix --dry-run` on a draft plan — fixes broke `\|`, `|>`,
+and `` ` `` spans in language guide tables.  
+**Test:** Add tests for `parse_row` with `\|`, backtick spans, and `||` input.
+
+---
+
 ## AD-09: Language names containing symbols trigger symbol-based heuristics
 
 **Pattern:** Language names like `C#`, `F#`, `C++`, and `Objective-C` contain `#` and `+`

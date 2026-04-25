@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use anyhow::Context;
 use glint_lib::draft::build_draft_plan;
 use glint_lib::fix::{serialize_json, serialize_rich, FixOptions};
 use glint_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
@@ -253,7 +254,8 @@ fn cmd_fix(
         }
     };
 
-    let plan = FixPlan::load(&plan_path)?;
+    // Accept both FixPlan and DraftPlan (draft → fix via to_fix_plan())
+    let plan = load_plan(&plan_path)?;
     let root = std::env::current_dir()?;
 
     eprintln!(
@@ -414,6 +416,27 @@ fn cmd_draft(paths: Vec<PathBuf>, output: PathBuf, config_override: &Option<Path
     eprintln!("  3. glint fix --plan {}", output.display());
 
     Ok(())
+}
+
+/// Load a plan file — accepts both FixPlan and DraftPlan formats.
+/// DraftPlan is automatically converted to FixPlan via to_fix_plan().
+fn load_plan(path: &std::path::Path) -> anyhow::Result<FixPlan> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("reading plan file: {}", path.display()))?;
+
+    // Try FixPlan first (has "schema_version" + "fixes" array)
+    if let Ok(plan) = serde_json::from_str::<FixPlan>(&content) {
+        return Ok(plan);
+    }
+
+    // Try DraftPlan (has "schema_version" + "groups" array)
+    if let Ok(draft) = serde_json::from_str::<glint_lib::draft::DraftPlan>(&content) {
+        eprintln!("{} converting draft plan to fix plan (auto+annotated groups only)",
+            "info:".cyan());
+        return Ok(draft.to_fix_plan());
+    }
+
+    anyhow::bail!("cannot parse {} as FixPlan or DraftPlan", path.display())
 }
 
 fn load_config(path: &std::path::Path, override_path: &Option<PathBuf>) -> GlintConfig {

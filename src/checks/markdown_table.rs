@@ -162,7 +162,9 @@ pub fn parse_tables(lines: &[&str], in_code: &[bool]) -> Vec<ParsedTable> {
                 }
 
                 tables.push(ParsedTable {
-                    headers: header_cells.iter().map(|c| c.trim().to_string()).collect(),
+                    // Keep raw cells (with whitespace) for padding validation.
+                    // Schema matching trims at comparison time via .trim().
+                    headers: header_cells,
                     separator_cells: sep_cells,
                     body_rows,
                     line: i + 1, // 1-based
@@ -211,13 +213,62 @@ fn is_separator_cell_strict(cell: &str, min_dashes: usize) -> bool {
     dashes >= min_dashes && core.chars().all(|c| c == '-' || c == ' ')
 }
 
-/// Split a table row into cell strings (strips outer pipes, splits on `|`).
+/// Split a table row into cell strings (strips outer pipes, splits on unescaped `|`).
+///
+/// Handles GFM table escaping rules:
+///   - `\|` inside a cell is an escaped pipe — NOT a column separator
+///   - `|` inside backtick code spans is content — NOT a separator
+///   - `||` (SQL concat) is two pipe chars but context determines if they're separators
+///
+/// See: https://github.github.com/gfm/#tables (§4.10)
 fn parse_row(line: &str) -> Vec<String> {
     let trimmed = line.trim();
-    // Strip leading and trailing |
+    if trimmed.is_empty() { return Vec::new(); }
+
+    // Identify the inner content (between outer pipe delimiters if present)
     let inner = if trimmed.starts_with('|') { &trimmed[1..] } else { trimmed };
     let inner = if inner.ends_with('|') { &inner[..inner.len()-1] } else { inner };
-    inner.split('|').map(|s| s.to_string()).collect()
+
+    // Walk character-by-character, respecting:
+    //   \| — escaped pipe, kept as content
+    //   backtick spans — | inside `` ` `` ... `` ` `` is content
+    let mut cells: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut chars = inner.chars().peekable();
+    let mut in_code_span = false;
+    let mut code_span_char = '`';
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                // Escaped pipe — keep in cell content
+                current.push('\\');
+                current.push('|');
+                chars.next();
+            }
+            '`' if !in_code_span => {
+                // Opening code span
+                in_code_span = true;
+                code_span_char = '`';
+                current.push(c);
+            }
+            c if c == code_span_char && in_code_span => {
+                // Closing code span
+                in_code_span = false;
+                current.push(c);
+            }
+            '|' if !in_code_span => {
+                // Unescaped, not-in-code-span pipe = column separator
+                cells.push(current.clone());
+                current = String::new();
+            }
+            other => {
+                current.push(other);
+            }
+        }
+    }
+    cells.push(current);
+    cells
 }
 
 // ─────────────────────────────────────────────────────────
