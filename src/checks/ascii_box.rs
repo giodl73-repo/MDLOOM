@@ -287,8 +287,18 @@ fn check_boxes(
         for row_idx in (b.top_line + 1)..b.bottom_line {
             let line = lines[row_idx];
             let abs_line = row_idx + line_offset;
-            let row_width = visual_width(line);
             let actual_cols = vertical_columns(line);
+
+            // Skip rows with no vertical separators entirely — these are:
+            //   • Empty lines between two box elements (Pattern G: inline/floating box)
+            //   • Free-text continuation lines above/below a box
+            //   • Arrow-only connector lines (▼, │) that have no | characters
+            // Checking width on these produces false "row width 0 ≠ box width N" errors.
+            if actual_cols.is_empty() && !b.expected_cols.is_empty() {
+                continue;
+            }
+
+            let row_width = visual_width(line);
 
             // Width check
             if row_width != b.top_width {
@@ -311,8 +321,10 @@ fn check_boxes(
                 }
             }
 
-            // Column alignment check
-            if actual_cols.is_empty() && !b.expected_cols.is_empty() {
+            // Column alignment check — actual_cols is non-empty here (checked above)
+            if false {
+                // Dead branch: the `actual_cols.is_empty()` guard above already handles this.
+                // Left as documentation that the guard was intentionally moved up.
                 continue; // continuation text — skip
             }
 
