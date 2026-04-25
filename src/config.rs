@@ -15,6 +15,8 @@ pub struct GlintConfig {
     #[serde(default)]
     pub ascii_box: AsciiBoxConfig,
     #[serde(default)]
+    pub ascii_char: AsciiCharConfig,
+    #[serde(default)]
     pub ascii_flow: AsciiFlowConfig,
     #[serde(default)]
     pub markdown: MarkdownConfig,
@@ -100,6 +102,9 @@ pub struct AsciiBoxConfig {
     /// Also validate Unicode box-drawing character boxes
     #[serde(default = "bool_true")]
     pub check_unicode: bool,
+    /// Tab width for visual column calculation (CommonMark default: 4)
+    #[serde(default = "default_tab_width")]
+    pub tab_width: usize,
 }
 
 impl Default for AsciiBoxConfig {
@@ -109,9 +114,35 @@ impl Default for AsciiBoxConfig {
             tolerance: 0,
             code_blocks_only: true,
             check_unicode: true,
+            tab_width: 4,
         }
     }
 }
+
+/// Character range check (Style Guide Rule S-01).
+#[derive(Debug, Deserialize, Clone)]
+pub struct AsciiCharConfig {
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+    /// Error on wide/fullwidth chars (2-col) that will break alignment (always recommended)
+    #[serde(default = "bool_true")]
+    pub error_on_wide: bool,
+    /// Also warn on narrow chars outside the safe Unicode ranges
+    #[serde(default)]
+    pub warn_unusual: bool,
+}
+
+impl Default for AsciiCharConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            error_on_wide: true,
+            warn_unusual: false,
+        }
+    }
+}
+
+fn default_tab_width() -> usize { 4 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AsciiFlowConfig {
@@ -328,7 +359,8 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
         extends: child.extends,
         meta: if child.meta.name.is_some() { child.meta } else { parent.meta },
         files: merge_files(parent.files, child.files),
-        ascii_box: child.ascii_box, // scalars: child wins entirely
+        ascii_box: child.ascii_box,   // scalars: child wins entirely
+        ascii_char: child.ascii_char,
         ascii_flow: child.ascii_flow,
         markdown: merge_markdown(parent.markdown, child.markdown),
         section_schemas: {

@@ -1,8 +1,9 @@
 use crate::checks::ascii_box::AsciiBoxCheck;
+use crate::checks::ascii_char::AsciiCharCheck;
 use crate::checks::ascii_flow::AsciiFlowCheck;
 use crate::checks::markdown::MarkdownCheck;
 use crate::checks::Check;
-use crate::config::{AsciiBoxConfig, AsciiFlowConfig, GlintConfig, MarkdownConfig, SectionSchema};
+use crate::config::{AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, GlintConfig, MarkdownConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
@@ -112,6 +113,12 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
     if config.ascii_box.enabled {
         checks.push(Box::new(AsciiBoxCheck {
             config: config.ascii_box.clone(),
+        }));
+    }
+
+    if config.ascii_char.enabled {
+        checks.push(Box::new(AsciiCharCheck {
+            config: config.ascii_char.clone(),
         }));
     }
 

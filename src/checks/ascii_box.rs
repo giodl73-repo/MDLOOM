@@ -32,11 +32,24 @@ impl Check for AsciiBoxCheck {
         let mut diags = Vec::new();
 
         if self.config.code_blocks_only {
-            // Only check inside fenced code blocks
-            let regions = code_block_regions(&lines);
-            for (start, end) in regions {
-                let region = &lines[start..end];
-                let mut region_diags = check_boxes(path, region, start + 1, &self.config);
+            let blocks = detect_code_blocks(&lines, 0);
+            for block in &blocks {
+                // Warn on unclosed code blocks — the content may be malformed
+                if block.unclosed {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(),
+                        block.fence_line,
+                        1,
+                        "ascii_unclosed_fence",
+                        format!(
+                            "unclosed code fence (opened at line {}) — \
+                             content extends to end of file; ASCII art inside may be malformed",
+                            block.fence_line
+                        ),
+                    ));
+                }
+                let region = &lines[block.content_start..block.content_end];
+                let mut region_diags = check_boxes(path, region, block.content_start + 1, &self.config);
                 diags.append(&mut region_diags);
             }
         } else {
@@ -47,42 +60,110 @@ impl Check for AsciiBoxCheck {
     }
 }
 
-/// Returns (start, end) line index ranges of code block contents (exclusive of fences).
-fn code_block_regions(lines: &[&str]) -> Vec<(usize, usize)> {
-    let mut regions = Vec::new();
+/// A detected code block region.
+struct CodeBlock {
+    /// Index of first content line (after opening fence), 0-based in `lines`
+    content_start: usize,
+    /// Index one past the last content line (before closing fence or EOF)
+    content_end: usize,
+    /// True if the block was never closed (no matching closing fence found)
+    unclosed: bool,
+    /// 1-based line number of the opening fence in the file
+    fence_line: usize,
+}
+
+/// Detect all fenced code blocks in `lines`.
+/// Returns regions with their content range and whether they were properly closed.
+fn detect_code_blocks(lines: &[&str], line_offset: usize) -> Vec<CodeBlock> {
+    let mut blocks = Vec::new();
     let mut in_block = false;
-    let mut block_start = 0;
+    let mut block_start = 0usize;
     let mut fence_char = '`';
+    let mut fence_len = 3usize;
+    let mut fence_line = 0usize;
 
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
         if !in_block {
-            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-                fence_char = trimmed.chars().next().unwrap();
-                in_block = true;
-                block_start = i + 1;
+            let ch = trimmed.chars().next();
+            if matches!(ch, Some('`') | Some('~')) {
+                let c = ch.unwrap();
+                let run = trimmed.chars().take_while(|&x| x == c).count();
+                if run >= 3 {
+                    fence_char = c;
+                    fence_len = run;
+                    fence_line = i + line_offset + 1; // 1-based file line
+                    in_block = true;
+                    block_start = i + 1;
+                }
             }
         } else {
-            let close: String = std::iter::repeat(fence_char).take(3).collect();
-            if trimmed.starts_with(&close) {
-                regions.push((block_start, i));
-                in_block = false;
+            let ch = trimmed.chars().next();
+            if ch == Some(fence_char) {
+                let run = trimmed.chars().take_while(|&x| x == fence_char).count();
+                if run >= fence_len {
+                    blocks.push(CodeBlock {
+                        content_start: block_start,
+                        content_end: i,
+                        unclosed: false,
+                        fence_line,
+                    });
+                    in_block = false;
+                }
             }
         }
     }
-    // Unclosed block — include to end
     if in_block {
-        regions.push((block_start, lines.len()));
+        blocks.push(CodeBlock {
+            content_start: block_start,
+            content_end: lines.len(),
+            unclosed: true,
+            fence_line,
+        });
     }
-    regions
+    blocks
 }
 
-/// Visual display width of a string, treating tabs as 1.
+/// Returns (start, end) line index ranges of code block contents (exclusive of fences).
+/// Unclosed blocks are included (content extends to end of input).
+fn code_block_regions(lines: &[&str]) -> Vec<(usize, usize)> {
+    detect_code_blocks(lines, 0)
+        .into_iter()
+        .map(|b| (b.content_start, b.content_end))
+        .collect()
+}
+
+// ─────────────────────────────────────────────────────────
+// Character width primitives — used by all column/width functions
+// ─────────────────────────────────────────────────────────
+
+/// Advance width of a single character at `col_0based` (0-indexed position).
+/// Tabs expand to the next `tab_width`-space tab stop.
+/// Wide/Fullwidth Unicode chars count as 2 columns.
+/// Zero-width chars (combining, etc.) count as 0.
+pub fn char_advance(c: char, col_0based: usize, tab_width: usize) -> usize {
+    match c {
+        '\t' => {
+            let next_stop = ((col_0based / tab_width) + 1) * tab_width;
+            (next_stop - col_0based).max(1) // tabs always advance at least 1
+        }
+        _ => c.width().unwrap_or(0),
+    }
+}
+
+/// Visual display width of a string with tab expansion.
+/// Tab width is configurable; use 4 for CommonMark-compatible behaviour.
+pub fn visual_width_tab(s: &str, tab_width: usize) -> usize {
+    let mut col = 0usize;
+    for c in s.chars() {
+        col += char_advance(c, col, tab_width);
+    }
+    col
+}
+
+/// Visual width with default 4-space tabs.
 fn visual_width(s: &str) -> usize {
-    s.chars().map(|c| {
-        if c == '\t' { 1 }
-        else { c.width().unwrap_or(0) }
-    }).sum()
+    visual_width_tab(s, 4)
 }
 
 /// True if char is a box-drawing top/bottom border fill char.
@@ -165,28 +246,29 @@ fn is_border_line(line: &str) -> bool {
 }
 
 /// Extract visual column positions of junction characters from a border line.
-/// Returns positions as 1-based visual columns.
+/// Returns 1-based visual columns with tab expansion (4-space tab stops).
 fn junction_columns(line: &str) -> Vec<usize> {
     let mut cols = Vec::new();
-    let mut visual_col = 1usize;
+    let mut col_0 = 0usize; // 0-based running column
     for c in line.chars() {
         if is_border_junction(c) {
-            cols.push(visual_col);
+            cols.push(col_0 + 1); // 1-based
         }
-        visual_col += c.width().unwrap_or(0).max(1);
+        col_0 += char_advance(c, col_0, 4);
     }
     cols
 }
 
 /// Extract visual column positions of vertical separator characters from a content line.
+/// Uses tab expansion (4-space tab stops) for consistent alignment with junction_columns.
 fn vertical_columns(line: &str) -> Vec<usize> {
     let mut cols = Vec::new();
-    let mut visual_col = 1usize;
+    let mut col_0 = 0usize; // 0-based running column, for tab expansion
     for c in line.chars() {
         if is_vertical(c) {
-            cols.push(visual_col);
+            cols.push(col_0 + 1); // 1-based
         }
-        visual_col += c.width().unwrap_or(0).max(1);
+        col_0 += char_advance(c, col_0, 4);
     }
     cols
 }
