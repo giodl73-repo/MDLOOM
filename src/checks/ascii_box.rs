@@ -108,31 +108,38 @@ fn is_vertical(c: char) -> bool {
 }
 
 /// Returns true if this line looks like a box border (top/bottom of a box).
-/// A border line must:
-///   - Contain at least one junction character
-///   - After stripping leading whitespace, majority of non-space chars are fill or junction
+///
+/// Requirements:
+///   - Starts with a junction char (`+`, `┌`, etc.) or a vertical bar (`|`, `│`)
+///   - Contains ≥ 2 junction characters (NOT just vertical bars)
+///   - Fill chars (`-`, `─`) dominate over non-fill, non-junction chars
+///
+/// Safety note: `|` is NOT a junction — it's counted in `other_count`. This means
+/// a markdown table row `| --- | --- |` produces junction_count=0, which fails the
+/// `junction_count >= 2` check. Markdown tables never trigger this function.
 fn is_border_line(line: &str) -> bool {
     let trimmed = line.trim_start();
     if trimmed.is_empty() { return false; }
 
-    // Must start with a junction or vertical (the latter for partial borders)
+    // Allow `|` as a first char so partial borders (`|---+---+`) are detected,
+    // but `|` is NOT a junction — it goes to other_count below.
     let first = trimmed.chars().next().unwrap();
     if !is_border_junction(first) && first != '|' && first != '│' {
         return false;
     }
 
-    let mut junction_count = 0;
-    let mut fill_count = 0;
-    let mut other_count = 0;
+    let mut junction_count = 0usize; // only `+` and Unicode corners/Ts
+    let mut fill_count = 0usize;
+    let mut other_count = 0usize;
 
     for c in trimmed.chars() {
         if is_border_junction(c) { junction_count += 1; }
         else if is_border_fill(c) { fill_count += 1; }
-        else if c == ' ' { /* ok inside cells */ }
-        else { other_count += 1; }
+        else if c == ' ' { /* spacing inside cells — ok */ }
+        else { other_count += 1; } // includes `|`, letters, digits
     }
 
-    // Must have at least 2 junctions and fill chars dominate
+    // Two genuine corners/junctions required; fill chars must dominate prose
     junction_count >= 2 && (fill_count + junction_count) > other_count
 }
 
@@ -293,9 +300,13 @@ fn check_boxes(
                     .iter()
                     .any(|&c| c.abs_diff(expected_col) <= config.tolerance);
                 if !aligned {
+                    // Search window for "nearest actual separator" in the error message.
+                    // Use at least 3 columns so the message is useful even with tolerance=0,
+                    // but honour larger tolerances too.
+                    let search_window = config.tolerance.max(3);
                     let found_at: Vec<usize> = actual_cols
                         .iter()
-                        .filter(|&&c| c.abs_diff(expected_col) <= 3)
+                        .filter(|&&c| c.abs_diff(expected_col) <= search_window)
                         .copied()
                         .collect();
 

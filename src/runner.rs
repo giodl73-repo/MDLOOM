@@ -97,8 +97,9 @@ impl Runner {
 
     fn matches(&self, path: &Path) -> bool {
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
-        let included = if self.include.is_empty() { true } else { self.include.is_match(rel) };
-        let excluded = self.exclude.is_match(rel);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        let included = if self.include.is_empty() { true } else { self.include.is_match(&*rel_str) };
+        let excluded = self.exclude.is_match(&*rel_str);
         included && !excluded
     }
 }
@@ -133,6 +134,9 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
 /// section_schemas additively on top of the base markdown config.
 fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> MarkdownConfig {
     let rel = file.strip_prefix(root).unwrap_or(file);
+    // Normalize to forward slashes so glob patterns work on Windows too.
+    // Glob patterns are always written as "languages/**" not "languages\\**".
+    let rel_str = rel.to_string_lossy().replace('\\', "/");
     let mut md = config.markdown.clone();
 
     for schema in &config.section_schemas {
@@ -140,7 +144,7 @@ fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> Markdow
             Ok(gs) => gs,
             Err(_) => continue,
         };
-        if globset.is_match(rel) {
+        if globset.is_match(&*rel_str) {
             apply_section_schema(&mut md, schema);
         }
     }

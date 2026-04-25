@@ -221,6 +221,10 @@ impl GlintConfig {
 
 /// Walk from `dir` up to `root_dir`, collecting every glint.toml found.
 /// Returns configs ordered nearest-first (dir's config first, root last).
+///
+/// If a config has `extends = "path/to/parent.toml"`, that file is loaded and
+/// inserted immediately after the current config (lower priority, higher in chain).
+/// This allows explicit parenting that overrides the auto-cascade direction.
 fn collect_configs_up(dir: &Path, root_dir: &Path) -> Vec<GlintConfig> {
     let mut configs = Vec::new();
     let mut current = dir.to_path_buf();
@@ -228,14 +232,31 @@ fn collect_configs_up(dir: &Path, root_dir: &Path) -> Vec<GlintConfig> {
     loop {
         if let Some(cfg) = try_load_config(&current) {
             let is_root = cfg.files.root;
-            configs.push(cfg);
+
+            // Resolve `extends` before pushing — extends acts as an explicit parent,
+            // inserted at lower priority (further from the file) than the current config.
+            if let Some(ref parent_rel) = cfg.extends.clone() {
+                let parent_abs = current.join(parent_rel);
+                match GlintConfig::load(&parent_abs) {
+                    Ok(parent_cfg) => {
+                        // Push current first (nearest → highest priority after reversal)
+                        configs.push(cfg);
+                        // Then push extends (will end up at lower priority)
+                        configs.push(parent_cfg);
+                    }
+                    Err(e) => {
+                        eprintln!("glint: warning: extends {:?} failed: {}", parent_abs, e);
+                        configs.push(cfg);
+                    }
+                }
+            } else {
+                configs.push(cfg);
+            }
+
             if is_root { break; }
         }
 
-        // Stop at root_dir (inclusive — we already checked it above)
-        if current == root_dir {
-            break;
-        }
+        if current == root_dir { break; }
 
         match current.parent() {
             Some(p) => current = p.to_path_buf(),
@@ -269,7 +290,7 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
     GlintConfig {
         extends: child.extends,
         meta: if child.meta.name.is_some() { child.meta } else { parent.meta },
-        files: child.files, // child's include/exclude takes over
+        files: merge_files(parent.files, child.files),
         ascii_box: child.ascii_box, // scalars: child wins entirely
         ascii_flow: child.ascii_flow,
         markdown: merge_markdown(parent.markdown, child.markdown),
@@ -283,6 +304,28 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
             v.extend(child.custom_rules);
             v
         },
+    }
+}
+
+/// Merge file selection configs.
+/// - `include`: child wins if it differs from the default (non-empty overrides parent)
+/// - `exclude`: additive — a child cannot un-exclude what the root excluded
+/// - `root`: either can mark the stop point
+fn merge_files(parent: FilesConfig, child: FilesConfig) -> FilesConfig {
+    FilesConfig {
+        // Child's include overrides parent (it knows what files are in its subtree)
+        include: if !child.include.is_empty() { child.include } else { parent.include },
+        // Exclude is additive: child adds more exclusions on top of parent's
+        exclude: {
+            let mut v = parent.exclude;
+            for pat in child.exclude {
+                if !v.contains(&pat) {
+                    v.push(pat);
+                }
+            }
+            v
+        },
+        root: child.root || parent.root,
     }
 }
 
