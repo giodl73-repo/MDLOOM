@@ -13,6 +13,7 @@ use walkdir::WalkDir;
 
 pub struct Runner {
     root: PathBuf,
+    #[allow(dead_code)]
     root_config: GlintConfig,
     /// Cache of per-directory resolved configs (dir path → resolved config)
     config_cache: Arc<Mutex<HashMap<PathBuf, Arc<GlintConfig>>>>,

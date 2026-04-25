@@ -12,7 +12,8 @@
 
 use crate::checks::Check;
 use crate::config::AsciiBoxConfig;
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{Diagnostic, RichContext};
+use std::collections::BTreeMap;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 
@@ -205,7 +206,7 @@ fn find_boxes(lines: &[&str]) -> Vec<BoxRegion> {
 fn check_boxes(
     path: &Path,
     lines: &[&str],
-    line_offset: usize,  // line number of lines[0] in the original file (1-based)
+    line_offset: usize, // line number of lines[0] in the original file (1-based)
     config: &AsciiBoxConfig,
 ) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
@@ -214,10 +215,30 @@ fn check_boxes(
     for b in &boxes {
         let abs_top = b.top_line + line_offset;
         let abs_bottom = b.bottom_line + line_offset;
+        let border_line = lines[b.top_line].to_string();
+
+        // Helper: build rich context for a line in this box
+        let box_context = |abs_line: usize, actual: Vec<usize>| -> RichContext {
+            let mut ctx_lines = BTreeMap::new();
+            // Capture the full box + 1 line of surrounding context
+            let region_start = b.top_line.saturating_sub(1);
+            let region_end = (b.bottom_line + 2).min(lines.len());
+            for idx in region_start..region_end {
+                ctx_lines.insert(idx + line_offset, lines[idx].to_string());
+            }
+            RichContext {
+                box_opens_at: Some(abs_top),
+                border_line: Some(border_line.clone()),
+                expected_cols: Some(b.expected_cols.clone()),
+                actual_cols: if actual.is_empty() { None } else { Some(actual) },
+                lines: ctx_lines,
+            }
+        };
 
         // Check bottom border width matches top
         let bottom_width = visual_width(lines[b.bottom_line]);
         if bottom_width != b.top_width {
+            let ctx = box_context(abs_bottom, junction_columns(lines[b.bottom_line]));
             diags.push(
                 Diagnostic::error(
                     path.to_path_buf(),
@@ -225,11 +246,12 @@ fn check_boxes(
                     1,
                     "ascii_box_width",
                     format!(
-                        "box bottom border width {} ≠ top border width {} (opened at line {})",
+                        "bottom border width {} ≠ top border width {} (opened at line {})",
                         bottom_width, b.top_width, abs_top
                     ),
                 )
                 .with_note(format!("top border at line {}", abs_top))
+                .with_rich(ctx),
             );
         }
 
@@ -238,12 +260,13 @@ fn check_boxes(
             let line = lines[row_idx];
             let abs_line = row_idx + line_offset;
             let row_width = visual_width(line);
+            let actual_cols = vertical_columns(line);
 
             // Width check
             if row_width != b.top_width {
-                let tolerance = config.tolerance;
                 let diff = row_width.abs_diff(b.top_width);
-                if diff > tolerance {
+                if diff > config.tolerance {
+                    let ctx = box_context(abs_line, actual_cols.clone());
                     diags.push(
                         Diagnostic::error(
                             path.to_path_buf(),
@@ -255,23 +278,23 @@ fn check_boxes(
                                 row_width, b.top_width, abs_top
                             ),
                         )
+                        .with_rich(ctx),
                     );
                 }
             }
 
             // Column alignment check
-            let actual_cols = vertical_columns(line);
             if actual_cols.is_empty() && !b.expected_cols.is_empty() {
-                // Lines without any vertical chars are probably continuation text — skip
-                continue;
+                continue; // continuation text — skip
             }
 
             for &expected_col in &b.expected_cols {
-                let tolerance = config.tolerance;
-                let aligned = actual_cols.iter().any(|&c| c.abs_diff(expected_col) <= tolerance);
+                let aligned = actual_cols
+                    .iter()
+                    .any(|&c| c.abs_diff(expected_col) <= config.tolerance);
                 if !aligned {
-                    // Find what's at the expected column position
-                    let found_at: Vec<usize> = actual_cols.iter()
+                    let found_at: Vec<usize> = actual_cols
+                        .iter()
                         .filter(|&&c| c.abs_diff(expected_col) <= 3)
                         .copied()
                         .collect();
@@ -279,7 +302,10 @@ fn check_boxes(
                     let msg = if let Some(&nearest) = found_at.first() {
                         format!(
                             "column separator at col {} (expected col {}) — off by {} (box opened at line {})",
-                            nearest, expected_col, nearest.abs_diff(expected_col), abs_top
+                            nearest,
+                            expected_col,
+                            nearest.abs_diff(expected_col),
+                            abs_top
                         )
                     } else {
                         format!(
@@ -288,13 +314,17 @@ fn check_boxes(
                         )
                     };
 
-                    diags.push(Diagnostic::error(
-                        path.to_path_buf(),
-                        abs_line,
-                        expected_col,
-                        "ascii_box_col",
-                        msg,
-                    ));
+                    let ctx = box_context(abs_line, actual_cols.clone());
+                    diags.push(
+                        Diagnostic::error(
+                            path.to_path_buf(),
+                            abs_line,
+                            expected_col,
+                            "ascii_box_col",
+                            msg,
+                        )
+                        .with_rich(ctx),
+                    );
                 }
             }
         }
@@ -302,24 +332,29 @@ fn check_boxes(
         // Check bottom border junction columns match top
         let bottom_cols = junction_columns(lines[b.bottom_line]);
         if bottom_cols != b.expected_cols {
-            // Report which columns diverge
-            let top_set: std::collections::HashSet<usize> = b.expected_cols.iter().copied().collect();
-            let bot_set: std::collections::HashSet<usize> = bottom_cols.iter().copied().collect();
+            let top_set: std::collections::HashSet<usize> =
+                b.expected_cols.iter().copied().collect();
+            let bot_set: std::collections::HashSet<usize> =
+                bottom_cols.iter().copied().collect();
 
             for col in top_set.symmetric_difference(&bot_set) {
                 let in_top = b.expected_cols.contains(col);
-                diags.push(Diagnostic::warning(
-                    path.to_path_buf(),
-                    abs_bottom,
-                    *col,
-                    "ascii_box_col",
-                    format!(
-                        "bottom border junction at col {} {} match top border (line {})",
-                        col,
-                        if in_top { "does not" } else { "not in top but present in" },
-                        abs_top
-                    ),
-                ));
+                let ctx = box_context(abs_bottom, bottom_cols.clone());
+                diags.push(
+                    Diagnostic::warning(
+                        path.to_path_buf(),
+                        abs_bottom,
+                        *col,
+                        "ascii_box_col",
+                        format!(
+                            "bottom border junction at col {} {} match top border (line {})",
+                            col,
+                            if in_top { "does not" } else { "present in bottom but not top" },
+                            abs_top
+                        ),
+                    )
+                    .with_rich(ctx),
+                );
             }
         }
     }

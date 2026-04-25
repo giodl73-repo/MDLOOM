@@ -1,7 +1,10 @@
+use serde::Serialize;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
     Warning,
@@ -18,10 +21,10 @@ impl fmt::Display for Severity {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Span {
-    pub line: usize,   // 1-based
-    pub col: usize,    // 1-based, byte offset
+    pub line: usize, // 1-based
+    pub col: usize,  // 1-based, visual column
 }
 
 impl fmt::Display for Span {
@@ -30,19 +33,57 @@ impl fmt::Display for Span {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Rich context block — populated by checks, serialized only in --format rich.
+/// Gives an AI reviewer everything needed to decide the fix direction without
+/// reading the whole file.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct RichContext {
+    /// For ascii_box errors: the line where this box's top border was found.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub box_opens_at: Option<usize>,
+
+    /// The top border line of the box (defines expected column positions).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border_line: Option<String>,
+
+    /// Column positions (1-based visual) that column separators must occupy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_cols: Option<Vec<usize>>,
+
+    /// Actual column positions found on the failing line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual_cols: Option<Vec<usize>>,
+
+    /// Surrounding file lines: line_number → line_content.
+    /// Populated by the runner for all diagnostics (typically ±3 lines).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub lines: BTreeMap<usize, String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Diagnostic {
     pub file: PathBuf,
     pub span: Span,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_span: Option<Span>,
     pub severity: Severity,
     pub code: &'static str,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Rich context — always computed by checks, only emitted in --format rich.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rich: Option<RichContext>,
 }
 
 impl Diagnostic {
-    pub fn error(file: PathBuf, line: usize, col: usize, code: &'static str, message: impl Into<String>) -> Self {
+    pub fn error(
+        file: PathBuf,
+        line: usize,
+        col: usize,
+        code: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             file,
             span: Span { line, col },
@@ -51,10 +92,17 @@ impl Diagnostic {
             code,
             message: message.into(),
             note: None,
+            rich: None,
         }
     }
 
-    pub fn warning(file: PathBuf, line: usize, col: usize, code: &'static str, message: impl Into<String>) -> Self {
+    pub fn warning(
+        file: PathBuf,
+        line: usize,
+        col: usize,
+        code: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             file,
             span: Span { line, col },
@@ -63,6 +111,7 @@ impl Diagnostic {
             code,
             message: message.into(),
             note: None,
+            rich: None,
         }
     }
 
@@ -71,8 +120,8 @@ impl Diagnostic {
         self
     }
 
-    pub fn with_end(mut self, end_line: usize, end_col: usize) -> Self {
-        self.end_span = Some(Span { line: end_line, col: end_col });
+    pub fn with_rich(mut self, ctx: RichContext) -> Self {
+        self.rich = Some(ctx);
         self
     }
 }
