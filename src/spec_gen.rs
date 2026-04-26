@@ -216,11 +216,12 @@ pub fn format_toml(spec: &SpecSuggestion) -> String {
             inv.confidence.label(),
             inv.rationale
         ));
-        out.push_str("  [[davinci.invariant]]\n");
+        out.push_str("  [[davinci.invariants]]\n");
         out.push_str(&format!("  rule = {:?}\n", inv.rule));
         match &inv.params {
             InvariantParams::Text { value } => {
-                out.push_str(&format!("  value = {:?}\n", value));
+                // The Invariant struct uses `text` for string params (not `value`)
+                out.push_str(&format!("  text = {:?}\n", value));
             }
             InvariantParams::MinMax { min, max } => {
                 if let Some(v) = min {
@@ -521,7 +522,7 @@ GOROUTINE SCHEDULER — M:N multiplexing
         let toml = format_toml(&spec);
         assert!(toml.contains("[[davinci]]"));
         assert!(toml.contains("id = \"scheduler\""));
-        assert!(toml.contains("[[davinci.invariant]]"));
+        assert!(toml.contains("[[davinci.invariants]]"));
         assert!(toml.contains("# [high]"));
         assert!(toml.contains("rule = \"line-count\""));
     }

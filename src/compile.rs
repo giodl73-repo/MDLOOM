@@ -332,19 +332,17 @@ pub fn compile_file(
                 if any_err || figures.is_empty() {
                     source_lines[line_start..=line_end].join("\n")
                 } else {
-                    let layout_config = LayoutAttrs::parse(
-                        // Re-parse from attrs since we can't move out of the match binding
-                        &format!(
-                            "gap={} align={} width={} direction={} border={}{}{}",
-                            attrs.gap,
-                            attrs.align,
-                            attrs.width,
-                            attrs.direction,
-                            if attrs.border { "true" } else { "false" },
-                            if let Some(c) = attrs.cols { format!(" cols={}", c) } else { String::new() },
-                            if !attrs.labels.is_empty() { format!(" labels={:?}", attrs.labels.join(",")) } else { String::new() },
-                        )
-                    ).to_layout_config();
+                    // Convert attrs directly to LayoutConfig — no re-serialization to avoid
+                    // label corruption (labels with spaces would be split by the string parser)
+                    let layout_config = LayoutConfig {
+                        gap: attrs.gap,
+                        align: Align::parse(&attrs.align).unwrap_or(Align::Top),
+                        labels: attrs.labels.clone(),
+                        cols: attrs.cols,
+                        width: attrs.width,
+                        direction: Direction::parse(&attrs.direction).unwrap_or(Direction::Horizontal),
+                        border: attrs.border,
+                    };
 
                     let composed = layout::layout(figures, &layout_config);
                     // Strip outer ``` wrapper — compile embeds content inline
@@ -395,8 +393,12 @@ pub fn compile_file(
         });
     }
 
-    // Rebuild source with replacements applied
-    let output_text = apply_replacements(&source_lines, &replacements);
+    // Rebuild source with replacements applied, preserving trailing newline
+    let had_trailing_newline = source_text.ends_with('\n');
+    let mut output_text = apply_replacements(&source_lines, &replacements);
+    if had_trailing_newline && !output_text.ends_with('\n') {
+        output_text.push('\n');
+    }
 
     // Atomic write: temp-then-rename
     let tmp = output_path.with_extension("proof_tmp");

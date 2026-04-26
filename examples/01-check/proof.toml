@@ -1,0 +1,22 @@
+[meta]
+name = "go-guide-example"
+
+[files]
+include = ["**/*.md"]
+root = true
+
+[ascii_box]
+enabled = true
+tolerance = 0
+code_blocks_only = true
+
+[markdown]
+enabled = true
+max_h1 = 1
+required_h2_all = ["Decision Cheat Sheet"]
+
+[[markdown_table.table_schemas]]
+heading = "Type System Snapshot"
+required_columns = ["Axis"]
+required_row_keys = ["Binding", "Typing", "Strength", "Type system", "Memory model"]
+min_body_rows = 4

@@ -228,7 +228,7 @@ fn detect_border_widths(lines: &[&str]) -> Vec<usize> {
             let t = l.trim();
             matches!(t.chars().next(), Some('+') | Some('┌') | Some('└') | Some('╔') | Some('╚'))
         })
-        .map(|l| l.chars().count())
+        .map(|l| crate::layout::visual_width(l.trim()))
         .collect()
 }
 

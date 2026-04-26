@@ -1031,6 +1031,9 @@ fn count_files(dir: &std::path::Path) -> usize {
     walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.file_type().is_file()
+                && e.path().extension().map(|x| x == "md").unwrap_or(false)
+        })
         .count()
 }
