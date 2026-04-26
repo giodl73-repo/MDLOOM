@@ -5,6 +5,7 @@ use anyhow::Context;
 use proof_lib::davinci::check_daVinci;
 use proof_lib::draft::build_draft_plan;
 use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
+use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
 use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
 use std::path::PathBuf;
 use std::process;
@@ -129,6 +130,38 @@ enum Command {
         #[arg(long)]
         by_code: bool,
     },
+    /// Compose N figures side-by-side into a single ASCII art collage
+    Layout {
+        /// Source figures: md:// URIs or file paths
+        sources: Vec<String>,
+        /// Spaces between frames (default: 3)
+        #[arg(long, default_value = "3")]
+        gap: usize,
+        /// Vertical alignment: top | center | bottom (default: top)
+        #[arg(long, default_value = "top")]
+        align: String,
+        /// Labels above each frame (one per source, space-separated)
+        #[arg(long, num_args = 0..)]
+        labels: Vec<String>,
+        /// Number of frames per row before wrapping (default: all)
+        #[arg(long)]
+        cols: Option<usize>,
+        /// Max output width in columns (default: 120)
+        #[arg(long, default_value = "120")]
+        width: usize,
+        /// Composition direction: horizontal | vertical (or h | v)
+        #[arg(long, default_value = "horizontal")]
+        direction: String,
+        /// Add a border box around each frame
+        #[arg(long)]
+        border: bool,
+        /// Write output to file (default: stdout)
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+        /// Root directory for md:// URI resolution (default: current directory)
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -165,6 +198,13 @@ fn main() -> Result<()> {
         Some(Command::Stats { paths, by_directory, by_code }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             return cmd_stats(paths, by_directory, by_code, &cli.config);
+        }
+        Some(Command::Layout {
+            sources, gap, align, labels, cols, width, direction, border, output, root,
+        }) => {
+            return cmd_layout(
+                sources, gap, align, labels, cols, width, direction, border, output, root,
+            );
         }
         _ => {}
     }
@@ -585,6 +625,65 @@ fn cmd_resolve(uri: String, root: Option<PathBuf>, format: String) -> Result<()>
             println!();
             println!("{}", element.content);
         }
+    }
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// layout
+// ─────────────────────────────────────────────────────────
+
+fn cmd_layout(
+    sources: Vec<String>,
+    gap: usize,
+    align_str: String,
+    labels: Vec<String>,
+    cols: Option<usize>,
+    width: usize,
+    direction_str: String,
+    border: bool,
+    output: Option<PathBuf>,
+    root: Option<PathBuf>,
+) -> Result<()> {
+    if sources.is_empty() {
+        eprintln!("{} no sources provided — pass md:// URIs or file paths", "error:".red());
+        process::exit(2);
+    }
+
+    let align = Align::parse(&align_str)?;
+    let direction = Direction::parse(&direction_str)?;
+    let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+    let config = LayoutConfig { gap, align, labels, cols, width, direction, border };
+
+    // Resolve each source to content lines
+    let mut figures: Vec<Vec<String>> = Vec::new();
+    for source in &sources {
+        let content = if source.starts_with("md://") {
+            // Resolve via mdpath
+            let parsed = mdpath::parse(source)
+                .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", source, e))?;
+            let element = mdpath::resolve(&parsed, &root)
+                .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", source, e))?;
+            element.content
+        } else {
+            // File path — read and use whole file content
+            let path = root.join(source);
+            std::fs::read_to_string(&path)
+                .with_context(|| format!("reading figure file: {}", path.display()))?
+        };
+        figures.push(extract_content_lines(&content));
+    }
+
+    let result = layout::layout(figures, &config);
+
+    match output {
+        Some(path) => {
+            std::fs::write(&path, &result)?;
+            eprintln!("{} layout written to {}", "✓".green(), path.display());
+        }
+        None => println!("{}", result),
     }
 
     Ok(())

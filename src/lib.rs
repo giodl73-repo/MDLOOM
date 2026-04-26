@@ -4,6 +4,7 @@ pub mod davinci;
 pub mod diagnostic;
 pub mod draft;
 pub mod fix;
+pub mod layout;
 pub mod runner;
 
 pub use config::GlintConfig;
