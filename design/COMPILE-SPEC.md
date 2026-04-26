@@ -493,6 +493,7 @@ Axis         | Value        Axis         | Value
 | `COMPILE-004` | error | Cache snapshot integrity hash mismatch — restore rejected |
 | `COMPILE-005` | error | Snapshot restore rejected: compilation in progress (server/session mode only) |
 | `COMPILE-006` | warning | Snapshot missing some files present in current state |
+| `COMPILE-007` | warning | Included figure has lint errors — embedded output may be misaligned |
 
 ---
 

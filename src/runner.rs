@@ -45,6 +45,16 @@ impl Runner {
             .collect()
     }
 
+    /// Lint content directly (for inline validation — e.g., figure content before embed).
+    /// Uses the config for `path`'s directory but operates on the provided content string.
+    pub fn lint_content(&self, content: &str, path: &Path) -> Vec<Diagnostic> {
+        let config = self.resolve_config_for(path);
+        let checks = build_checks(&config, path, &self.root);
+        checks.iter()
+            .flat_map(|check| check.check(path, content))
+            .collect()
+    }
+
     /// Lint a single file using the cascaded config for its directory.
     pub fn lint_file(&self, path: &Path) -> Vec<Diagnostic> {
         let content = match std::fs::read_to_string(path) {

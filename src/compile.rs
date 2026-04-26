@@ -4,6 +4,8 @@ use anyhow::Result;
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
 use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
+use crate::runner::Runner;
+use crate::diagnostic::Severity;
 
 // ─────────────────────────────────────────────────────────
 // Public result types
@@ -264,6 +266,9 @@ pub fn compile_file(
     let source_lines: Vec<&str> = source_text.lines().collect();
     let directives = collect_directives(&source_text);
 
+    // Build a runner for figure lint validation
+    let runner = Runner::new(root, config.clone())?;
+
     let mut violations: Vec<CompileViolation> = Vec::new();
     let mut resolved_count = 0usize;
 
@@ -277,7 +282,8 @@ pub fn compile_file(
         let replacement = match directive {
             Directive::Include { uri, .. } => {
                 match resolve_uri(uri, root) {
-                    Ok(content) => {
+                    Ok((content, fig_file)) => {
+                        lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                         validate_davinci(uri, &content, config, line_start, &mut violations);
                         resolved_count += 1;
                         format_include_block(uri, &content)
@@ -302,7 +308,8 @@ pub fn compile_file(
                 let mut any_err = false;
                 for uri in uris {
                     match resolve_uri(uri, root) {
-                        Ok(content) => {
+                        Ok((content, fig_file)) => {
+                            lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                             validate_davinci(uri, &content, config, line_start, &mut violations);
                             figures.push(extract_content_lines(&content));
                             resolved_count += 1;
@@ -351,7 +358,8 @@ pub fn compile_file(
 
             Directive::Table { uri, .. } => {
                 match resolve_uri(uri, root) {
-                    Ok(content) => {
+                    Ok((content, fig_file)) => {
+                        lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                         validate_davinci(uri, &content, config, line_start, &mut violations);
                         resolved_count += 1;
                         format_include_block(uri, &content)
@@ -407,15 +415,49 @@ pub fn compile_file(
 }
 
 // ─────────────────────────────────────────────────────────
-// URI resolution
+// URI resolution + figure lint validation
 // ─────────────────────────────────────────────────────────
 
-fn resolve_uri(uri: &str, root: &Path) -> Result<String> {
+fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
     let parsed = mdpath::parse(uri)
         .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    Ok(element.content)
+    Ok((element.content, element.file))
+}
+
+/// Validate figure content with the proof linter before embedding.
+/// Emits COMPILE-007 warnings for each lint error found in the figure.
+fn lint_figure(
+    uri: &str,
+    content: &str,
+    figure_file: &Path,
+    source_line: usize,
+    runner: &Runner,
+    violations: &mut Vec<CompileViolation>,
+) {
+    // Build a synthetic file content: wrap content in a fenced block for checking
+    let synthetic = format!("```\n{}\n```\n", content);
+    let diags = runner.lint_content(&synthetic, figure_file);
+    let errors: Vec<_> = diags.iter()
+        .filter(|d| d.severity == Severity::Error)
+        .collect();
+    if !errors.is_empty() {
+        violations.push(CompileViolation {
+            code: "COMPILE-007",
+            severity: ViolationSeverity::Warning,
+            uri: uri.to_string(),
+            figure_id: None,
+            invariant: String::new(),
+            message: format!(
+                "figure has {} lint error{} — embedded output may be misaligned ({})",
+                errors.len(),
+                if errors.len() == 1 { "" } else { "s" },
+                errors.iter().map(|d| d.code).collect::<Vec<_>>().join(", ")
+            ),
+            source_line,
+        });
+    }
 }
 
 // ─────────────────────────────────────────────────────────
