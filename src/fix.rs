@@ -1,9 +1,9 @@
-/// Fix plan: the data format shared between AI-generated plans and `glint fix`.
+/// Fix plan: the data format shared between AI-generated plans and `proof fix`.
 ///
 /// Workflow:
-///   1. `glint check --format rich` → rich.json
+///   1. `proof check --format rich` → rich.json
 ///   2. AI (fix-guide skill) reads rich.json → writes plan.json
-///   3. `glint fix --plan plan.json` applies edits to files
+///   3. `proof fix --plan plan.json` applies edits to files
 
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 // ─────────────────────────────────────────────────────────
-// Fix plan types (AI writes these; glint fix reads them)
+// Fix plan types (AI writes these; proof fix reads them)
 // ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -5,8 +5,10 @@ All notable changes to **proof** (formerly **glint**), traced from initial relea
 The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → pin**. Each release added one tier on top of the last, never replacing what came before.
 
 ```
-v0.4  ┌────────────────────────────────────────────┐
-      │ fig:// addressing + DaVinci protection      │  ← named, pinnable figures
+v0.5  ┌────────────────────────────────────────────┐
+      │ mdpath + compile + layout + resolve/pin     │  ← source doc compilation
+      ├────────────────────────────────────────────┤
+v0.4  │ md:// addressing + DaVinci protection      │  ← named, pinnable figures
       ├────────────────────────────────────────────┤
 v0.3  │ Table schemas + link validation + draft     │  ← document structure as data
       ├────────────────────────────────────────────┤
@@ -15,6 +17,46 @@ v0.2  │ Fix pipeline (rich → plan → fix)            │  ← AI-assisted b
 v0.1  │ ASCII box check + cascading config          │  ← detection foundation
       └────────────────────────────────────────────┘
 ```
+
+---
+
+## [0.5.0] — 2026-04-26 — *the compilation release*
+
+The shift from "linter with pinnable figures" to "document compilation system." Source documents (`.source.md`) now reference figures by stable `md://` URI and are compiled to output `.md` files by a pipeline that validates DaVinci invariants before writing. The `md://` resolver ships as a standalone library (`mdpath`) so editors and CI tools can adopt the addressing scheme without depending on proof.
+
+### Added
+
+- **`mdpath` library** — standalone Rust crate implementing the `md://` URI scheme. Fully implemented with 56+ passing tests covering URI parsing (all forms), section navigation, element detection, label matching (exact → starts-with → substring hierarchy), sub-selectors (`[row=X]`, `[col=Y]`, `[box=Z]`), query parameters (`?select`, `?filter`, `?top`, `?skip`, `?count`), round-trip stability, and error cases. Ships at `https://github.com/giodl73-repo/MDPATH`.
+
+- **`proof compile`** — markdown compiler that resolves `proof:include` and `proof:layout` fenced directives in `.source.md` files, validates DaVinci invariants on each included figure, and writes compiled `.md` output. Default output path drops `.source.` in-place (`foo.source.md` → `foo.md`). Flags: `--watch`, `--check`, `--cache-status`, `--no-cache`. Cache snapshot commands: `proof cache snapshot save/restore/diff/list/prune/deploy`.
+
+- **`proof layout`** — ASCII art collage composer. Takes N figures (via `md://` URIs or file paths) and arranges them side-by-side with correct alignment. Handles height equalization, gap insertion, unicode-width-aware column measurement, multi-row wrapping (`--cols`), label centering (`--labels`), top/center/bottom alignment (`--align`), and optional borders (`--border`). 31 passing tests covering all layout invariants L-1 through L-9.
+
+- **`proof resolve`** — resolve an `md://` URI and print element content, file path, line range, label, section heading, element type, and detected kind.
+
+- **`proof pin`** — register a figure with DaVinci invariants. Writes a `[[davinci]]` block to `proof.toml` with the URI, protection level (`error` or `warn`), and invariant rules.
+
+- **`proof pin-list`** — list all pinned DaVinci figures with their URIs and invariants.
+
+- **Figure validation before embed** — `proof compile` checks each `md://` figure against its DaVinci pin (if one exists) before embedding. Emits `COMPILE-001` (error) or `COMPILE-003` (warn) on invariant violation. Emits `COMPILE-007` (dirty figure warning) when a figure's content has changed since the last pin snapshot.
+
+- **Compile diagnostics**: `COMPILE-001` (DaVinci error violation), `COMPILE-002` (URI resolve failure), `COMPILE-003` (DaVinci warn), `COMPILE-007` (dirty figure warning).
+
+- **`BatchResolver` in mdpath** — resolve multiple `md://` URIs in the same file without re-reading it. `proof compile` uses this for per-file resolution passes.
+
+- **Design documents**: `COMPILE-SPEC.md`, `LAYOUT-SPEC.md`, `THREE-TIER-CACHE.md`, `CACHE-SNAPSHOTS.md`, `SCENARIOS.md` (31 spec findings resolved across all new subsystems).
+
+- **Review roles**: SOURCE (source document format and compile pipeline UX), COMPOSE (layout algorithm correctness and unicode-width accounting), CACHE (cache invalidation and snapshot consistency). Added to `.roles/`.
+
+### Changed
+
+- **Renamed `fig://` → `md://`** throughout — all specs, source code, tests, configuration examples, and documentation. The old scheme name does not appear anywhere in the codebase.
+- **Removed all `glint` references from source** — any remaining `glint` references in source files, comments, or generated output have been cleared. The naming history table in this file remains for reference.
+- **`proof.toml` description updated** — Cargo.toml description reflects the full scope: figures, tables, links, ASCII art, and compilation.
+
+### What it enables
+
+A figure in `languages/10-GO.md § Concurrency Model` is not just named — it is *compiled into* any document that references `md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler`. Change the source figure; recompile dependent documents. The DaVinci invariants are the contract between the figure and its consumers: if the scheduler diagram loses its "M:N multiplexing" label, every compile that includes it fails, loudly, before the change ships.
 
 ---
 

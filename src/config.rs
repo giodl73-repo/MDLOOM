@@ -39,8 +39,8 @@ pub struct GlintConfig {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct SectionSchema {
     /// Glob patterns — files matching ANY of these are candidates.
-    /// In a directory-level glint.toml, paths are relative to that directory.
-    /// In the root glint.toml, paths are relative to the root.
+    /// In a directory-level proof.toml, paths are relative to that directory.
+    /// In the root proof.toml, paths are relative to the root.
     /// Example: `["*.md"]` matches all markdown files in the directory.
     pub paths: Vec<String>,
 
@@ -432,7 +432,7 @@ impl GlintConfig {
     /// the directory tree. Configs are merged: parent first, then child overrides.
     ///
     /// section_schemas paths are automatically prefixed with the config file's
-    /// directory relative to root_dir. This means a `languages/glint.toml` can
+    /// directory relative to root_dir. This means a `languages/proof.toml` can
     /// write `paths = ["02-*.md"]` instead of `paths = ["languages/02-*.md"]`.
     ///
     /// Cascade stops when a config has `files.root = true` or we hit root_dir.
@@ -468,12 +468,12 @@ impl GlintConfig {
     }
 
     pub fn load_or_default(dir: &Path) -> Self {
-        for name in &["proof.toml", ".proof.toml", ".glint/config.toml"] {
+        for name in &["proof.toml", ".proof.toml", ".proof/config.toml"] {
             let path = dir.join(name);
             if path.exists() {
                 match Self::load(&path) {
                     Ok(cfg) => return cfg,
-                    Err(e) => eprintln!("glint: warning: {}", e),
+                    Err(e) => eprintln!("proof: warning: {}", e),
                 }
             }
         }
@@ -481,12 +481,12 @@ impl GlintConfig {
     }
 }
 
-/// Walk from `dir` up to `root_dir`, collecting every glint.toml found.
+/// Walk from `dir` up to `root_dir`, collecting every proof.toml found.
 /// Returns (origin_directory, config) pairs ordered nearest-first.
 ///
-/// The origin_directory is the directory where each glint.toml was found.
+/// The origin_directory is the directory where each proof.toml was found.
 /// It is used by resolve_for() to prefix section_schema paths so that a
-/// `languages/glint.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
+/// `languages/proof.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
 fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, GlintConfig)> {
     let mut configs: Vec<(PathBuf, GlintConfig)> = Vec::new();
     let mut current = dir.to_path_buf();
@@ -507,7 +507,7 @@ fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, 
                         configs.push((parent_dir, parent_cfg));
                     }
                     Err(e) => {
-                        eprintln!("glint: warning: extends {:?} failed: {}", parent_abs, e);
+                        eprintln!("proof: warning: extends {:?} failed: {}", parent_abs, e);
                         configs.push((current.clone(), cfg));
                     }
                 }
@@ -535,7 +535,7 @@ fn try_load_config(dir: &Path) -> Option<GlintConfig> {
         if path.exists() {
             match GlintConfig::load(&path) {
                 Ok(cfg) => return Some(cfg),
-                Err(e) => eprintln!("glint: warning: {}", e),
+                Err(e) => eprintln!("proof: warning: {}", e),
             }
         }
     }

@@ -25,7 +25,7 @@ struct Cli {
     /// Files or directories to lint (default: current directory)
     paths: Vec<PathBuf>,
 
-    /// Schema config file (default: glint.toml in target directory)
+    /// Schema config file (default: proof.toml in target directory)
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
 
@@ -911,14 +911,14 @@ fn load_config(path: &std::path::Path, override_path: &Option<PathBuf>) -> Glint
 }
 
 fn cmd_init() -> Result<()> {
-    let path = std::path::Path::new("glint.toml");
+    let path = std::path::Path::new("proof.toml");
     if path.exists() {
-        eprintln!("{} glint.toml already exists", "warning:".yellow());
+        eprintln!("{} proof.toml already exists", "warning:".yellow());
         return Ok(());
     }
     let content = include_str!("../schemas/default.toml");
     std::fs::write(path, content)?;
-    println!("{} glint.toml created", "OK".green().bold());
+    println!("{} proof.toml created", "OK".green().bold());
     Ok(())
 }
 

@@ -188,8 +188,8 @@ fn is_border_junction(c: char) -> bool {
 /// the TOP of a new box — it's the bottom of a previous one.
 /// Without this check, flowcharts like:
 ///   └──────┘   ← real bottom border
-///   ▼ text ▼   ← glint would treat these as "content" of a phantom box
-///   ┌──────┐   ← glint would treat this as the "bottom"
+///   ▼ text ▼   ← proof would treat these as "content" of a phantom box
+///   ┌──────┐   ← proof would treat this as the "bottom"
 /// generate hundreds of false width/column errors.
 fn can_open_box(line: &str) -> bool {
     let trimmed = line.trim_start();
@@ -326,7 +326,7 @@ fn check_boxes(
         let abs_top = b.top_line + line_offset;
         let abs_bottom = b.bottom_line + line_offset;
         let border_line = lines[b.top_line].to_string();
-        // All errors from this box share a group_id so glint draft can cluster them
+        // All errors from this box share a group_id so proof draft can cluster them
         let group_id = format!("box-l{}", abs_top);
 
         // Helper: build rich context for a line in this box

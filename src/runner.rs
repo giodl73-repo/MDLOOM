@@ -173,11 +173,11 @@ fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> Markdow
     for schema in &config.section_schemas {
         let include = match build_globset(&schema.paths) {
             Ok(gs) => gs,
-            Err(e) => { eprintln!("glint: invalid glob in section_schema paths: {}", e); continue; }
+            Err(e) => { eprintln!("proof: invalid glob in section_schema paths: {}", e); continue; }
         };
         let exclude = match build_globset(&schema.paths_exclude) {
             Ok(gs) => gs,
-            Err(e) => { eprintln!("glint: invalid glob in section_schema paths_exclude: {}", e); continue; }
+            Err(e) => { eprintln!("proof: invalid glob in section_schema paths_exclude: {}", e); continue; }
         };
         if include.is_match(&*rel_str) && !exclude.is_match(&*rel_str) {
             apply_section_schema(&mut md, schema);

@@ -76,7 +76,7 @@ pub struct Diagnostic {
     pub rich: Option<RichContext>,
 
     /// Groups related diagnostics from the same source object (same box, table, chart).
-    /// Used by `glint draft` to cluster errors for AI review.
+    /// Used by `proof draft` to cluster errors for AI review.
     /// Format: "<type>-l<line>" e.g. "box-l38", "table-l12", "chart-l20"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,

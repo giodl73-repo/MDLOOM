@@ -1,14 +1,14 @@
-/// glint draft — generates a pre-populated fix plan from a diagnostic scan.
+/// proof draft — generates a pre-populated fix plan from a diagnostic scan.
 ///
-/// Unlike `glint check --format rich` (which the AI reads to generate a plan),
-/// `glint draft` does both steps in one:
+/// Unlike `proof check --format rich` (which the AI reads to generate a plan),
+/// `proof draft` does both steps in one:
 ///   1. Runs all checks to collect diagnostics
 ///   2. Groups diagnostics by source object (box, table, chart, heading)
 ///   3. Pre-computes fixes for deterministic cases (barchart scale, separator dashes)
 ///   4. Pre-templates old_string for judgment calls (AI fills new_string + decision)
 ///
 /// Output: a draft-plan.json the AI can read and annotate inline, then
-/// `glint fix --plan draft-plan.json` applies it.
+/// `proof fix --plan draft-plan.json` applies it.
 
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::fix::is_pattern_b;
@@ -58,7 +58,7 @@ pub struct DraftFix {
     pub auto: bool,
     /// True = this line has Pattern B (text after closing │/|).
     /// The text after the bar must be preserved — move it inside the box
-    /// or to adjacent prose. glint fix will block this unless new_string
+    /// or to adjacent prose. proof fix will block this unless new_string
     /// contains the removed words OR --no-signal-check is set.
     #[serde(default)]
     pub pattern_b: bool,
@@ -119,7 +119,7 @@ impl DraftPlan {
         let total = fixes.len();
         FixPlan {
             schema_version: "1".to_string(),
-            generated_by: "glint-draft".to_string(),
+            generated_by: "proof-draft".to_string(),
             source_report: "draft-plan.json".to_string(),
             summary: PlanSummary {
                 total_fixes: total,
@@ -187,7 +187,7 @@ pub fn build_draft_plan(diagnostics: &[Diagnostic], root: &Path) -> Result<Draft
 
     Ok(DraftPlan {
         schema_version: "1".to_string(),
-        generated_by: "glint draft".to_string(),
+        generated_by: "proof draft".to_string(),
         summary: DraftSummary {
             total_groups: fix_groups.len(),
             auto_fixable,
