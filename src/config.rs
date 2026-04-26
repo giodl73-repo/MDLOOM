@@ -29,6 +29,9 @@ pub struct GlintConfig {
     pub section_schemas: Vec<SectionSchema>,
     #[serde(default)]
     pub custom_rules: Vec<CustomRule>,
+    /// Pinned figures with invariant protection (DaVinci tier).
+    #[serde(default)]
+    pub davinci: Vec<DaVinciEntry>,
 }
 
 /// A schema applied to files matching a glob pattern.
@@ -567,6 +570,12 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
             v.extend(child.custom_rules);
             v
         },
+        // DaVinci entries are additive — all levels contribute pins
+        davinci: {
+            let mut v = parent.davinci;
+            v.extend(child.davinci);
+            v
+        },
     }
 }
 
@@ -624,4 +633,69 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
         thematic_break_style: child.thematic_break_style.or(parent.thematic_break_style),
         check_blockquote_spacing: child.check_blockquote_spacing,
     }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DaVinci — pinned figures with invariant protection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A pinned figure entry in [[davinci]] of proof.toml.
+#[derive(Debug, Deserialize, Clone)]
+pub struct DaVinciEntry {
+    /// Stable identifier — used in diagnostics and reports
+    pub id: String,
+    /// md:// URI addressing the pinned element
+    pub uri: String,
+    /// Human description (shown in `proof pin list`)
+    #[serde(default)]
+    pub description: String,
+    /// Optional template name — inherits its base invariants
+    pub template: Option<String>,
+    /// What happens when an invariant is violated
+    #[serde(default)]
+    pub protection: ProtectionTier,
+    /// Invariants to enforce on the resolved element
+    #[serde(default)]
+    pub invariants: Vec<Invariant>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProtectionTier {
+    #[default]
+    Warn,
+    Error,
+    Lock,
+}
+
+impl std::fmt::Display for ProtectionTier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProtectionTier::Warn => write!(f, "warn"),
+            ProtectionTier::Error => write!(f, "error"),
+            ProtectionTier::Lock => write!(f, "lock"),
+        }
+    }
+}
+
+/// A single invariant rule on a pinned element.
+#[derive(Debug, Deserialize, Clone)]
+pub struct Invariant {
+    /// Rule name: box-width, contains-text, box-count, column-count,
+    ///            row-count, equals, required-row-keys, all-boxes-same-width,
+    ///            starts-with, ends-with, pattern, bar-proportional
+    pub rule: String,
+    /// String parameter (contains-text, equals, starts-with, ends-with, pattern)
+    pub text: Option<String>,
+    /// Minimum value (box-width.min, row-count.min, etc.)
+    pub min: Option<usize>,
+    /// Maximum value (box-width.max, row-count.max, etc.)
+    pub max: Option<usize>,
+    /// Exact value (box-count, column-count)
+    pub value: Option<usize>,
+    /// List parameter (required-row-keys)
+    pub values: Option<Vec<String>>,
+    /// Tolerance (bar-proportional, all-boxes-same-width)
+    pub tolerance: Option<usize>,
 }

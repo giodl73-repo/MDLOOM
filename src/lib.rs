@@ -1,5 +1,6 @@
 pub mod checks;
 pub mod config;
+pub mod davinci;
 pub mod diagnostic;
 pub mod draft;
 pub mod fix;
