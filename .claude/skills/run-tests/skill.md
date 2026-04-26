@@ -1,6 +1,6 @@
 ---
 name: run-tests
-description: Run the glint test suite and report results. Flags any failures, identifies new coverage gaps, and verifies E2E behavior. Uses BENCH role.
+description: Run the proof test suite and report results. Flags any failures, identifies new coverage gaps, and verifies E2E behavior. Uses BENCH role.
 user_invocable: true
 ---
 
@@ -13,7 +13,7 @@ Runs the full test suite, checks results, and identifies gaps.
 ### 1. Run unit tests
 
 ```bash
-cd C:/src/glint && cargo test 2>&1
+cd C:/src/proof && cargo test 2>&1
 ```
 
 Expected: all unit tests in `src/checks/ascii_box.rs` pass (4 tests).
@@ -21,7 +21,7 @@ Expected: all unit tests in `src/checks/ascii_box.rs` pass (4 tests).
 ### 2. Run integration tests
 
 ```bash
-cd C:/src/glint && cargo test --test integration_tests 2>&1
+cd C:/src/proof && cargo test --test integration_tests 2>&1
 ```
 
 Expected: 18 tests pass, 0 fail.
@@ -34,30 +34,30 @@ Report any failures with:
 ### 3. Build the binary
 
 ```bash
-cd C:/src/glint && cargo build 2>&1
+cd C:/src/proof && cargo build 2>&1
 ```
 
 Check for warnings — none should remain. Any warning is a candidate for fixing.
 
 ### 4. E2E smoke test
 
-Run glint against its own fixtures:
+Run proof against its own fixtures:
 
 ```bash
-C:/src/glint/target/debug/glint tests/fixtures/perfect_box.md
+C:/src/proof/target/debug/glint tests/fixtures/perfect_box.md
 # Expected: exit 0, zero diagnostics
 
-C:/src/glint/target/debug/glint tests/fixtures/width_mismatch.md
+C:/src/proof/target/debug/glint tests/fixtures/width_mismatch.md
 # Expected: exit 1, at least one ascii_box_width error
 
-C:/src/glint/target/debug/glint --format json --no-fail tests/fixtures/width_mismatch.md
+C:/src/proof/target/debug/glint --format json --no-fail tests/fixtures/width_mismatch.md
 # Expected: exit 0, valid JSON array
 ```
 
 ### 5. Run against maxim library (if available)
 
 ```bash
-C:/src/glint/target/debug/glint --config C:/src/maxim/glint.toml C:/src/maxim/ 2>&1 | tail -20
+C:/src/proof/target/debug/glint --config C:/src/maxim/proof.toml C:/src/maxim/ 2>&1 | tail -20
 ```
 
 Record:
@@ -72,7 +72,7 @@ After running tests, identify gaps:
 - Is CRLF handling tested?
 - Is a nested-box fixture present?
 - Is the config cascade tested end-to-end (not just unit-tested)?
-- Is there a test for `glint init` creating a glint.toml?
+- Is there a test for `proof init` creating a proof.toml?
 
 ## Output
 

@@ -1,9 +1,9 @@
-# glint.toml for the MAXIM Reference Library
-# Copy to C:\src\maxim\glint.toml to activate.
+# proof.toml for the MAXIM Reference Library
+# Copy to C:\src\maxim\proof.toml to activate.
 #
 # Cascade model:
 #   - This root schema applies to all files
-#   - Per-directory glint.toml files inherit and add section-specific rules
+#   - Per-directory proof.toml files inherit and add section-specific rules
 
 [meta]
 name = "MAXIM Reference Library"

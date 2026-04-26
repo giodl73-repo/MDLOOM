@@ -16,7 +16,7 @@ lens:
     - "Does the explicit 'extends' field override auto-cascade cleanly, or do both apply?"
     - "Are section_schemas applied before or after the directory cascade? (They should compose.)"
     - "Is there a way for a schema to accidentally exclude all files? (include = [] with no default?)"
-    - "Is the config error message clear when a glint.toml has a syntax error?"
+    - "Is the config error message clear when a proof.toml has a syntax error?"
   simplify:
     - "If the merge semantics surprise the author, the design is wrong"
     - "Additive lists mean child cannot remove what parent required — this is intentional but must be documented"
@@ -27,7 +27,7 @@ expertise:
   domains:
     - "Cascade models: auto-walk vs. explicit extends vs. hybrid"
     - "Merge semantics: override vs. additive vs. replace"
-    - "Config error handling: what happens when a glint.toml is invalid"
+    - "Config error handling: what happens when a proof.toml is invalid"
     - "Schema expressiveness: what kinds of rules can be expressed, what can't"
     - "Section schemas: glob matching, path relativity, composition order"
 
@@ -38,4 +38,4 @@ pulls_against:
 scope: project
 ---
 
-SCHEMA asks: if I have three nested glint.toml files and a section_schema that matches the file, what are the exact effective rules? If the answer requires tracing through three files and doing mental merge algebra, the design needs simplification.
+SCHEMA asks: if I have three nested proof.toml files and a section_schema that matches the file, what are the exact effective rules? If the answer requires tracing through three files and doing mental merge algebra, the design needs simplification.

@@ -1,6 +1,6 @@
 # Adjacent Borders — Should Be Handled Gracefully
 
-Two border lines with no content rows between them. glint should detect this
+Two border lines with no content rows between them. proof should detect this
 as a box with zero content rows. The borders must have matching widths.
 
 ```

@@ -5,7 +5,7 @@ retrieved: 2026-04-25
 version: "0.29-gfm"
 relevance: >
   GFM Tables are a GFM extension (not in CommonMark baseline). They are the
-  primary structure for comparison data in the MAXIM library. glint's
+  primary structure for comparison data in the MAXIM library. proof's
   markdown_table check validates their structure and schema conformance.
 ---
 
@@ -50,7 +50,7 @@ Where:
 
 **Minimum dashes:** GFM spec says "one or more" dashes. However, conventional
 style and most renderers expect at least 3 dashes per cell for readability.
-glint enforces `min_separator_dashes = 3` by default (configurable).
+proof enforces `min_separator_dashes = 3` by default (configurable).
 
 **Alignment syntax:**
 - `---` — default (left align)
@@ -72,12 +72,12 @@ glint enforces `min_separator_dashes = 3` by default (configurable).
 
 All body rows must have the same number of cells as the header row.
 GFM renderers handle mismatches differently — some truncate, some pad.
-glint reports them as errors to prevent this ambiguity.
+proof reports them as errors to prevent this ambiguity.
 
 ## Cells Inside Code Spans
 
 Cell content is parsed as inline markdown. This means `|` inside a code span
-`` `foo | bar` `` within a cell is NOT a column separator. glint's simple
+`` `foo | bar` `` within a cell is NOT a column separator. proof's simple
 split-on-`|` parser does not handle this edge case — it will miscount columns
 if cells contain code spans with `|`. Style guide recommendation: avoid `|`
 inside table cells, or use HTML entities `&vert;` instead.
@@ -99,7 +99,7 @@ GFM tables are explicitly an extension:
 They are NOT supported by default in CommonMark parsers. MkDocs uses the
 `tables` extension for Python-Markdown to support them.
 
-## Relevance to glint Check Codes
+## Relevance to proof Check Codes
 
 | Check Code | What it validates | Spec reference |
 |-----------|-------------------|---------------|

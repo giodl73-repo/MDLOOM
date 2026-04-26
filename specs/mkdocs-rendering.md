@@ -5,7 +5,7 @@ retrieved: 2026-04-25
 version: "MkDocs Material 9.x"
 relevance: >
   The MAXIM reference library uses MkDocs for its rendered site. Code blocks
-  in MkDocs Material are rendered with a specific font stack. glint must produce
+  in MkDocs Material are rendered with a specific font stack. proof must produce
   validation results that match the visual rendering in the MkDocs output.
 ---
 
@@ -82,7 +82,7 @@ transform or color characters in ways that may confuse authors about alignment.
 
 ## Validation Alignment
 
-glint's visual width measurement using `unicode-width` aligns with MkDocs
+proof's visual width measurement using `unicode-width` aligns with MkDocs
 Material rendering for all characters recommended in the style guide.
 
 **Verified compatible:**
@@ -105,6 +105,6 @@ differences that affect code blocks:
    `mkdocs.yml` by default)
 3. **Info strings**: Passed to Pygments for syntax highlighting
 
-For glint purposes: fenced code block detection is compatible between
+For proof purposes: fenced code block detection is compatible between
 Python-Markdown and CommonMark. The differences do not affect ASCII art
 validation.

@@ -1,5 +1,5 @@
-# glint.toml — default schema
-# Run `glint init` to copy this into your project.
+# proof.toml — default schema
+# Run `proof init` to copy this into your project.
 
 [meta]
 name = "My Project"

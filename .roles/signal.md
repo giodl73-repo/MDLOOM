@@ -37,4 +37,4 @@ pulls_against:
 scope: project
 ---
 
-SIGNAL is the role that runs glint against a perfectly formatted file and expects zero output. If it gets any output, that's a failure — not of the file, but of the tool. The bar is not 'did we catch something' but 'is what we caught real.'
+SIGNAL is the role that runs proof against a perfectly formatted file and expects zero output. If it gets any output, that's a failure — not of the file, but of the tool. The bar is not 'did we catch something' but 'is what we caught real.'

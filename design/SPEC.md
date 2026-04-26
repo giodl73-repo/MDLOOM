@@ -1,4 +1,4 @@
-# glint — Specification v0.2
+# proof — Specification v0.2
 
 A fast, schema-driven markdown and ASCII art linter with an AI-assisted fix pipeline.
 
@@ -9,13 +9,13 @@ A fast, schema-driven markdown and ASCII art linter with an AI-assisted fix pipe
 Markdown documents that contain ASCII art diagrams — boxes, flowcharts, tables,
 connector lines — have no automated validator. Authors introduce subtle alignment
 errors that are invisible at writing time but render incorrectly or look sloppy in
-final output. `glint` fills this gap.
+final output. `proof` fills this gap.
 
 Secondary purpose: enforce structural conventions on large guide libraries where
 every file must follow a style contract (required sections, required content patterns,
 heading limits).
 
-At scale — a 2,000-file library like MAXIM — manual repair is impractical. glint
+At scale — a 2,000-file library like MAXIM — manual repair is impractical. proof
 provides a three-stage pipeline: **detect**, **plan**, **fix** — where detection is
 mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic (Rust).
 
@@ -24,9 +24,9 @@ mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic
 ## Design Principles
 
 1. **Schema-driven** — no hard-coded opinions about structure. All rules come from a
-   `glint.toml` schema file the author controls, cascading through the directory tree.
+   `proof.toml` schema file the author controls, cascading through the directory tree.
 
-2. **Cascading config** — `glint.toml` files nest through directories. Lists are additive
+2. **Cascading config** — `proof.toml` files nest through directories. Lists are additive
    (parent + child both enforced); scalars use the nearest config's value.
 
 3. **Precise error location** — every diagnostic reports `file:line:col` with enough
@@ -37,11 +37,11 @@ mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic
    - `json` — compact machine-readable, for CI and editor integration
    - `rich` — structured with context blocks, for AI-assisted fix planning
 
-5. **Separation of detection from judgment** — glint detects *where* errors are and
+5. **Separation of detection from judgment** — proof detects *where* errors are and
    *what* is wrong. Deciding *how* to fix an alignment error requires spatial judgment
-   that belongs to AI or the author. glint never guesses the fix direction.
+   that belongs to AI or the author. proof never guesses the fix direction.
 
-6. **Fix pipeline** — `glint check` → `glint plan` (AI) → `glint fix` — enables bulk
+6. **Fix pipeline** — `proof check` → `proof draft` (AI) → `proof fix` — enables bulk
    repair of an entire library in one supervised pass.
 
 7. **Fast** — parallel file processing via rayon. A 2,000-file library completes in
@@ -53,7 +53,7 @@ mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  STAGE 1: glint check --format rich                         │
+│  STAGE 1: proof check --format rich                         │
 │                                                             │
 │  Rust: fast, mechanical, parallel                           │
 │  Output: rich.json — every error with surrounding context,  │
@@ -74,7 +74,7 @@ mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  STAGE 3: glint fix --plan plan.json                        │
+│  STAGE 3: proof fix --plan plan.json                        │
 │                                                             │
 │  Rust: applies edits from plan.json to files                │
 │  --dry-run: shows diff without writing                      │
@@ -85,11 +85,11 @@ mechanical (Rust), planning is AI-assisted (Claude), and fixing is deterministic
 
 ### Bulk workflow for the entire MAXIM library
 
-**Option A: draft workflow (recommended)** — glint pre-populates the plan, AI annotates:
+**Option A: draft workflow (recommended)** — proof pre-populates the plan, AI annotates:
 
 ```bash
 # Stage 1: generate draft plan (groups errors, pre-computes deterministic fixes)
-glint draft --config glint.toml . -o draft-plan.json
+proof draft --config proof.toml . -o draft-plan.json
 
 # Stage 2: AI opens draft-plan.json and fills in:
 #   - new_string for each non-auto fix
@@ -99,32 +99,32 @@ glint draft --config glint.toml . -o draft-plan.json
 # One decision per group (not per line).
 
 # Stage 3: preview
-glint fix --plan draft-plan.json --dry-run
+proof fix --plan draft-plan.json --dry-run
 
 # Stage 4: apply auto fixes first (confidence=high, auto=true)
-glint fix --plan draft-plan.json --min-confidence high
+proof fix --plan draft-plan.json --min-confidence high
 
 # Stage 5: verify
-glint check --config glint.toml .
+proof check --config proof.toml .
 ```
 
 **Option B: rich workflow** — AI reads full rich report and generates plan from scratch:
 
 ```bash
 # Stage 1: detect all errors, emit rich context
-glint check --format rich --config glint.toml . > rich.json
+proof check --format rich --config proof.toml . > rich.json
 
 # Stage 2: AI (fix-guide skill) reads rich.json → writes plan.json
 # Input: rich.json  Output: plan.json
 
 # Stage 3: dry run first — review what will change
-glint fix --plan plan.json --dry-run
+proof fix --plan plan.json --dry-run
 
 # Stage 4: apply high-confidence fixes automatically
-glint fix --plan plan.json --min-confidence high
+proof fix --plan plan.json --min-confidence high
 
 # Stage 5: verify
-glint check --config glint.toml .
+proof check --config proof.toml .
 ```
 
 ---
@@ -174,7 +174,7 @@ diagnostic. This is the format intended for AI consumption.
 ## Fix Plan Format
 
 A fix plan is a JSON file generated by AI (via the `fix-guide` skill) and consumed
-by `glint fix`. It is a machine-readable, reviewable audit trail of every intended edit.
+by `proof fix`. It is a machine-readable, reviewable audit trail of every intended edit.
 
 ```json
 {
@@ -242,7 +242,7 @@ by `glint fix`. It is a machine-readable, reviewable audit trail of every intend
   numbers stay valid after edits to later lines.
 - `old_string` must match exactly in the file at the specified line — if it doesn't
   match (file changed since plan was generated), the fix is skipped and logged.
-- After all fixes are applied, `glint check` is re-run automatically. Any remaining
+- After all fixes are applied, `proof check` is re-run automatically. Any remaining
   errors are reported — the plan did not fully resolve them.
 
 ---
@@ -251,16 +251,16 @@ by `glint fix`. It is a machine-readable, reviewable audit trail of every intend
 
 ### File Discovery
 
-glint looks for config starting from the file's directory and walking up:
+proof looks for config starting from the file's directory and walking up:
 
 ```
 file.md
   ↑
-  dir/glint.toml        ← nearest config
+  dir/proof.toml        ← nearest config
   ↑
-  parent/glint.toml     ← grandparent config
+  parent/proof.toml     ← grandparent config
   ↑
-  root/glint.toml       ← root config (files.root = true stops cascade here)
+  root/proof.toml       ← root config (files.root = true stops cascade here)
 ```
 
 ### Merge Semantics
@@ -371,13 +371,13 @@ severity = "warning"
 COMMANDS
   check   Lint files and report diagnostics (default)
   draft   Generate a pre-populated fix plan — AI annotates inline
-  fix     Apply a fix plan (from glint draft or AI-generated)
+  fix     Apply a fix plan (from proof draft or AI-generated)
   config  Print the effective config for a path
-  init    Write a glint.toml to the current directory
+  init    Write a proof.toml to the current directory
   stats   Summary statistics only (no per-file output)
 
 CHECK OPTIONS
-  glint check [PATHS]...
+  proof check [PATHS]...
     -c, --config <FILE>           Use this config file (skips auto-cascade)
     -f, --format <FMT>            text (default) | json | rich | github
     -e, --errors-only             Suppress warnings
@@ -386,7 +386,7 @@ CHECK OPTIONS
         --progress                Show progress bar (auto-enabled for >100 files)
 
 DRAFT OPTIONS
-  glint draft [PATHS]...
+  proof draft [PATHS]...
     -o, --output <FILE>           Output file (default: draft-plan.json)
 
   Generates a pre-populated plan file:
@@ -398,7 +398,7 @@ DRAFT OPTIONS
     - One decision per group (not per line)
 
 FIX OPTIONS
-  glint fix --plan <FILE>
+  proof fix --plan <FILE>
         --plan <FILE>             Fix plan JSON file (required)
         --dry-run                 Show diff without writing any files
         --min-confidence <LVL>    Skip fixes below this level: high | medium | low
@@ -406,7 +406,7 @@ FIX OPTIONS
     -o, --output <FILE>           Write application log to file
 
 STATS OPTIONS
-  glint stats [PATHS]...
+  proof stats [PATHS]...
         --by-directory            Break down counts by directory
         --by-code                 Break down counts by error code
 ```
@@ -450,24 +450,24 @@ Extended json with `context` block — see **`--format rich` Output** section ab
 | I-8 | `--format json` and `--format rich` output are always valid JSON arrays | yes (json) |
 | I-9 | Exit code 0 iff zero error-severity diagnostics (or `--no-fail`) | yes |
 | I-10 | Unicode boxes treated identically to ASCII boxes | yes |
-| I-11 | `glint fix` with `old_string` that doesn't match the file skips that fix and logs it | no — add |
-| I-12 | `glint fix --dry-run` makes zero writes to disk | no — add |
+| I-11 | `proof fix` with `old_string` that doesn't match the file skips that fix and logs it | no — add |
+| I-12 | `proof fix --dry-run` makes zero writes to disk | no — add |
 | I-13 | Fix application in reverse line order — later line edits never invalidate earlier line numbers | no — add |
 
 ---
 
 ## What Remains to Build
 
-### Rust (glint itself)
+### Rust (proof itself)
 
 | Item | Priority | Description |
 |------|----------|-------------|
 | `--format rich` | P0 | Add `context` block to each diagnostic in JSON output |
-| `glint fix --plan` | P0 | Apply fix plan: parse JSON, apply edits in reverse line order, verify |
+| `proof fix --plan` | P0 | Apply fix plan: parse JSON, apply edits in reverse line order, verify |
 | `--dry-run` for fix | P0 | Show unified diff without writing |
 | `--min-confidence` for fix | P1 | Filter fixes below threshold |
-| Re-verify after fix | P1 | Auto re-run `check` after `glint fix`, report residual errors |
-| `glint stats` | P2 | Summary by directory and error code |
+| Re-verify after fix | P1 | Auto re-run `check` after `proof fix`, report residual errors |
+| `proof stats` | P2 | Summary by directory and error code |
 | Progress bar | P2 | `--progress` flag for large runs |
 | Fix application log | P2 | Structured log of what was applied, skipped, failed |
 
@@ -492,7 +492,7 @@ Extended json with `context` block — see **`--format rich` Output** section ab
 | Invariant I-3 (valid spans) | P1 | Assert all diagnostics have line ≥ 1, col ≥ 1 |
 | Invariant I-6 (tolerance bounds) | P1 | Verify tolerance=N suppresses ≤N, reports >N |
 | Invariant I-7 (parallel = sequential) | P1 | Run both, diff the diagnostic sets |
-| Fix plan application | P0 | Integration test: write plan.json → glint fix → verify file contents |
+| Fix plan application | P0 | Integration test: write plan.json → proof fix → verify file contents |
 | Fix --dry-run | P0 | Assert no disk writes after dry-run |
 | Fix with stale old_string | P1 | Assert skipped, not panicked |
 | CRLF line endings | P1 | Fixture with \\r\\n — should not cause false width mismatches |
@@ -502,7 +502,7 @@ Extended json with `context` block — see **`--format rich` Output** section ab
 ## Non-Goals
 
 - **Custom check plugins** — use `custom_rules` for simple patterns; native plugins are future work.
-- **Non-markdown files** — glint only reads `.md` files.
-- **HTML rendering correctness** — glint validates source structure, not rendered output.
+- **Non-markdown files** — proof only reads `.md` files.
+- **HTML rendering correctness** — proof validates source structure, not rendered output.
 - **Fully automatic fix without review** — `--dry-run` exists for a reason. Bulk fixes
   across 2,000 files should be reviewed before applying.

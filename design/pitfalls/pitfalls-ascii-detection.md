@@ -157,7 +157,7 @@ A simple `split('|')` is never correct for GFM table rows.
 **Status:** SOLVED in `parse_row()` in `markdown_table.rs`  
 **Auto-fix NOT enabled:** `md_table_cell_padding` auto-fix remains disabled in `draft.rs`
 until the fix generator itself uses the correct escaped-pipe-aware parser.  
-**Discovered by:** Running `glint fix --dry-run` on a draft plan — fixes broke `\|`, `|>`,
+**Discovered by:** Running `proof fix --dry-run` on a draft plan — fixes broke `\|`, `|>`,
 and `` ` `` spans in language guide tables.  
 **Test:** Add tests for `parse_row` with `\|`, backtick spans, and `||` input.
 
@@ -179,7 +179,7 @@ when the char before the trailing `#` run is whitespace — `## Title ##` (space
 `##`) is decoration, `## Gotchas from C#` (no space before `#`) is a language name.
 
 **Status:** SOLVED  
-**Discovered by:** Running `glint draft` on the languages/ directory — all 17
+**Discovered by:** Running `proof draft` on the languages/ directory — all 17
 `md_heading_format` warnings were false positives on C# and F# guide headings.  
 **Proved by:** Zero `md_heading_format` errors after fix; real trailing-hash headings
 (with space before `##`) still detected correctly.  
@@ -197,7 +197,7 @@ pass because the test is insufficiently specific.
 **Domain:** Any test that writes fixture `.md` files and asserts "zero diagnostics."
 
 **Structural solution:**
-1. After creating a fixture file, run `glint check` on it manually before writing the test.
+1. After creating a fixture file, run `proof check` on it manually before writing the test.
 2. Tests that assert zero diagnostics should always verify against the specific fixture's
    content first.
 3. If a "clean" fixture has errors, fix the fixture (not the test).
@@ -223,5 +223,5 @@ is visually correct.
 spaces because they are invisible and don't constitute a real misalignment.
 
 **Status:** OPEN — current implementation measures visual width including trailing spaces.
-**Workaround:** Use `tolerance = 1` in `glint.toml` to absorb single trailing-space drift.
+**Workaround:** Use `tolerance = 1` in `proof.toml` to absorb single trailing-space drift.
 **Test:** Not yet written — write a fixture with trailing spaces to lock in the behavior.

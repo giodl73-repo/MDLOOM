@@ -1,26 +1,26 @@
 ---
 name: fix-guide
-description: Read a glint rich JSON report and generate a fix plan. For each diagnostic, uses the context block to decide fix direction and confidence, then writes a plan.json for `glint fix --plan`.
+description: Read a proof rich JSON report and generate a fix plan. For each diagnostic, uses the context block to decide fix direction and confidence, then writes a plan.json for `proof fix --plan`.
 user_invocable: true
 ---
 
 # Fix Guide — AI-Assisted Fix Plan Generator
 
-Reads `rich.json` (from `glint check --format rich`) and generates `plan.json`
-for `glint fix --plan`. This is Stage 2 of the three-stage pipeline.
+Reads `rich.json` (from `proof check --format rich`) and generates `plan.json`
+for `proof fix --plan`. This is Stage 2 of the three-stage pipeline.
 
 ## Usage
 
 ```bash
 # Stage 1: generate the rich report
-glint check --format rich --config glint.toml . -o rich.json
+proof check --format rich --config proof.toml . -o rich.json
 
 # Stage 2 (this skill): review report and generate plan
 # Run: /fix-guide rich.json plan.json
 
 # Stage 3: preview then apply
-glint fix --plan plan.json --dry-run
-glint fix --plan plan.json --min-confidence high
+proof fix --plan plan.json --dry-run
+proof fix --plan plan.json --min-confidence high
 ```
 
 ## Input
@@ -146,8 +146,8 @@ After writing, summarize:
 - Files affected
 - Total fixes: N high, M medium, K low
 - Any diagnostics skipped (low confidence, structural issues)
-- Command to preview: `glint fix --plan plan.json --dry-run`
-- Command to apply:  `glint fix --plan plan.json --min-confidence high`
+- Command to preview: `proof fix --plan plan.json --dry-run`
+- Command to apply:  `proof fix --plan plan.json --min-confidence high`
 
 ## Edge Cases
 
@@ -162,4 +162,4 @@ The `lines` map may be clipped. Read the actual file to get the exact line conte
 Use the Read tool on the file path + the diagnostic line number.
 
 **The old_string must match exactly — trailing spaces matter:**
-If a line has a trailing space, include it in old_string. glint fix skips mismatches.
+If a line has a trailing space, include it in old_string. proof fix skips mismatches.

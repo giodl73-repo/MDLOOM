@@ -4,7 +4,7 @@ version: "1.0"
 archetype: test-and-performance
 
 orientation:
-  frame: "BENCH owns test coverage and performance. It asks: is this behavior tested, and would we know if it broke? It also asks: how fast does glint run on 2,000 files, and does a new feature slow that down? BENCH is not interested in whether the algorithm is correct in theory — only in whether the tests would catch it if it became wrong."
+  frame: "BENCH owns test coverage and performance. It asks: is this behavior tested, and would we know if it broke? It also asks: how fast does proof run on 2,000 files, and does a new feature slow that down? BENCH is not interested in whether the algorithm is correct in theory — only in whether the tests would catch it if it became wrong."
   serves: "Test review, new fixture design, benchmark measurements, coverage gaps, regression safety for any algorithm change."
 
 lens:
@@ -38,4 +38,4 @@ pulls_against:
 scope: project
 ---
 
-BENCH is the role that runs `cargo test` and expects 18/18. If it's 17/18, BENCH asks whether the failing test is correct before assuming the code is wrong. And after every merge, BENCH runs glint against the full maxim library to confirm the wall-clock time is still acceptable.
+BENCH is the role that runs `cargo test` and expects 18/18. If it's 17/18, BENCH asks whether the failing test is correct before assuming the code is wrong. And after every merge, BENCH runs proof against the full maxim library to confirm the wall-clock time is still acceptable.

@@ -5,7 +5,7 @@ retrieved: 2026-04-25
 version: "Unicode 15.1"
 relevance: >
   Defines how many display columns each Unicode character occupies in
-  monospace (fixed-pitch) contexts. glint uses the `unicode-width` Rust crate
+  monospace (fixed-pitch) contexts. proof uses the `unicode-width` Rust crate
   which implements this standard to compute visual column positions for
   alignment validation.
 ---
@@ -62,7 +62,7 @@ The `unicode-width` Rust crate implements this exactly.
 | U+4E00–U+9FFF (CJK) | W | **2** | 中, 国, 語 |
 | U+FF01–U+FF60 (Fullwidth) | F | **2** | Ａ, Ｂ, ０ |
 
-## Implications for glint
+## Implications for proof
 
 ### Why unicode-width is the right choice
 
@@ -76,7 +76,7 @@ The `unicode-width` Rust crate implements this exactly.
    where box-drawing characters are 1 column wide.
 
 4. **Known divergence** — CJK characters in ASCII art diagrams will measure as
-   2 columns in glint but may render differently in some web fonts (font
+   2 columns in proof but may render differently in some web fonts (font
    fallbacks can cause display width ≠ measured width). Style guide constraint:
    avoid CJK in ASCII art diagrams.
 
@@ -91,5 +91,5 @@ Specifically: no CJK ideographs, fullwidth Latin, or fullwidth symbols inside
 box-drawing diagrams.
 
 **Constraint S-03:** Ambiguous (A) characters (accented Latin, Greek, Cyrillic,
-some symbols) default to 1 column in glint. Authors should avoid using them
+some symbols) default to 1 column in proof. Authors should avoid using them
 in horizontally-aligned diagrams because their width may vary across renderers.

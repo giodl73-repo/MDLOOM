@@ -1,7 +1,7 @@
 # Bottom-Close Borders — No Box Errors
 
 Tests that `└──┘` and `╰──╯` corners cannot open a new box when they appear
-between two stacked diagram elements. Without the can_open_box() guard, glint
+between two stacked diagram elements. Without the can_open_box() guard, proof
 would detect a phantom box from the bottom border of one element to the top
 border of the next, generating hundreds of false width/column errors.
 

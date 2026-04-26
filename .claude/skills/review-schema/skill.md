@@ -1,18 +1,18 @@
 ---
 name: review-schema
-description: Review a glint.toml schema file (or the cascade implementation) for correctness, merge semantics, and usability. Uses SCHEMA and SIGNAL roles. Pass a file path or "cascade" to review the implementation.
+description: Review a proof.toml schema file (or the cascade implementation) for correctness, merge semantics, and usability. Uses SCHEMA and SIGNAL roles. Pass a file path or "cascade" to review the implementation.
 user_invocable: true
 ---
 
 # Schema Review
 
-Reviews a `glint.toml` for correct syntax, sensible defaults, and merge behavior,
+Reviews a `proof.toml` for correct syntax, sensible defaults, and merge behavior,
 OR reviews the cascade implementation in `src/config.rs`.
 
 ## Input
 
 Specify what to review:
-- `<path/to/glint.toml>` — review a specific schema file
+- `<path/to/proof.toml>` — review a specific schema file
 - `cascade` — review the cascade implementation in src/config.rs
 - `maxim` — review schemas/reference.toml (the maxim library schema)
 
@@ -40,8 +40,8 @@ For each rule:
 
 ### 3. Cascade correctness
 
-If multiple glint.toml files exist in a hierarchy, trace the effective config for a sample file:
-- Which glint.toml files apply?
+If multiple proof.toml files exist in a hierarchy, trace the effective config for a sample file:
+- Which proof.toml files apply?
 - What is the merged `required_h2_all`?
 - What is the effective `tolerance`?
 - Is `files.root = true` set at the right level?
