@@ -11,7 +11,7 @@ Complete reference for every field in `proof.toml`. Grouped by section in the or
 ```
 proof.toml
 .proof.toml
-.glint/config.toml      (legacy — still read)
+.proof/config.toml
 ```
 
 The first match wins. `--config <path>` overrides discovery.
@@ -483,78 +483,77 @@ only_in = ["computing/**", "languages/**"]
 
 ---
 
-## Reserved / forward-looking sections
+## `[[davinci]]` — figure invariant pinning
 
-These sections appear in design specs and may be partially implemented or coming. Treat them as a preview of the schema, not stable contracts yet.
+Pin a specific figure to an `md://` URI and attach invariants that must hold across edits. Protects canonical diagrams from silent drift.
 
-### `[[davinci]]` — figure invariant pinning *(forward-looking, see `design/FIG-SPEC.md`)*
+**Register via CLI** (recommended):
 
-Pin a specific figure to a `fig://` URI and attach invariants that must hold across edits. Designed to protect canonical diagrams from silent drift.
+```bash
+proof pin "md://computing/01-PACKAGE.md#the-big-picture:0" --id package-layer-stack --protection error
+```
+
+**Or write directly in `proof.toml`:**
 
 ```toml
 [[davinci]]
 id = "package-layer-stack"
-uri = "fig://computing/01-PACKAGE.md#the-big-picture:0"
+uri = "md://computing/01-PACKAGE.md#the-big-picture:0"
 description = "Canonical package manager hierarchy — 5-level stack diagram"
 protection = "error"   # "warn" | "error" | "lock"
 
-  [[davinci.invariants]]
+  [[davinci.invariant]]
   rule = "box-width"
   min = 68
   max = 72
 
-  [[davinci.invariants]]
+  [[davinci.invariant]]
   rule = "contains-text"
-  text = "SYSTEM / OS LAYER"
+  value = "SYSTEM / OS LAYER"
 
-  [[davinci.invariants]]
+  [[davinci.invariant]]
   rule = "box-count"
-  value = 5
+  min = 5
+```
+
+**Verify pins:**
+
+```bash
+proof check --daVinci .
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Stable handle for the figure (used in pin list, lock files) |
-| `uri` | string | `fig://path#heading:index` or `fig://path#heading:label` |
-| `description` | string | Human-readable purpose |
+| `id` | string | Stable handle for the figure (used in `proof pin-list`) |
+| `uri` | string | `md://path#heading:selector` — resolved via mdpath |
+| `description` | string | Human-readable purpose (defaults to figure label if omitted) |
 | `protection` | string | `"warn"`, `"error"`, or `"lock"` |
-| `[[davinci.invariants]]` | array of tables | One invariant per entry; see rule list below |
+| `[[davinci.invariant]]` | array of tables | One invariant per entry; see rule list below |
 
 **Protection tiers:**
 
 | Tier | Behavior |
 |------|---------|
-| `warn` | `proof check` emits a warning if invariant violated |
-| `error` | `proof check` emits an error (non-zero exit) |
-| `lock` | `proof check` fails AND `proof fix` refuses to modify the figure |
+| `warn` | `proof check --daVinci` emits a warning; `proof compile` continues |
+| `error` | `proof check --daVinci` emits an error; `proof compile` aborts |
+| `lock` | Same as `error`; reserved for future `proof fix` hard-block |
 
 **Built-in invariant rules:**
 
 | Rule | Parameters | Description |
 |------|-----------|-------------|
 | `box-width` | `min`, `max` | Visual width of the box border must be in range |
-| `box-count` | `value` | Number of detected boxes in the figure |
+| `box-count` | `value`, `min`, `max` | Number of detected boxes in the figure |
 | `column-count` | `value` | Number of column separators per content row |
-| `contains-text` | `text` | Figure must contain this string (case-insensitive) |
-| `not-contains-text` | `text` | Figure must NOT contain this string |
-| `line-count` | `min`, `max` | Number of lines in the code block |
-| `starts-with` | `text` | First non-empty line must start with this text |
-| `ends-with` | `text` | Last non-empty line must end with this text |
-| `pattern` | `regex` | Figure must match this regex |
-
-### `[[consistency-group]]` — cross-file figure consistency *(forward-looking)*
-
-Group figures whose structure should stay consistent with each other.
-
-```toml
-[[consistency-group]]
-name = "package-hierarchy-references"
-uris = [
-    "fig://computing/01-PACKAGE.md#the-big-picture:0",
-    "fig://computing/00-OVERVIEW.md#landscape:0",
-]
-rules = ["same-column-count", "same-box-width"]
-```
+| `contains-text` | `value` | Figure must contain this string (case-insensitive) |
+| `not-contains-text` | `value` | Figure must NOT contain this string |
+| `line-count` | `min`, `max`, `value` | Number of lines in the code block |
+| `starts-with` | `value` | First non-empty line must start with this string |
+| `ends-with` | `value` | Last non-empty line must end with this string |
+| `pattern` | `value` | Figure must contain this substring |
+| `required-row-keys` | `values` | Table figure must contain all of these row key strings |
+| `equals` | `value` | Figure content must exactly equal this string (trimmed) |
+| `heading-exists` | `value` | Content must contain a heading with this text |
 
 ---
 
@@ -563,8 +562,8 @@ rules = ["same-column-count", "same-box-width"]
 A few labels appear in informal docs but have no dedicated config section in code:
 
 - **`[markdown_links]`** — link validation lives on `TableSchema` (`link_columns`, `verify_link_targets`, `link_auto_fix`). There is no separate top-level `[markdown_links]` section.
-- **Per-figure invariants outside `[[davinci]]`** — `fig://` URIs and DaVinci pinning are the entry point.
-- **CLI flags** — see `proof --help`. Config governs *what is checked*; CLI flags govern *how output is formatted* (`--format rich|json|compact`, `--output`, `--min-confidence`, etc.).
+- **`[[consistency-group]]`** — cross-file figure consistency groups are specified in `design/SCENARIOS.md` but not yet implemented.
+- **CLI flags** — see `proof --help`. Config governs *what is checked*; CLI flags govern *how output is formatted* (`--format rich|json|text`, `--output`, `--min-confidence`, etc.).
 
 ---
 
@@ -584,6 +583,6 @@ This is the single source of truth for "what rules apply to this file" — prefe
 
 - `schemas/default.toml` — minimal starter config (run `proof init` to copy)
 - `schemas/reference.toml` — full real-world example (the MAXIM library's root schema)
-- `design/SPEC.md` — full proof specification
-- `design/FIG-SPEC.md` — `fig://` URIs and DaVinci pinning
+- `design/COMPILE-SPEC.md` — `proof compile` pipeline and `proof:include`/`proof:layout` directives
+- `design/LAYOUT-SPEC.md` — `proof layout` algorithm and invariants
 - `design/STYLE-GUIDE.md` — style rules (S-01 wide chars, etc.)

@@ -6,7 +6,7 @@ Zero to first scan in five minutes. By the end you will have:
 - run a scan against a small docs directory and read the output
 - written a real `proof.toml` with a section schema
 - generated a draft fix plan, reviewed it, and applied the auto-fixable parts
-- previewed how DaVinci figure pinning works (forward-looking)
+- pinned a figure with DaVinci invariants and verified `proof check --daVinci` catches drift
 
 The example docs directory is small (10 files) and contains the kinds of drift `proof` is built to catch: a misaligned ASCII box, a table missing a required row, a broken internal link, a wide Unicode character.
 
@@ -26,7 +26,7 @@ That's it. `proof` is a single static binary; no Node, no Python, no runtime.
 ## 1. Install (60 seconds)
 
 ```bash
-git clone https://github.com/your-org/proof
+git clone https://github.com/giodl73-repo/PROOF
 cd proof
 cargo build --release
 ./target/release/proof --version
@@ -46,10 +46,8 @@ Verify:
 
 ```bash
 proof --version
-# proof 0.2.x
+# proof 0.5.0
 ```
-
-> **Note.** `proof init` currently writes a file named `glint.toml` for legacy reasons; rename it to `proof.toml` (the binary reads both, but `proof.toml` is canonical going forward).
 
 ---
 
@@ -156,7 +154,6 @@ The fastest way:
 ```bash
 cd mydocs
 proof init
-mv glint.toml proof.toml      # rename to canonical filename
 ```
 
 Then open it and edit. A real-world starter looks like this — every line earns its keep:
@@ -379,44 +376,69 @@ proof fix --plan draft-plan.json --dry-run                # see what *would* hap
 
 ---
 
-## 7. Forward look — pinning canonical figures (DaVinci)
+## 7. Pinning canonical figures (DaVinci)
 
-The pipeline above catches drift inside individual files. The next problem is **drift between files** — a hierarchy diagram in `01-PACKAGE.md` and the same hierarchy referenced in `00-OVERVIEW.md` should look identical, but nothing today enforces that.
+The pipeline above catches drift inside individual files. **DaVinci pinning** protects figures across time — a diagram you pin carries invariants that must hold on every future run. If the diagram changes in a way that violates a rule, `proof check --daVinci` fails before the change can ship.
 
-`proof` is building **DaVinci pinning** to address this. The mechanism is a `fig://` URI that addresses a specific code block by name (not line number, which rots):
+### Register a figure with `proof pin`
 
+```bash
+proof pin "md://architecture/01-COMPONENTS.md#the-big-picture:0" --id service-layer
 ```
-fig://architecture/01-COMPONENTS.md#the-big-picture:0
-```
 
-You then declare it in `proof.toml` with invariants that must hold:
+This resolves the URI, verifies the figure exists, and appends to `proof.toml`:
 
 ```toml
 [[davinci]]
-id = "service-layer-stack"
-uri = "fig://architecture/01-COMPONENTS.md#the-big-picture:0"
+id = "service-layer"
+uri = "md://architecture/01-COMPONENTS.md#the-big-picture:0"
 description = "Canonical 3-tier architecture diagram"
-protection = "error"            # warn | error | lock
-
-  [[davinci.invariants]]
-  rule = "box-count"
-  value = 3
-
-  [[davinci.invariants]]
-  rule = "contains-text"
-  text = "Service Layer"
-
-  [[davinci.invariants]]
-  rule = "box-width"
-  min = 16
-  max = 18
+protection = "warn"
 ```
 
-When `proof check` runs, it resolves each pinned figure and verifies the invariants. If the figure is later edited and now has 2 boxes instead of 3, you get an error before the change is merged. With `protection = "lock"`, even `proof fix` refuses to modify the figure.
+### Add invariants
 
-This is the path from "linter" to "load-bearing diagram contracts."
+Edit the `[[davinci]]` block to declare what must always be true:
 
-> **Status.** DaVinci is specified in `design/FIG-SPEC.md` and the `[[davinci]]` schema is reserved. Implementation is in flight; track it in the spec.
+```toml
+[[davinci]]
+id = "service-layer"
+uri = "md://architecture/01-COMPONENTS.md#the-big-picture:0"
+protection = "error"
+
+  [[davinci.invariant]]
+  rule = "box-count"
+  min = 3
+
+  [[davinci.invariant]]
+  rule = "contains-text"
+  value = "Service Layer"
+```
+
+### Verify pins
+
+```bash
+proof check --daVinci .
+# ✓ all 1 DaVinci invariants satisfied
+```
+
+If the diagram is later edited and the "Service Layer" label is removed, `proof check --daVinci` emits `fig_invariant_violated` before the change merges.
+
+### Protection levels
+
+| Level | Effect |
+|-------|--------|
+| `warn` | Violation reported as warning — compile and check continue |
+| `error` | Violation reported as error — `proof compile` aborts |
+| `lock` | Same as `error`; reserved for future `proof fix` hard-block |
+
+### List all pins
+
+```bash
+proof pin-list
+# 1 DaVinci entries:
+#   service-layer [error] md://architecture/01-COMPONENTS.md#the-big-picture:0 — 2 invariants
+```
 
 ---
 
@@ -426,7 +448,7 @@ A minimal GitHub Actions step:
 
 ```yaml
 - name: Build proof
-  run: cargo install --git https://github.com/your-org/proof
+  run: cargo install --git https://github.com/giodl73-repo/PROOF --branch master
 
 - name: Lint docs
   run: proof check . -f github
@@ -451,20 +473,27 @@ For a non-failing advisory run (warnings without breaking the build):
 | Filter to errors | `proof check . --errors-only` |
 | See machine-readable output | `proof check . -f json` |
 | Get summary stats | `proof stats . --by-code` |
-| Write a starter config | `proof init` (then rename to `proof.toml`) |
+| Write a starter config | `proof init` |
 | Inspect effective config | `proof config path/to/file.md` |
 | Generate a draft plan | `proof draft . -o draft-plan.json` |
 | Preview fixes | `proof fix --plan draft-plan.json --dry-run` |
 | Apply fixes safely | `proof fix --plan draft-plan.json` |
 | Apply more aggressive fixes | `proof fix --plan draft-plan.json --min-confidence medium` |
+| Pin a figure with invariants | `proof pin "md://path/file.md#section:0" --id name` |
+| Verify pinned figures | `proof check --daVinci .` |
+| List pins | `proof pin-list` |
+| Resolve a URI | `proof resolve "md://path/file.md#section:0"` |
+| Compile source documents | `proof compile .` |
+| Compose figures side-by-side | `proof layout fig1.md fig2.md --gap 4 --labels "A,B"` |
 
 ---
 
 ## 10. Where to go next
 
 - **`docs/SCHEMA-REFERENCE.md`** — every `proof.toml` field documented with type, default, and what it catches.
-- **`design/SPEC.md`** — the full proof specification.
-- **`design/FIG-SPEC.md`** — the `fig://` URI scheme and DaVinci pinning, in depth.
+- **`design/COMPILE-SPEC.md`** — `proof compile` pipeline, directive syntax, three-tier cache.
+- **`design/LAYOUT-SPEC.md`** — `proof layout` algorithm and invariants L-1 through L-9.
+- **`design/SCENARIOS.md`** — 8 hand-simulated scenarios with 31 spec findings; useful before extending the compiler.
 - **`schemas/reference.toml`** — the real-world schema used by the MAXIM library (2,170 files); a useful starting point for your own.
 - **`design/STYLE-GUIDE.md`** — style rules baked into the linter (S-01 wide-char policy, etc.).
 

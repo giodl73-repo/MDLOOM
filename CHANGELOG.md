@@ -166,4 +166,4 @@ The rename reflects the scope expansion: `glint` (v0.1) lints; `proof` (v0.4) ce
 
 ## Versioning policy
 
-Conceptual milestones are tracked here as `0.1` / `0.2` / `0.3` / `0.4`. The Cargo crate version follows semver independently and currently sits at `0.2.0` (Cargo.toml). Once the `fig://` resolver and DaVinci tier are implemented (not just designed), the crate version will jump to `0.4.0` to align.
+Conceptual milestones are tracked here as `0.1` through `0.5`. The Cargo crate version is now aligned at `0.5.0` following the v0.5 release. Future versions will continue to align semver with milestone numbers.
