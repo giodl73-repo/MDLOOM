@@ -6,6 +6,7 @@ use proof_lib::davinci::check_daVinci;
 use proof_lib::draft::build_draft_plan;
 use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
 use proof_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
+use proof_lib::spec_gen;
 use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
 use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
 use std::path::PathBuf;
@@ -145,6 +146,23 @@ enum Command {
         #[arg(long)]
         root: Option<PathBuf>,
     },
+    /// Analyze a figure and generate suggested DaVinci invariants
+    SpecGenerate {
+        /// The md:// URI of the figure to analyze
+        uri: String,
+        /// Stable ID for the [[davinci]] entry (default: derived from URI)
+        #[arg(long)]
+        id: Option<String>,
+        /// Protection tier: warn | error | lock (default: error)
+        #[arg(long, default_value = "error")]
+        protection: String,
+        /// Root directory for URI resolution (default: cwd)
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Write output to file instead of stdout
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+    },
     /// Compose N figures side-by-side into a single ASCII art collage
     Layout {
         /// Source figures: md:// URIs or file paths
@@ -213,6 +231,9 @@ fn main() -> Result<()> {
         Some(Command::Stats { paths, by_directory, by_code }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             return cmd_stats(paths, by_directory, by_code, &cli.config);
+        }
+        Some(Command::SpecGenerate { uri, id, protection, root, output }) => {
+            return cmd_spec_generate(uri, id, protection, root, output);
         }
         Some(Command::Compile { paths, output, check, root }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
@@ -644,6 +665,90 @@ fn cmd_resolve(uri: String, root: Option<PathBuf>, format: String) -> Result<()>
             println!();
             println!("{}", element.content);
         }
+    }
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// spec generate
+// ─────────────────────────────────────────────────────────
+
+fn cmd_spec_generate(
+    uri: String,
+    id_override: Option<String>,
+    protection: String,
+    root_override: Option<PathBuf>,
+    output: Option<PathBuf>,
+) -> Result<()> {
+    let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+    // Resolve the URI
+    let parsed = mdpath::parse(&uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let element = mdpath::resolve(&parsed, &root)
+        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+
+    // Derive ID from URI if not provided
+    let id = id_override.unwrap_or_else(|| {
+        // Use the last path segment minus extension, falling back to "figure"
+        parsed.path
+            .split('/')
+            .last()
+            .unwrap_or("figure")
+            .trim_end_matches(".md")
+            .replace(['-', '_'], "-")
+            .to_string()
+    });
+
+    eprintln!("{} Analyzing {} ({} lines)...",
+        "→".cyan(),
+        uri.dimmed(),
+        element.content.lines().count(),
+    );
+
+    let spec = spec_gen::generate(
+        &element.content,
+        element.label.as_deref(),
+        &uri,
+        &id,
+    );
+
+    // Override protection from CLI
+    let mut spec = spec;
+    spec.protection = protection;
+
+    let toml_out = spec_gen::format_toml(&spec);
+
+    // Print summary to stderr, TOML to stdout (or file)
+    eprintln!("{} {} invariant{} suggested for {:?}",
+        "✓".green(),
+        spec.invariants.len(),
+        if spec.invariants.len() == 1 { "" } else { "s" },
+        spec.id,
+    );
+    for inv in &spec.invariants {
+        eprintln!("  {} [{}] {}",
+            match inv.confidence {
+                spec_gen::SuggestionConfidence::High   => "●".green().to_string(),
+                spec_gen::SuggestionConfidence::Medium => "◐".yellow().to_string(),
+                spec_gen::SuggestionConfidence::Low    => "○".dimmed().to_string(),
+            },
+            inv.confidence.label(),
+            inv.rule,
+        );
+    }
+    eprintln!();
+    eprintln!("Paste the output below into your proof.toml, then run:");
+    eprintln!("  proof check --daVinci .");
+    eprintln!();
+
+    match output {
+        Some(path) => {
+            std::fs::write(&path, &toml_out)?;
+            eprintln!("{} written to {}", "✓".green(), path.display());
+        }
+        None => print!("{}", toml_out),
     }
 
     Ok(())
