@@ -75,9 +75,20 @@ enum Command {
         #[arg(short = 'o', long, default_value = "draft-plan.json")]
         output: PathBuf,
     },
+    /// Resolve an md:// URI — print the element content, label, and line range
+    Resolve {
+        /// The md:// URI to resolve
+        uri: String,
+        /// Root directory (default: current directory, or where proof.toml lives)
+        #[arg(short, long)]
+        root: Option<PathBuf>,
+        /// Output format: text (default) | json
+        #[arg(short = 'f', long, default_value = "text")]
+        format: String,
+    },
     /// Print the effective config for a path
     Config,
-    /// Write a glint.toml to the current directory
+    /// Write a proof.toml to the current directory
     Init,
     /// Summary statistics (error/warning counts by directory and code)
     Stats {
@@ -106,11 +117,14 @@ fn main() -> Result<()> {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             return cmd_draft(paths, output, &cli.config);
         }
+        Some(Command::Resolve { uri, root, format }) => {
+            return cmd_resolve(uri, root, format);
+        }
         Some(Command::Init) => {
             return cmd_init();
         }
         Some(Command::Config) => {
-            println!("(use proof.toml in your project directory — see `glint init`)");
+            println!("(use proof.toml in your project directory — see `proof init`)");
             return Ok(());
         }
         Some(Command::Stats { paths, by_directory, by_code }) => {
@@ -369,6 +383,57 @@ fn cmd_stats(
         }
         for (dir, count) in &by_dir {
             println!("  {:50} {}", dir, count);
+        }
+    }
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// resolve
+// ─────────────────────────────────────────────────────────
+
+fn cmd_resolve(uri: String, root: Option<PathBuf>, format: String) -> Result<()> {
+    let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+    let parsed = mdpath::parse(&uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI: {}", e))?;
+
+    let element = mdpath::resolve(&parsed, &root)
+        .map_err(|e| anyhow::anyhow!("resolve failed: {}", e))?;
+
+    match format.as_str() {
+        "json" => {
+            let json = serde_json::json!({
+                "uri": element.uri,
+                "file": element.file.display().to_string(),
+                "line_start": element.line_start,
+                "line_end": element.line_end,
+                "element_type": format!("{:?}", element.element_type),
+                "kind": element.kind,
+                "label": element.label,
+                "section_heading": element.section_heading,
+                "content": element.content,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        _ => {
+            // text format
+            println!("{}", element.uri.cyan());
+            if let Some(h) = &element.section_heading {
+                println!("  section:  {}", h);
+            }
+            if let Some(label) = &element.label {
+                println!("  label:    {}", label);
+            }
+            if let Some(kind) = &element.kind {
+                println!("  kind:     {}", kind);
+            }
+            println!("  lines:    {}–{}", element.line_start, element.line_end);
+            println!("  file:     {}", element.file.display());
+            println!();
+            println!("{}", element.content);
         }
     }
 
