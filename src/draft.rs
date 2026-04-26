@@ -477,14 +477,46 @@ fn fix_missing_table_link(table_row: &str) -> Option<String> {
 
     let cells = parse_table_cells(table_row);
 
-    // Extract the directory from the first cell that looks like a dirname
-    // This is used as the parent path for file links in the same row.
+    // Extract the directory from the first cell that looks like a dirname.
+    // Handles three formats:
+    //   bare:     "computing/"          → "computing"
+    //   wrapped:  "`computing/`"        → "computing"
+    //   linked:   "[computing/](../computing/00-OVERVIEW.md)" → "computing"
     let parent_dir: Option<String> = cells.iter().find_map(|cell| {
         let raw = cell.trim();
         let inner = raw.trim_matches('`').trim();
+
+        // Format 1: bare or backtick-wrapped dirname/
         if inner.ends_with('/') && !inner.contains(' ') && !inner.contains('[') {
-            Some(inner.trim_end_matches('/').to_string())
-        } else { None }
+            return Some(inner.trim_end_matches('/').to_string());
+        }
+
+        // Format 2: already a markdown link [dirname/](../dirname/...)
+        // Extract dirname from the link text or URL
+        if inner.starts_with('[') {
+            // Try link text: [dirname/](url) → "dirname"
+            if let Some(close_bracket) = inner.find("](") {
+                let link_text = &inner[1..close_bracket];
+                if link_text.ends_with('/') && !link_text.contains('/') {
+                    // single-component dir: [computing/](...)
+                    return Some(link_text.trim_end_matches('/').to_string());
+                }
+                // Also try the URL part: [...](../dirname/00-OVERVIEW.md)
+                if let Some(url_end) = inner[close_bracket + 2..].find(')') {
+                    let url = &inner[close_bracket + 2..close_bracket + 2 + url_end];
+                    // url like "../computing/00-OVERVIEW.md" → "computing"
+                    let parts: Vec<&str> = url.split('/').collect();
+                    if parts.len() >= 2 {
+                        let dir_candidate = parts[parts.len() - 2];
+                        if !dir_candidate.is_empty() && !dir_candidate.starts_with('.') {
+                            return Some(dir_candidate.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     });
 
     let mut any_fixed = false;
@@ -524,6 +556,10 @@ fn fix_missing_table_link(table_row: &str) -> Option<String> {
         } else {
             (inner, None)
         };
+
+        // Strip backticks from check_inner before filename detection
+        // handles: `01-FILE.md` — description (where check_inner = "`01-FILE.md`")
+        let check_inner = check_inner.trim_matches('`');
 
         // Detect if check_inner is a filename.md
         if check_inner.ends_with(".md") && !check_inner.contains(' ') {
