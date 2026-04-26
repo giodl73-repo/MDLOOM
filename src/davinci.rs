@@ -50,7 +50,7 @@ fn validate_entry(entry: &DaVinciEntry, root: &Path) -> Result<Vec<Diagnostic>, 
     let line = element.line_start;
 
     for inv in &entry.invariants {
-        if let Some(violation) = evaluate_invariant(inv, content, &element) {
+        if let Some(violation) = evaluate_invariant_inner(inv, content) {
             diags.push(Diagnostic {
                 file: file.clone(),
                 span: crate::diagnostic::Span { line, col: 1 },
@@ -71,13 +71,18 @@ fn validate_entry(entry: &DaVinciEntry, root: &Path) -> Result<Vec<Diagnostic>, 
     Ok(diags)
 }
 
+/// Public entry point: evaluate one invariant against raw content string.
+/// Returns Err(message) if the invariant is violated, Ok(()) if satisfied.
+pub fn evaluate_invariant(inv: &Invariant, content: &str) -> Result<(), String> {
+    match evaluate_invariant_inner(inv, content) {
+        Some(msg) => Err(msg),
+        None => Ok(()),
+    }
+}
+
 /// Evaluate one invariant rule against element content.
-/// Returns Some(violation_message) if violated, None if satisfied.
-fn evaluate_invariant(
-    inv: &Invariant,
-    content: &str,
-    element: &mdpath::ResolvedElement,
-) -> Option<String> {
+/// Returns Some(violation_message) if violated, None if passed.
+fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
 
     match inv.rule.as_str() {
@@ -200,12 +205,13 @@ fn evaluate_invariant(
             }
         }
         "heading-exists" => {
+            // Checks for a specific heading text in content
             let text = inv.text.as_deref()?;
-            if element.section_heading.as_deref() != Some(text) {
-                return Some(format!(
-                    "section heading is {:?}, expected {:?}",
-                    element.section_heading, text
-                ));
+            if !content.lines().any(|l| {
+                let t = l.trim_start_matches('#').trim();
+                t.eq_ignore_ascii_case(text)
+            }) {
+                return Some(format!("expected heading {:?} not found in content", text));
             }
         }
         unknown => {
@@ -250,7 +256,7 @@ mod tests {
             text: Some("M:N multiplexing".into()),
             min: None, max: None, value: None, values: None, tolerance: None,
         };
-        assert!(evaluate_invariant(&inv, "GOROUTINE SCHEDULER — M:N multiplexing\n┌──┐", &make_elem()).is_none());
+        assert!(evaluate_invariant_inner(&inv, "GOROUTINE SCHEDULER — M:N multiplexing\n┌──┐").is_none());
     }
 
     #[test]
@@ -260,7 +266,7 @@ mod tests {
             text: Some("missing text".into()),
             min: None, max: None, value: None, values: None, tolerance: None,
         };
-        assert!(evaluate_invariant(&inv, "some content here", &make_elem()).is_some());
+        assert!(evaluate_invariant_inner(&inv, "some content here").is_some());
     }
 
     #[test]
@@ -270,7 +276,7 @@ mod tests {
             rule: "box-count".into(),
             text: None, min: None, max: None, value: Some(2), values: None, tolerance: None,
         };
-        assert!(evaluate_invariant(&inv, content, &make_elem()).is_none());
+        assert!(evaluate_invariant_inner(&inv, content).is_none());
     }
 
     #[test]
@@ -282,7 +288,7 @@ mod tests {
             tolerance: None,
         };
         let content = "| Axis | Value |\n| Binding | Late |\n| Typing | Static |";
-        assert!(evaluate_invariant(&inv, content, &make_elem()).is_none());
+        assert!(evaluate_invariant_inner(&inv, content).is_none());
     }
 
     #[test]
@@ -294,7 +300,7 @@ mod tests {
             tolerance: None,
         };
         let content = "| Axis | Value |\n| Binding | Late |";
-        assert!(evaluate_invariant(&inv, content, &make_elem()).is_some());
+        assert!(evaluate_invariant_inner(&inv, content).is_some());
     }
 
     fn make_elem() -> mdpath::ResolvedElement {

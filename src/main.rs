@@ -5,6 +5,7 @@ use anyhow::Context;
 use proof_lib::davinci::check_daVinci;
 use proof_lib::draft::build_draft_plan;
 use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
+use proof_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
 use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
 use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
 use std::path::PathBuf;
@@ -130,6 +131,20 @@ enum Command {
         #[arg(long)]
         by_code: bool,
     },
+    /// Compile source documents — resolve proof: directives and write output
+    Compile {
+        /// Source files or directories (default: current directory)
+        paths: Vec<PathBuf>,
+        /// Explicit output path (only valid for single-file compile)
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+        /// Validate without writing any output files
+        #[arg(long)]
+        check: bool,
+        /// Root directory for md:// URI resolution (default: proof.toml location or cwd)
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
     /// Compose N figures side-by-side into a single ASCII art collage
     Layout {
         /// Source figures: md:// URIs or file paths
@@ -198,6 +213,10 @@ fn main() -> Result<()> {
         Some(Command::Stats { paths, by_directory, by_code }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             return cmd_stats(paths, by_directory, by_code, &cli.config);
+        }
+        Some(Command::Compile { paths, output, check, root }) => {
+            let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
+            return cmd_compile(paths, output, check, root, &cli.config);
         }
         Some(Command::Layout {
             sources, gap, align, labels, cols, width, direction, border, output, root,
@@ -627,6 +646,128 @@ fn cmd_resolve(uri: String, root: Option<PathBuf>, format: String) -> Result<()>
         }
     }
 
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// compile
+// ─────────────────────────────────────────────────────────
+
+fn cmd_compile(
+    paths: Vec<PathBuf>,
+    output_override: Option<PathBuf>,
+    check_only: bool,
+    root_override: Option<PathBuf>,
+    config_override: &Option<PathBuf>,
+) -> Result<()> {
+    // Collect .source.md files
+    let mut source_files: Vec<PathBuf> = Vec::new();
+    for path in &paths {
+        if path.is_file() {
+            source_files.push(path.clone());
+        } else {
+            for entry in walkdir::WalkDir::new(path)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+            {
+                let p = entry.path().to_path_buf();
+                if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
+                    source_files.push(p);
+                }
+            }
+        }
+    }
+
+    if source_files.is_empty() {
+        eprintln!("{} no .source.md files found", "proof compile:".yellow());
+        return Ok(());
+    }
+
+    if output_override.is_some() && source_files.len() > 1 {
+        eprintln!("{} -o can only be used with a single source file", "error:".red());
+        process::exit(2);
+    }
+
+    let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
+    let config = load_config(&root, config_override);
+
+    let mut total_errors = 0usize;
+    let mut total_warnings = 0usize;
+    let mut compiled = 0usize;
+
+    for source_path in &source_files {
+        let output_path = if let Some(ref out) = output_override {
+            out.clone()
+        } else if let Some(p) = derive_output_path(source_path) {
+            p
+        } else {
+            eprintln!("{} {} has no .source.md suffix — use -o to specify output",
+                "skip:".yellow(), source_path.display());
+            continue;
+        };
+
+        if check_only {
+            eprintln!("  {} {} → {} (check only)",
+                "→".cyan(), source_path.display(), output_path.display());
+        }
+
+        let result = compile_file(source_path, &output_path, &root, &config)?;
+
+        // Report violations
+        for v in &result.violations {
+            let sev = match v.severity {
+                ViolationSeverity::Error   => { total_errors += 1; "error".red().bold().to_string() }
+                ViolationSeverity::Warning => { total_warnings += 1; "warning".yellow().bold().to_string() }
+            };
+            eprintln!(
+                "{}:{}:{}: {} [{}]: {}",
+                source_path.display().to_string().cyan(),
+                v.source_line, 1,
+                sev, v.code, v.message
+            );
+            if let Some(ref id) = v.figure_id {
+                eprintln!("    figure: {}", id);
+            }
+            if !v.uri.is_empty() {
+                eprintln!("    uri:    {}", v.uri);
+            }
+        }
+
+        if result.written {
+            compiled += 1;
+            eprintln!("{} {} → {}  ({} directive{})",
+                "✓".green(),
+                source_path.display().to_string().cyan(),
+                output_path.display(),
+                result.directives_resolved,
+                if result.directives_resolved == 1 { "" } else { "s" },
+            );
+        } else if !result.violations.iter().any(|v| v.severity == ViolationSeverity::Error) {
+            eprintln!("{} {} (no directives — pass-through)",
+                "→".dimmed(), source_path.display());
+            if !check_only {
+                // Copy source to output unchanged
+                std::fs::copy(source_path, &output_path)?;
+                compiled += 1;
+            }
+        }
+    }
+
+    eprintln!();
+    if total_errors > 0 {
+        eprintln!("{} — {} compiled, {} error{}, {} warning{}",
+            "FAIL".red().bold(), compiled,
+            total_errors, if total_errors == 1 { "" } else { "s" },
+            total_warnings, if total_warnings == 1 { "" } else { "s" },
+        );
+        process::exit(1);
+    } else {
+        eprintln!("{} — {} compiled, {} warning{}",
+            "OK".green().bold(), compiled,
+            total_warnings, if total_warnings == 1 { "" } else { "s" },
+        );
+    }
     Ok(())
 }
 
