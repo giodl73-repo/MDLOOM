@@ -318,6 +318,12 @@ fn validate_structure(
 
     for (ri, row) in table.body_rows.iter().enumerate() {
         if row.len() != expected_cols {
+            // If body has MORE cols than header and ignore_extra_body_cols is set,
+            // skip — this is likely a false positive from | in math/code content.
+            // Body rows with FEWER cols are always flagged (genuine missing columns).
+            if config.ignore_extra_body_cols && row.len() > expected_cols {
+                continue;
+            }
             diags.push(Diagnostic::error(
                 path.to_path_buf(), table.line + 2 + ri, 1,
                 "md_table_col_mismatch",

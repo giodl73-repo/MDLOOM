@@ -89,6 +89,13 @@ pub struct MarkdownTableConfig {
     /// Warn when a table has more than this many columns (0 = no limit)
     #[serde(default)]
     pub max_columns: usize,
+    /// Don't flag body rows that have MORE columns than the header.
+    /// Use this when guide content includes pipe characters in math/code
+    /// (e.g. |G| group notation, regex, bitwise ops) that are parsed as
+    /// extra column separators. Rows with FEWER columns than the header
+    /// are still flagged (those are genuine missing-column errors).
+    #[serde(default)]
+    pub ignore_extra_body_cols: bool,
 }
 
 impl Default for MarkdownTableConfig {
@@ -102,6 +109,7 @@ impl Default for MarkdownTableConfig {
             table_schemas: Vec::new(),
             check_empty_headers: true,
             max_columns: 0,
+            ignore_extra_body_cols: false,
         }
     }
 }
@@ -256,6 +264,11 @@ pub struct AsciiBoxConfig {
     /// Tab width for visual column calculation (CommonMark default: 4)
     #[serde(default = "default_tab_width")]
     pub tab_width: usize,
+    /// Check that column separators (│ positions) are consistent row-to-row.
+    /// Disable for diagrams with multiple independent side-by-side boxes
+    /// (spatial layouts) where different rows legitimately have │ at different columns.
+    #[serde(default = "bool_true")]
+    pub check_col_separators: bool,
 }
 
 impl Default for AsciiBoxConfig {
@@ -266,6 +279,7 @@ impl Default for AsciiBoxConfig {
             code_blocks_only: true,
             check_unicode: true,
             tab_width: 4,
+            check_col_separators: true,
         }
     }
 }

@@ -51,8 +51,20 @@ impl Check for AsciiCharCheck {
 
                     if !is_alignment_safe(c) {
                         if width >= 2 {
-                            // Wide or Fullwidth — ERROR: will definitely break alignment
-                            diags.push(Diagnostic::error(
+                            // Wide or Fullwidth (CJK etc.) — box checker already uses
+                            // visual_width to count these as 2 cols. If the box border
+                            // accounts for the extra width, no box error will fire.
+                            // error_on_wide = true (default): error here too, catching
+                            //   cases where CJK appears in contexts without box checking.
+                            // error_on_wide = false: suppress — rely on ascii_box_width
+                            //   to catch actual misalignment. Use this when CJK content
+                            //   is intentional (e.g. world-languages guides).
+                            let make_diag = if self.config.error_on_wide {
+                                Diagnostic::error
+                            } else {
+                                Diagnostic::warning
+                            };
+                            diags.push(make_diag(
                                 path.to_path_buf(),
                                 abs_line,
                                 col_1,

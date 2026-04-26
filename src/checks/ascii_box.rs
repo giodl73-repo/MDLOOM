@@ -407,11 +407,9 @@ fn check_boxes(
                 }
             }
 
-            // Column alignment check — actual_cols is non-empty here (checked above)
-            if false {
-                // Dead branch: the `actual_cols.is_empty()` guard above already handles this.
-                // Left as documentation that the guard was intentionally moved up.
-                continue; // continuation text — skip
+            // Column alignment check — skip if disabled (spatial/multi-box layouts)
+            if !config.check_col_separators {
+                continue;
             }
 
             for &expected_col in &b.expected_cols {
