@@ -123,6 +123,25 @@ pub struct TableSchema {
     /// Allowed values per column: { "ColumnName": ["allowed1", "allowed2"] }
     #[serde(default)]
     pub column_allowed_values: std::collections::HashMap<String, Vec<String>>,
+
+    // ── Link validation ────────────────────────────────────────────────────
+
+    /// Columns where every body cell MUST contain at least one markdown link.
+    /// Pattern: `[text](url)` — bare text is flagged as `md_table_missing_link`.
+    /// Example: `link_columns = ["Directory", "Entry Point"]`
+    #[serde(default)]
+    pub link_columns: Vec<String>,
+
+    /// Auto-fix strategy for link_columns cells that have bare text:
+    /// "directory" — `computing/` → `[computing/](../computing/00-OVERVIEW.md)`
+    /// "file"      — `01-PKG.md` → `[01-PKG.md](../dirname/01-PKG.md)`
+    /// ""          — no auto-fix
+    #[serde(default)]
+    pub link_auto_fix: String,
+
+    /// Check that link targets (relative file paths) exist on disk.
+    #[serde(default)]
+    pub verify_link_targets: bool,
 }
 
 /// ASCII bar chart validator.

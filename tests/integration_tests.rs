@@ -7,8 +7,9 @@
 use glint_lib::checks::ascii_box::AsciiBoxCheck;
 use glint_lib::checks::ascii_flow::AsciiFlowCheck;
 use glint_lib::checks::markdown::MarkdownCheck;
+use glint_lib::checks::markdown_table::MarkdownTableCheck;
 use glint_lib::checks::Check;
-use glint_lib::config::{AsciiBoxConfig, AsciiFlowConfig, MarkdownConfig};
+use glint_lib::config::{AsciiBoxConfig, AsciiFlowConfig, MarkdownConfig, MarkdownTableConfig, TableSchema};
 use glint_lib::diagnostic::Severity;
 use std::path::{Path, PathBuf};
 
@@ -1229,6 +1230,112 @@ fn unicode_wide_chars_measured_correctly() {
     let diags = check.check(Path::new("test.md"), content);
     // Perfect box — zero errors
     assert!(diags.is_empty(), "ASCII box with spaces: should have zero errors, got:\n{}", format_diags(&diags));
+}
+
+// ─────────────────────────────────────────────────────────
+// Link validation — md_table_missing_link + md_broken_link
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn table_link_column_flags_bare_text() {
+    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    let content = "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| computing/ | Tech stack |\n| languages/ | Language guides |\n";
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig {
+            enabled: true,
+            table_schemas: vec![TableSchema {
+                heading: Some("Directories".to_string()),
+                link_columns: vec!["Directory".to_string()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    };
+    let diags = check.check(Path::new("t.md"), content);
+    let missing = diags.iter().filter(|d| d.code == "md_table_missing_link").count();
+    assert_eq!(missing, 2, "both bare directory names must be flagged");
+}
+
+#[test]
+fn table_link_column_passes_linked_cells() {
+    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    let content = "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| [computing/](../computing/00-OVERVIEW.md) | Tech stack |\n";
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig {
+            enabled: true,
+            table_schemas: vec![TableSchema {
+                heading: Some("Directories".to_string()),
+                link_columns: vec!["Directory".to_string()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    };
+    let diags = check.check(Path::new("t.md"), content);
+    assert!(!diags.iter().any(|d| d.code == "md_table_missing_link"),
+        "properly linked cells must not be flagged");
+}
+
+#[test]
+fn broken_link_detected_when_file_missing() {
+    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    let dir = tempfile::tempdir().unwrap();
+    let md_path = dir.path().join("section.md");
+
+    // Write a section page with a link to a non-existent file
+    std::fs::write(&md_path,
+        "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| [computing/](../computing/00-OVERVIEW.md) | Tech |\n"
+    ).unwrap();
+
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig {
+            enabled: true,
+            table_schemas: vec![TableSchema {
+                heading: Some("Directories".to_string()),
+                link_columns: vec!["Directory".to_string()],
+                verify_link_targets: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    };
+
+    let content = std::fs::read_to_string(&md_path).unwrap();
+    let diags = check.check(&md_path, &content);
+    assert!(diags.iter().any(|d| d.code == "md_broken_link"),
+        "link to non-existent file must produce md_broken_link");
+}
+
+#[test]
+fn broken_link_passes_when_target_exists() {
+    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    let dir = tempfile::tempdir().unwrap();
+    let target_dir = dir.path().join("computing");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    std::fs::write(target_dir.join("00-OVERVIEW.md"), "# Computing\n").unwrap();
+
+    let md_path = dir.path().join("section.md");
+    std::fs::write(&md_path,
+        "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| [computing/](computing/00-OVERVIEW.md) | Tech |\n"
+    ).unwrap();
+
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig {
+            enabled: true,
+            table_schemas: vec![TableSchema {
+                heading: Some("Directories".to_string()),
+                link_columns: vec!["Directory".to_string()],
+                verify_link_targets: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    };
+
+    let content = std::fs::read_to_string(&md_path).unwrap();
+    let diags = check.check(&md_path, &content);
+    assert!(!diags.iter().any(|d| d.code == "md_broken_link"),
+        "link to existing file must not be flagged");
 }
 
 // ─────────────────────────────────────────────────────────

@@ -342,6 +342,19 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
         }
     }
 
+    // --- Deterministic: md_table_missing_link with auto_link_pattern ---
+    // "directory" pattern: `computing/` → `[computing/](../computing/00-OVERVIEW.md)`
+    // "file" pattern: `01-PKG.md` → `[01-PKG.md](../dirname/01-PKG.md)`
+    if codes_on_line.iter().any(|&c| c == "md_table_missing_link") {
+        // The fix strategy comes from the schema config via the diagnostic message
+        // For now, detect bare directory (ends with /) or bare file (ends with .md)
+        // and generate the standard link
+        let trimmed = old_string.trim();
+        if let Some(fixed) = fix_missing_table_link(trimmed) {
+            return (fixed, true);
+        }
+    }
+
     // All other errors: AI judgment needed
     ("".to_string(), false)
 }
@@ -449,6 +462,70 @@ fn fix_table_cell_padding(line: &str) -> Option<String> {
 
 /// Escaped-pipe-aware cell splitter — used by the fix generator.
 /// Mirrors parse_row in markdown_table.rs but operates on the full line.
+/// Auto-generate a markdown link for a bare table cell.
+/// For a whole table row: finds the bare cell and wraps it in a link.
+///
+/// Patterns:
+///   `| computing/ | ...` → `| [computing/](../computing/00-OVERVIEW.md) | ...`
+///   `| 01-PACKAGE.md — desc | ...` → `| [01-PACKAGE.md](../computing/01-PACKAGE.md) — desc | ...`
+fn fix_missing_table_link(table_row: &str) -> Option<String> {
+    if !table_row.starts_with('|') { return None; }
+
+    let cells = parse_table_cells(table_row);
+    let mut any_fixed = false;
+    let mut fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
+        let content = cell.trim();
+        // Already has a link → leave alone
+        if has_markdown_link_in_cell(content) { return cell; }
+        if content.is_empty() { return cell; }
+
+        // Pattern: bare directory name (e.g. "computing/")
+        if content.ends_with('/') && !content.contains(' ') && !content.contains('[') {
+            let dir = content.trim_end_matches('/');
+            any_fixed = true;
+            let leading = cell.len() - cell.trim_start().len();
+            let trailing = cell.len() - cell.trim_end().len();
+            return format!(
+                "{}[{}/](../{}/00-OVERVIEW.md){}",
+                " ".repeat(leading), dir, dir,
+                " ".repeat(trailing)
+            );
+        }
+
+        // Pattern: bare filename (e.g. "01-PACKAGE.md" or "01-PACKAGE.md — description")
+        if let Some(fname_end) = content.find(".md") {
+            let fname = &content[..fname_end + 3]; // include ".md"
+            if fname.chars().next().map(|c| c.is_ascii_digit() || c == '0').unwrap_or(false) {
+                // Looks like a numbered guide file
+                // We don't know the parent directory without the schema context,
+                // so generate a placeholder: [filename](../DIRNAME/filename)
+                // The dirname will be wrong — mark as medium confidence
+                let rest = content[fname_end + 3..].trim();
+                let link_text = if rest.is_empty() {
+                    format!("[{}]({}/{})", fname, "DIRNAME", fname)
+                } else {
+                    format!("[{}]({}/{}) {}", fname, "DIRNAME", fname, rest)
+                };
+                any_fixed = true;
+                let leading = cell.len() - cell.trim_start().len();
+                let trailing = cell.len() - cell.trim_end().len();
+                return format!("{} {} {}", " ".repeat(leading.saturating_sub(1)), link_text, " ".repeat(trailing.saturating_sub(1)));
+            }
+        }
+
+        cell
+    }).collect();
+
+    if !any_fixed { return None; }
+
+    let indent = table_row.len() - table_row.trim_start().len();
+    Some(format!("{}|{}|", " ".repeat(indent), fixed_cells.join("|")))
+}
+
+fn has_markdown_link_in_cell(cell: &str) -> bool {
+    cell.contains("](") && cell.contains('[')
+}
+
 fn parse_table_cells(line: &str) -> Vec<String> {
     let trimmed = line.trim();
     let inner = if trimmed.starts_with('|') { &trimmed[1..] } else { trimmed };

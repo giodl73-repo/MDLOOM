@@ -376,6 +376,11 @@ fn validate_structure(
 // Schema validation
 // ─────────────────────────────────────────────────────────
 
+/// Returns true if a cell contains a markdown link [text](url).
+fn has_markdown_link(cell: &str) -> bool {
+    cell.contains("](") && cell.contains('[')
+}
+
 fn validate_schema(
     path: &Path,
     tables: &[ParsedTable],
@@ -518,6 +523,71 @@ fn validate_table_against_schema(
                                 allowed.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>().join(", ")
                             ),
                         ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Link column validation
+    for link_col_name in &schema.link_columns {
+        let col_idx = table.headers.iter().position(|h| h.trim() == link_col_name.as_str());
+        if let Some(idx) = col_idx {
+            for (ri, row) in table.body_rows.iter().enumerate() {
+                if let Some(cell) = row.get(idx) {
+                    let content = cell.trim();
+                    if !content.is_empty() && !has_markdown_link(content) {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(),
+                            table.line + 2 + ri, // body row line number
+                            idx + 1,
+                            "md_table_missing_link",
+                            format!(
+                                "column {:?} cell {:?} should contain a markdown link [text](url)\n  \
+                                 add a link or set link_auto_fix to auto-generate it",
+                                link_col_name, content
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // verify_link_targets: check that link paths exist on disk
+    if schema.verify_link_targets {
+        for link_col_name in &schema.link_columns {
+            let col_idx = table.headers.iter().position(|h| h.trim() == link_col_name.as_str());
+            if let Some(idx) = col_idx {
+                for (ri, row) in table.body_rows.iter().enumerate() {
+                    if let Some(cell) = row.get(idx) {
+                        // Extract all (url) from [text](url) in the cell
+                        let mut rest = cell.trim();
+                        while let Some(open) = rest.find("](") {
+                            rest = &rest[open + 2..];
+                            if let Some(close) = rest.find(')') {
+                                let url = &rest[..close];
+                                // Only check relative file paths (not http:// or #anchors)
+                                if !url.starts_with("http") && !url.starts_with('#') {
+                                    let target = path.parent().unwrap_or(path).join(url);
+                                    if !target.exists() {
+                                        diags.push(Diagnostic::warning(
+                                            path.to_path_buf(),
+                                            table.line + 2 + ri,
+                                            idx + 1,
+                                            "md_broken_link",
+                                            format!(
+                                                "link target {:?} does not exist (column {:?})",
+                                                url, link_col_name
+                                            ),
+                                        ));
+                                    }
+                                }
+                                rest = &rest[close + 1..];
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
             }
