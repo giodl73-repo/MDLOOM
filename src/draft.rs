@@ -310,6 +310,17 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
         }
     }
 
+    // --- Deterministic: ASCII art box cell padding (missing space against │) ---
+    // "cell N missing right padding" or "cell N missing left padding"
+    // These rows have content butting against │ with 0 spaces. Add 1 space.
+    if codes_on_line.iter().any(|&c| c == "ascii_cell_padding")
+        && !codes_on_line.iter().any(|&c| c == "ascii_box_width" || c == "ascii_box_col")
+    {
+        if let Some(fixed) = fix_box_cell_padding(old_string) {
+            return (fixed, true);
+        }
+    }
+
     // --- Deterministic: box col ±1 (shift trailing space in correct cell) ---
     // "column separator at col N (expected col M) — off by 1"
     // Only auto-fix when:
@@ -611,33 +622,49 @@ fn parse_table_cells(line: &str) -> Vec<String> {
 /// Fix box content row width by ±1 trailing space.
 /// Only handles the exact ±1 case — larger diffs need AI judgment.
 /// "row width N ≠ box width M" — if diff == 1, adjust trailing space in last cell.
+/// Fix ASCII art box cell padding: add 1 space before the closing │/| where content
+/// is flush against the bar (0 spaces, need 1). Only applied when there is no
+/// concurrent width or col error on the same line (those take priority).
+fn fix_box_cell_padding(line: &str) -> Option<String> {
+    let trimmed = line.trim_end();
+    let last_char = trimmed.chars().last()?;
+    if last_char != '│' && last_char != '|' { return None; }
+
+    // Check if content is flush against the closing bar (no space before it)
+    let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
+    if without_last.ends_with(' ') { return None; } // already has padding
+
+    // Only handle single-column box rows (one opening + one closing bar)
+    // to avoid corrupting multi-column layouts
+    let bar_count = trimmed.chars().filter(|&c| c == '│' || c == '|').count();
+    if bar_count != 2 { return None; }
+
+    Some(format!("{} {}", without_last, last_char))
+}
+
 fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
     // Parse "row width N ≠ box width M"
     let (actual, expected) = parse_width_diff(message)?;
     let diff = actual.abs_diff(expected);
-    if diff != 1 { return None; } // only handle ±1
+    if diff > 4 { return None; } // only handle small offsets
 
     // Find the closing vertical bar (│ or |) at the end of the line
     let trimmed = line.trim_end();
     let last_char = trimmed.chars().last()?;
     if last_char != '│' && last_char != '|' { return None; }
 
+    let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
+
     if actual > expected {
-        // Too wide by 1: remove one trailing space before the closing bar
-        // Find the space just before the closing bar
-        let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
-        if without_last.ends_with(' ') {
-            // Remove the space
-            let trimmed_inner = without_last.trim_end_matches(' ');
-            // Add back exactly the right number of spaces to make width correct
-            let extra = without_last.len() - trimmed_inner.len() - 1; // one fewer space
-            let preserved_trailing = " ".repeat(extra);
-            return Some(format!("{}{}{}", trimmed_inner, preserved_trailing, last_char));
+        // Too wide: remove trailing spaces before the closing bar
+        let spaces_before = without_last.chars().rev().take_while(|&c| c == ' ').count();
+        if spaces_before >= diff {
+            let trimmed_inner = &without_last[..without_last.len() - diff];
+            return Some(format!("{}{}", trimmed_inner, last_char));
         }
     } else {
-        // Too narrow by 1: add one trailing space before the closing bar
-        let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
-        return Some(format!("{} {}", without_last, last_char));
+        // Too narrow: add trailing spaces before the closing bar
+        return Some(format!("{}{}{}", without_last, " ".repeat(diff), last_char));
     }
 
     None
@@ -651,14 +678,14 @@ fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
 /// `│` independently would double-insert spaces. So we find the leftmost
 /// mismatch, fix only that one, and stop.
 ///
-/// Only handles ±1 drift (single column off). Larger drifts need AI judgment.
+/// Handles up to ±4 drift (single column off). Larger drifts need AI judgment.
 fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -> Option<String> {
-    // Find ALL mismatches where drift == 1, sorted by actual column (leftmost first)
+    // Find ALL mismatches where drift ≤ 4, sorted by actual column (leftmost first)
     let mut mismatches: Vec<(usize, usize)> = expected_cols.iter()
         .filter_map(|&exp| {
             let closest = actual_cols.iter().min_by_key(|&&a| a.abs_diff(exp))?;
             let drift = closest.abs_diff(exp);
-            if drift == 1 { Some((exp, *closest)) } else { None }
+            if drift <= 4 { Some((exp, *closest)) } else { None }
         })
         .collect();
     mismatches.sort_by_key(|&(_, act)| act); // leftmost actual column first
@@ -672,18 +699,19 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
         dir == first_dir
     });
 
-    // If all columns are off in the same direction by 1, fixing the leftmost cascades.
+    // If all columns are off in the same direction, fixing the leftmost cascades.
     // If they diverge (some left, some right), AI judgment needed.
     if !all_same_dir { return None; }
 
     // Fix ONLY the leftmost misaligned │ — cascades to all subsequent positions
     let (exp_first, act_first) = mismatches[0];
-    let need_insert = exp_first > act_first; // insert space before | to push it right
-    let need_remove = exp_first < act_first; // remove space before | to pull it left
+    let drift = exp_first.abs_diff(act_first);
+    let need_insert = exp_first > act_first; // insert spaces before | to push it right
+    let need_remove = exp_first < act_first; // remove spaces before | to pull it left
 
     let chars: Vec<char> = line.chars().collect();
     let n = chars.len();
-    let mut result: Vec<char> = Vec::with_capacity(n + 1);
+    let mut result: Vec<char> = Vec::with_capacity(n + drift + 1);
     let mut col_0 = 0usize;
     let mut fixed = false;
 
@@ -696,9 +724,15 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
 
         if is_vertical && !fixed && cur_col_1 == act_first {
             if need_insert {
-                result.push(' ');
-            } else if need_remove && result.last() == Some(&' ') {
-                result.pop();
+                for _ in 0..drift { result.push(' '); }
+            } else if need_remove {
+                // Remove up to `drift` trailing spaces from result
+                let mut removed = 0;
+                while removed < drift && result.last() == Some(&' ') {
+                    result.pop();
+                    removed += 1;
+                }
+                if removed < drift { return None; } // not enough spaces to remove
             }
             fixed = true;
         }
