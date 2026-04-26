@@ -465,7 +465,7 @@ impl GlintConfig {
     }
 
     pub fn load_or_default(dir: &Path) -> Self {
-        for name in &["glint.toml", ".glint.toml", ".glint/config.toml"] {
+        for name in &["proof.toml", ".proof.toml", ".glint/config.toml"] {
             let path = dir.join(name);
             if path.exists() {
                 match Self::load(&path) {
@@ -527,7 +527,7 @@ fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, 
 }
 
 fn try_load_config(dir: &Path) -> Option<GlintConfig> {
-    for name in &["glint.toml", ".glint.toml"] {
+    for name in &["proof.toml", ".proof.toml"] {
         let path = dir.join(name);
         if path.exists() {
             match GlintConfig::load(&path) {

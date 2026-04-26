@@ -4,13 +4,13 @@
 /// L1 = integration (this file — fixture files, check composition, error codes)
 /// L2 = E2E (CLI invocation, exit codes, output formats)
 
-use glint_lib::checks::ascii_box::AsciiBoxCheck;
-use glint_lib::checks::ascii_flow::AsciiFlowCheck;
-use glint_lib::checks::markdown::MarkdownCheck;
-use glint_lib::checks::markdown_table::MarkdownTableCheck;
-use glint_lib::checks::Check;
-use glint_lib::config::{AsciiBoxConfig, AsciiFlowConfig, MarkdownConfig, MarkdownTableConfig, TableSchema};
-use glint_lib::diagnostic::Severity;
+use proof_lib::checks::ascii_box::AsciiBoxCheck;
+use proof_lib::checks::ascii_flow::AsciiFlowCheck;
+use proof_lib::checks::markdown::MarkdownCheck;
+use proof_lib::checks::markdown_table::MarkdownTableCheck;
+use proof_lib::checks::Check;
+use proof_lib::config::{AsciiBoxConfig, AsciiFlowConfig, MarkdownConfig, MarkdownTableConfig, TableSchema};
+use proof_lib::diagnostic::Severity;
 use std::path::{Path, PathBuf};
 
 fn fixture(name: &str) -> PathBuf {
@@ -186,10 +186,10 @@ fn markdown_required_pattern_missing() {
     let check = MarkdownCheck {
         config: MarkdownConfig {
             enabled: true,
-            required_patterns: vec![glint_lib::config::RequiredPattern {
+            required_patterns: vec![proof_lib::config::RequiredPattern {
                 pattern: "```".to_string(),
                 description: "must have code block".to_string(),
-                severity: glint_lib::config::PatternSeverity::Warning,
+                severity: proof_lib::config::PatternSeverity::Warning,
             }],
             ..Default::default()
         },
@@ -224,7 +224,7 @@ fn markdown_max_lines_exceeded() {
 
 #[test]
 fn default_config_loads_without_panic() {
-    let cfg = glint_lib::GlintConfig::load_or_default(Path::new("."));
+    let cfg = proof_lib::GlintConfig::load_or_default(Path::new("."));
     assert!(cfg.ascii_box.enabled);
     assert_eq!(cfg.ascii_box.tolerance, 0);
 }
@@ -234,7 +234,7 @@ fn schema_file_loads_correctly() {
     let schema_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("schemas/default.toml");
     if schema_path.exists() {
-        let cfg = glint_lib::GlintConfig::load(&schema_path)
+        let cfg = proof_lib::GlintConfig::load(&schema_path)
             .expect("default schema should parse without error");
         assert!(cfg.ascii_box.enabled);
     }
@@ -246,9 +246,9 @@ fn schema_file_loads_correctly() {
 
 #[test]
 fn runner_scans_fixture_dir() {
-    use glint_lib::Runner;
+    use proof_lib::Runner;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let cfg = glint_lib::GlintConfig::default();
+    let cfg = proof_lib::GlintConfig::default();
     let runner = Runner::new(&fixture_dir, cfg).expect("runner should build");
     let diags = runner.run();
     assert!(
@@ -259,9 +259,9 @@ fn runner_scans_fixture_dir() {
 
 #[test]
 fn runner_lint_single_perfect_file() {
-    use glint_lib::Runner;
+    use proof_lib::Runner;
     let path = fixture("perfect_box.md");
-    let cfg = glint_lib::GlintConfig::default();
+    let cfg = proof_lib::GlintConfig::default();
     let runner = Runner::new(path.parent().unwrap(), cfg).expect("runner should build");
     let diags = runner.lint_file(&path);
     assert!(
@@ -492,8 +492,8 @@ fn rich_context_surrounding_lines_include_failing_line() {
 #[test]
 fn invariant_i3_all_diagnostics_have_valid_spans() {
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    use glint_lib::Runner;
-    let runner = Runner::new(&fixture_dir, glint_lib::GlintConfig::default()).unwrap();
+    use proof_lib::Runner;
+    let runner = Runner::new(&fixture_dir, proof_lib::GlintConfig::default()).unwrap();
     let diags = runner.run();
     for d in &diags {
         assert!(d.span.line >= 1, "diagnostic {} has line=0 (must be ≥1): {:?}", d.code, d.file);
@@ -539,10 +539,10 @@ fn invariant_i6_tolerance_bounds() {
 // I-7: Parallel and sequential execution produce same diagnostic SET
 #[test]
 fn invariant_i7_parallel_equals_sequential() {
-    use glint_lib::Runner;
+    use proof_lib::Runner;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let cfg1 = glint_lib::GlintConfig::default();
-    let cfg2 = glint_lib::GlintConfig::default();
+    let cfg1 = proof_lib::GlintConfig::default();
+    let cfg2 = proof_lib::GlintConfig::default();
 
     // Parallel (runner uses rayon internally)
     let runner = Runner::new(&fixture_dir, cfg1).unwrap();
@@ -550,7 +550,7 @@ fn invariant_i7_parallel_equals_sequential() {
 
     // Sequential (lint each file one-by-one)
     let runner2 = Runner::new(&fixture_dir, cfg2).unwrap();
-    let mut sequential: Vec<glint_lib::Diagnostic> = walkdir::WalkDir::new(&fixture_dir)
+    let mut sequential: Vec<proof_lib::Diagnostic> = walkdir::WalkDir::new(&fixture_dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
@@ -558,7 +558,7 @@ fn invariant_i7_parallel_equals_sequential() {
         .collect();
 
     // Sort both to make comparison order-independent
-    let key = |d: &glint_lib::Diagnostic| (d.file.clone(), d.span.line, d.span.col, d.code);
+    let key = |d: &proof_lib::Diagnostic| (d.file.clone(), d.span.line, d.span.col, d.code);
     parallel.sort_by_key(key);
     sequential.sort_by_key(key);
 
@@ -579,7 +579,7 @@ fn invariant_i7_parallel_equals_sequential() {
 
 #[test]
 fn fix_plan_round_trip_json() {
-    use glint_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
+    use proof_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
     use std::path::PathBuf;
 
     let plan = FixPlan {
@@ -611,7 +611,7 @@ fn fix_plan_round_trip_json() {
 
 #[test]
 fn fix_plan_confidence_filtering() {
-    use glint_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixOptions, FixPlan, PlanSummary};
+    use proof_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixOptions, FixPlan, PlanSummary};
     use std::path::PathBuf;
 
     let dir = tempfile::tempdir().unwrap();
@@ -799,14 +799,14 @@ fn markdown_table_in_code_block_is_not_a_box() {
 // way to test cascade-resolved config (the runner discovers it from disk).
 #[test]
 fn section_schema_paths_exclude_skips_matching_files() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
 
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
     // Write glint.toml — generic rule for all *.md EXCEPT 00-OVERVIEW.md,
     // and a separate rule for 00-OVERVIEW.md only.
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 
@@ -833,7 +833,7 @@ required_h2_all = ["Language Genealogy"]
     let ov_file = root.join("00-OVERVIEW.md");
     std::fs::write(&ov_file, "# Overview\n\n## Language Genealogy\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
 
     // 02-C.md must report missing "Type System Snapshot"
@@ -861,11 +861,11 @@ required_h2_all = ["Language Genealogy"]
 // paths_exclude with multiple exclusions
 #[test]
 fn paths_exclude_multiple_files_skipped() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -888,7 +888,7 @@ required_h2_all = ["Type System Snapshot"]
     let cheat = root.join("01-CHEATSHEET.md");
     std::fs::write(&cheat, "# Cheatsheet\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
 
     // Guide: requires it
@@ -905,11 +905,11 @@ required_h2_all = ["Type System Snapshot"]
 // paths_exclude with glob pattern (not just exact filename)
 #[test]
 fn paths_exclude_glob_pattern() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -927,7 +927,7 @@ required_h2_all = ["Type System Snapshot"]
     let cheat = root.join("01-CHEATSHEET.md");
     std::fs::write(&cheat, "# Cheatsheet\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
 
     assert!(runner.lint_file(&guide).iter().any(|d| d.message.contains("Type System Snapshot")),
@@ -941,12 +941,12 @@ required_h2_all = ["Type System Snapshot"]
 // Directory-level glint.toml: paths are relative to that directory, not root
 #[test]
 fn directory_schema_paths_relative_to_its_dir() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
     // Root glint.toml — universal rule
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -957,7 +957,7 @@ required_h2_all = ["Decision Cheat Sheet"]
     // languages/ sub-directory with its own glint.toml
     let langs = root.join("languages");
     std::fs::create_dir_all(&langs).unwrap();
-    std::fs::write(langs.join("glint.toml"), r#"
+    std::fs::write(langs.join("proof.toml"), r#"
 [markdown]
 enabled = true
 # paths here are relative to languages/ NOT to root
@@ -975,7 +975,7 @@ required_h2_all = ["Type System Snapshot"]
     let overview = langs.join("00-OVERVIEW.md");
     std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
 
     let guide_diags = runner.lint_file(&guide);
@@ -996,11 +996,11 @@ required_h2_all = ["Type System Snapshot"]
 // (section_schemas are additive — no "first match wins")
 #[test]
 fn section_schemas_are_additive_not_first_match_wins() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -1017,7 +1017,7 @@ required_h2_all = ["Section B"]
     let f = root.join("guide.md");
     std::fs::write(&f, "# Guide\n\n## Section A\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
     let diags = runner.lint_file(&f);
 
@@ -1032,11 +1032,11 @@ required_h2_all = ["Section B"]
 // paths_exclude does not affect the base [markdown] config — only the section_schema
 #[test]
 fn paths_exclude_only_affects_its_own_schema() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -1052,7 +1052,7 @@ required_h2_all = ["Guide Section"]
     let overview = root.join("00-OVERVIEW.md");
     std::fs::write(&overview, "# Overview\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
     let diags = runner.lint_file(&overview);
 
@@ -1067,11 +1067,11 @@ required_h2_all = ["Guide Section"]
 // Three-level cascade: root → languages/ → individual file picks up all levels
 #[test]
 fn three_level_cascade_all_rules_accumulate() {
-    use glint_lib::runner::Runner;
+    use proof_lib::runner::Runner;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
 
-    std::fs::write(root.join("glint.toml"), r#"
+    std::fs::write(root.join("proof.toml"), r#"
 [files]
 root = true
 [markdown]
@@ -1081,7 +1081,7 @@ required_h2_all = ["Root Requirement"]
 
     let langs = root.join("languages");
     std::fs::create_dir_all(&langs).unwrap();
-    std::fs::write(langs.join("glint.toml"), r#"
+    std::fs::write(langs.join("proof.toml"), r#"
 [markdown]
 enabled = true
 required_h2_all = ["Dir Requirement"]
@@ -1090,7 +1090,7 @@ required_h2_all = ["Dir Requirement"]
     let guide = langs.join("02-C.md");
     std::fs::write(&guide, "# C\n\ncontent\n").unwrap();
 
-    let cfg = glint_lib::GlintConfig::load_or_default(root);
+    let cfg = proof_lib::GlintConfig::load_or_default(root);
     let runner = Runner::new(root, cfg).unwrap();
     let diags = runner.lint_file(&guide);
 
@@ -1104,8 +1104,8 @@ required_h2_all = ["Dir Requirement"]
 // Config cascade: two glint.toml files in a hierarchy produce additive required_h2_all
 #[test]
 fn config_cascade_additive_required_sections() {
-    use glint_lib::config::merge;
-    use glint_lib::GlintConfig;
+    use proof_lib::config::merge;
+    use proof_lib::GlintConfig;
 
     let mut parent = GlintConfig::default();
     parent.markdown.enabled = true;
@@ -1130,8 +1130,8 @@ fn config_cascade_additive_required_sections() {
 // Config merge: child's empty required_h2_all does NOT erase parent's
 #[test]
 fn config_merge_empty_child_preserves_parent_requirements() {
-    use glint_lib::config::merge;
-    use glint_lib::GlintConfig;
+    use proof_lib::config::merge;
+    use proof_lib::GlintConfig;
 
     let mut parent = GlintConfig::default();
     parent.markdown.required_h2_all = vec!["Decision Cheat Sheet".to_string()];
@@ -1148,8 +1148,8 @@ fn config_merge_empty_child_preserves_parent_requirements() {
 // Config merge: files.exclude is additive (child adds, not replaces)
 #[test]
 fn config_merge_files_exclude_is_additive() {
-    use glint_lib::config::{merge, FilesConfig};
-    use glint_lib::GlintConfig;
+    use proof_lib::config::{merge, FilesConfig};
+    use proof_lib::GlintConfig;
 
     let mut parent = GlintConfig::default();
     parent.files = FilesConfig {
@@ -1176,7 +1176,7 @@ fn config_merge_files_exclude_is_additive() {
 // Multi-file fix plan: fixes across two files both apply correctly
 #[test]
 fn fix_plan_applies_to_multiple_files() {
-    use glint_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixOptions, FixPlan, PlanSummary};
+    use proof_lib::fix::{Confidence, DiagnosticRef, Edit, Fix, FixOptions, FixPlan, PlanSummary};
 
     let dir = tempfile::tempdir().unwrap();
     let file1 = dir.path().join("a.md");
@@ -1238,7 +1238,7 @@ fn unicode_wide_chars_measured_correctly() {
 
 #[test]
 fn table_link_column_flags_bare_text() {
-    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    use proof_lib::config::{MarkdownTableConfig, TableSchema};
     let content = "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| computing/ | Tech stack |\n| languages/ | Language guides |\n";
     let check = MarkdownTableCheck {
         config: MarkdownTableConfig {
@@ -1258,7 +1258,7 @@ fn table_link_column_flags_bare_text() {
 
 #[test]
 fn table_link_column_passes_linked_cells() {
-    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    use proof_lib::config::{MarkdownTableConfig, TableSchema};
     let content = "## Directories\n\n| Directory | Focus |\n|-----------|-------|\n| [computing/](../computing/00-OVERVIEW.md) | Tech stack |\n";
     let check = MarkdownTableCheck {
         config: MarkdownTableConfig {
@@ -1278,7 +1278,7 @@ fn table_link_column_passes_linked_cells() {
 
 #[test]
 fn broken_link_detected_when_file_missing() {
-    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    use proof_lib::config::{MarkdownTableConfig, TableSchema};
     let dir = tempfile::tempdir().unwrap();
     let md_path = dir.path().join("section.md");
 
@@ -1308,7 +1308,7 @@ fn broken_link_detected_when_file_missing() {
 
 #[test]
 fn broken_link_passes_when_target_exists() {
-    use glint_lib::config::{MarkdownTableConfig, TableSchema};
+    use proof_lib::config::{MarkdownTableConfig, TableSchema};
     let dir = tempfile::tempdir().unwrap();
     let target_dir = dir.path().join("computing");
     std::fs::create_dir_all(&target_dir).unwrap();
@@ -1344,7 +1344,7 @@ fn broken_link_passes_when_target_exists() {
 
 #[test]
 fn signal_loss_detects_removed_words() {
-    use glint_lib::fix::signal_loss;
+    use proof_lib::fix::signal_loss;
     // Annotation removed from line
     let old = "  │  compiles source     │  cc -S / cpp / as";
     let new = "  │  compiles source     │";
@@ -1355,7 +1355,7 @@ fn signal_loss_detects_removed_words() {
 
 #[test]
 fn signal_loss_passes_whitespace_only_change() {
-    use glint_lib::fix::signal_loss;
+    use proof_lib::fix::signal_loss;
     let old = "  │  compiles source      │";
     let new = "  │  compiles source       │";  // one more trailing space
     let lost = signal_loss(old, new);
@@ -1364,7 +1364,7 @@ fn signal_loss_passes_whitespace_only_change() {
 
 #[test]
 fn pattern_b_detects_annotation_after_bar() {
-    use glint_lib::fix::is_pattern_b;
+    use proof_lib::fix::is_pattern_b;
     assert!(is_pattern_b("  │ content │  ← annotation"), "annotation after │ is Pattern B");
     assert!(is_pattern_b("│ stage │  cc -S"), "tool label after │ is Pattern B");
     assert!(!is_pattern_b("  │ content │"), "clean closing │ is not Pattern B");
@@ -1373,9 +1373,9 @@ fn pattern_b_detects_annotation_after_bar() {
 
 #[test]
 fn nested_box_col_fix_only_adjusts_leftmost() {
-    use glint_lib::checks::ascii_box::AsciiBoxCheck;
-    use glint_lib::checks::Check;
-    use glint_lib::config::AsciiBoxConfig;
+    use proof_lib::checks::ascii_box::AsciiBoxCheck;
+    use proof_lib::checks::Check;
+    use proof_lib::config::AsciiBoxConfig;
     // A nested box where inner │ and outer │ are both off by 1
     // The fix should add ONE space at the leftmost misaligned │, cascading the rest
     let content = "```\n┌──────────────────────────────┐\n│  ┌──────────┐  inner text   │\n│  └──────────┘  more text    │\n└──────────────────────────────┘\n```";
@@ -1389,7 +1389,7 @@ fn nested_box_col_fix_only_adjusts_leftmost() {
 // Helper
 // ─────────────────────────────────────────────────────────
 
-fn format_diags(diags: &[glint_lib::Diagnostic]) -> String {
+fn format_diags(diags: &[proof_lib::Diagnostic]) -> String {
     diags.iter()
         .map(|d| format!("  {}:{} [{}] {}", d.file.display(), d.span, d.code, d.message))
         .collect::<Vec<_>>()

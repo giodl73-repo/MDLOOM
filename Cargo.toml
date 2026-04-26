@@ -1,19 +1,19 @@
 [package]
-name = "glint"
-version = "0.1.0"
+name = "proof"
+version = "0.2.0"
 edition = "2021"
-description = "A fast, schema-driven markdown and ASCII art linter"
+description = "Document quality assurance for markdown — figures, tables, links, and ASCII art. Figures addressed via the fig:// URI scheme."
 license = "MIT"
-repository = "https://github.com/giodl73-repo/glint"
-keywords = ["markdown", "linter", "ascii-art", "validation"]
+repository = "https://github.com/giodl73-repo/PROOF"
+keywords = ["markdown", "figures", "ascii-art", "validation", "documentation"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "glint"
+name = "proof"
 path = "src/main.rs"
 
 [lib]
-name = "glint_lib"
+name = "proof_lib"
 path = "src/lib.rs"
 
 [dependencies]

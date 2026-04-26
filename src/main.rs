@@ -2,15 +2,15 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use anyhow::Context;
-use glint_lib::draft::build_draft_plan;
-use glint_lib::fix::{serialize_json, serialize_rich, FixOptions};
-use glint_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
+use proof_lib::draft::build_draft_plan;
+use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
+use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
 use std::path::PathBuf;
 use std::process;
 
 #[derive(Parser)]
 #[command(
-    name = "glint",
+    name = "proof",
     version,
     about = "A fast, schema-driven markdown and ASCII art linter with AI-assisted fix pipeline",
     long_about = None,
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
             return cmd_init();
         }
         Some(Command::Config) => {
-            println!("(use glint.toml in your project directory — see `glint init`)");
+            println!("(use proof.toml in your project directory — see `glint init`)");
             return Ok(());
         }
         Some(Command::Stats { paths, by_directory, by_code }) => {
@@ -254,7 +254,7 @@ fn cmd_fix(
         "medium" => Confidence::Medium,
         "low" => Confidence::Low,
         other => {
-            eprintln!("glint: unknown confidence level {:?} — use high, medium, or low", other);
+            eprintln!("proof: unknown confidence level {:?} — use high, medium, or low", other);
             process::exit(2);
         }
     };
@@ -417,8 +417,8 @@ fn cmd_draft(paths: Vec<PathBuf>, output: PathBuf, config_override: &Option<Path
     eprintln!();
     eprintln!("Next steps:");
     eprintln!("  1. Open {} — AI fills in `decision` and `new_string` for non-auto groups", output.display());
-    eprintln!("  2. glint fix --plan {} --dry-run", output.display());
-    eprintln!("  3. glint fix --plan {}", output.display());
+    eprintln!("  2. proof fix --plan {} --dry-run", output.display());
+    eprintln!("  3. proof fix --plan {}", output.display());
 
     Ok(())
 }
@@ -435,7 +435,7 @@ fn load_plan(path: &std::path::Path) -> anyhow::Result<FixPlan> {
     }
 
     // Try DraftPlan (has "schema_version" + "groups" array)
-    if let Ok(draft) = serde_json::from_str::<glint_lib::draft::DraftPlan>(&content) {
+    if let Ok(draft) = serde_json::from_str::<proof_lib::draft::DraftPlan>(&content) {
         eprintln!("{} converting draft plan to fix plan (auto+annotated groups only)",
             "info:".cyan());
         return Ok(draft.to_fix_plan());
@@ -448,7 +448,7 @@ fn load_config(path: &std::path::Path, override_path: &Option<PathBuf>) -> Glint
     if let Some(ref cfg_path) = override_path {
         match GlintConfig::load(cfg_path) {
             Ok(cfg) => return cfg,
-            Err(e) => eprintln!("glint: warning: {}", e),
+            Err(e) => eprintln!("proof: warning: {}", e),
         }
     }
     let dir = if path.is_dir() { path.to_path_buf() } else { path.parent().unwrap_or(path).to_path_buf() };
