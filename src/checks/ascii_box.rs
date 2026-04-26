@@ -347,9 +347,9 @@ fn check_boxes(
             }
         };
 
-        // Check bottom border width matches top
+        // Check bottom border width matches top (applying same tolerance as content rows)
         let bottom_width = visual_width(lines[b.bottom_line]);
-        if bottom_width != b.top_width {
+        if bottom_width.abs_diff(b.top_width) > config.tolerance {
             let ctx = box_context(abs_bottom, junction_columns(lines[b.bottom_line]));
             diags.push(
                 Diagnostic::error(
