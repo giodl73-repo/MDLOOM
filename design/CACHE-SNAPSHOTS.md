@@ -91,7 +91,8 @@ struct TieredCacheKeys {
 ```
 save_snapshot("production", cache_dir)
     │
-    ├── Read current cache state for all source documents
+    ├── Read current cache state for all files WITH cache entries
+    │       (files that have never been compiled have no entries — they are not included)
     ├── Copy cache entries to temp directory
     │       → parse entries for each source file
     │       → resolve entries (if present)
@@ -116,7 +117,11 @@ Save uses an atomic temp-then-rename protocol. If the process crashes mid-save, 
 
 ## Restore — switching to a snapshot
 
-`proof cache snapshot restore "production"` swaps the active cache to a snapshot's state.
+`proof cache snapshot restore "production"` restores cached compiled artifacts to a
+snapshot's state. **This is a cache operation, not a file system rollback.** Working
+files (source documents and figure files) are not touched. After restore, files that
+were edited since the snapshot was saved will naturally miss the restored cache and
+recompile on the next `proof compile .`.
 
 ```
 restore_snapshot("production", cache_dir)
@@ -128,14 +133,16 @@ restore_snapshot("production", cache_dir)
     │       → compare against stored integrity_hash
     │       → COMPILE-004 on mismatch (corrupted/tampered snapshot)
     │
-    ├── Check compile state
-    │       → COMPILE-005 if compilation is in progress
+    ├── Check compile state (server/session mode only)
+    │       → COMPILE-005 if a long-running compile session is active
+    │       → In CLI (one-shot) mode, this guard never fires
     │
     ├── Compare snapshot files against current source documents
-    │       → COMPILE-006 warning on uncovered files
+    │       → COMPILE-006 warning on uncovered files (files compiled after snapshot was saved)
     │
     └── Copy snapshot entries to active cache directories
             → next compile run hits for all files in the snapshot
+            → files edited since snapshot was saved naturally miss and recompile
 ```
 
 ### Verify-before-restore
@@ -170,7 +177,14 @@ This enables build-once-deploy-many patterns. CI compiles the library, saves a s
 
 ## Diff — comparing two snapshots
 
-`proof cache snapshot diff "before" "after"` shows which source files differ between two named snapshots.
+`proof cache snapshot diff "before" "after"` shows which source files differ between
+two named snapshots. To diff against the current live cache without creating a snapshot,
+use `--vs-current`:
+
+```bash
+proof cache snapshot diff "before-redesign" "after-redesign"  # two named snapshots
+proof cache snapshot diff "before-redesign" --vs-current      # named vs. live cache
+```
 
 ```rust
 struct SnapshotDiff {
@@ -221,7 +235,7 @@ Returns the list of deleted snapshot names.
        proof compile .
 
 4. Check what changed
-       proof cache snapshot diff "before-redesign" "current"
+       proof cache snapshot diff "before-redesign" --vs-current
        # See which source documents were affected
 
 5a. Changes look good — save as new baseline
@@ -241,7 +255,8 @@ proof cache snapshot save <name>                     # capture current state
 proof cache snapshot restore <name>                  # switch to snapshot
 proof cache snapshot deploy <name> --to <dir>        # materialize compiled output
 proof cache snapshot list                            # show snapshots with dates + sizes
-proof cache snapshot diff <name-a> <name-b>          # compare two snapshots
+proof cache snapshot diff <name-a> <name-b>          # compare two named snapshots
+proof cache snapshot diff <name-a> --vs-current      # compare snapshot vs. live cache
 proof cache snapshot prune --keep <n>                # remove old snapshots
 ```
 

@@ -66,9 +66,18 @@ parse_key = SHA-256(
 
 Content-addressed files in `.proof/cache/parse/`. Each entry is keyed by its cache key hash. Atomic writes via temp-file-then-rename prevent partial entries.
 
+A **path index** is maintained alongside the cache at `.proof/cache/parse-index.json`,
+mapping file paths to their current `(parse_key, mtime)`. This lets the compile
+pipeline look up a target file's parse_key without re-hashing or re-reading the file —
+critical for the step-3 resolve_key computation. Entries are validated by mtime on
+startup; a stale mtime triggers a re-hash.
+
 ### Hit behavior
 
-On cache hit, the `ParsedDocument` is read from disk and returned without re-parsing. The parsed document includes all extracted headings, directives, figures, tables, and code blocks.
+On cache hit, the `ParsedDocument` is read from disk and returned without re-parsing.
+The cached document includes all extracted headings, directives, figure markers,
+tables, and code blocks — everything needed to extract directive lists without
+re-parsing the file.
 
 ---
 
@@ -122,19 +131,43 @@ The compile cache stores the full compiled output of a source document — the r
 ```
 compile_key = SHA-256(
     source_parse_key,       ← Tier 1 of the source document
-    sorted_resolve_keys[],  ← Tier 2 of all included figures
-    layout_config_hash,     ← gap, align settings
+    sorted_resolve_keys[],  ← Tier 2 of all included figures, in order, NOT deduplicated
+    layout_config_hash,     ← SHA-256 of normalized layout config (defaults filled in)
     proof_version
 )
 ```
 
+`sorted_resolve_keys[]` must **not** be deduplicated. If the same URI appears twice in
+a source document, its resolve_key appears twice in the list. Deduplication would cause
+a document with one include and a document with two identical includes to share a
+compile_key, silently returning the wrong cached output.
+
+When a source document has no `proof:layout` directives, `layout_config_hash` is
+`SHA-256("")`. When layout directives are present, all attribute defaults are filled
+in before hashing so that omitted and explicit-default attributes produce the same key.
+
 ### Storage
 
-Content-addressed files in `.proof/cache/compile/`. Each entry stores the full compiled markdown output for a source document.
+Content-addressed files in `.proof/cache/compile/`. Each entry stores:
+
+```rust
+struct CompileCacheEntry {
+    compile_key: String,
+    source_path: String,        // relative to proof.toml root
+    output_path: String,        // relative to proof.toml root
+    compiled_text: String,      // the full compiled markdown
+    resolved_uris: Vec<String>, // all md:// URIs embedded
+    proof_version: String,
+    created_at: u64,            // epoch ms
+}
+```
 
 ### Hit behavior
 
-On cache hit, the compiled markdown is read from disk and written to the output path without re-running the compilation pipeline. DaVinci validation results are also cached — if it compiled, it passed.
+On cache hit, the compiled markdown is read from disk and written to the output path.
+If the output file already contains identical content, the write is skipped to avoid
+updating the file's mtime (which would otherwise trigger spurious watch mode recompiles).
+DaVinci validation results are also cached — if it compiled, it passed.
 
 ---
 

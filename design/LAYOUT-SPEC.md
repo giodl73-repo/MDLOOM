@@ -1,4 +1,4 @@
-# proof layout — ASCII Art Collage Composer v0.1
+# proof layout — ASCII Art Collage Composer v0.2
 
 **Status:** Design — implementation in progress.
 
@@ -64,52 +64,79 @@ proof layout fig1.md fig2.md --direction vertical --gap 2
 
 ### Inputs
 
-- N source figures (each a list of content lines)
+- N source figures (each a list of content lines — fence delimiters stripped)
 - `gap`: spaces between frames (default: 3)
 - `align`: `top` | `center` | `bottom` (default: `top`)
 - `labels`: optional text labels above each frame
 - `width`: max output width in columns (default: 120)
 - `cols`: number of columns per row (default: N, wraps if > cols)
+- `direction`: `horizontal` | `vertical` (default: `horizontal`)
+- `border`: bool (default: false)
 
 ### Step 1: Fetch figures
 
 For each source (URI or file):
 1. Resolve via mdpath → `ResolvedElement.content`
-2. Split into lines
-3. Measure visual width of each line (using unicode-width — handles box-drawing chars)
+2. **Strip fence delimiters**: if the resolved content is a fenced code block, take only
+   the lines between the opening and closing ` ``` `. The layout engine operates on
+   figure content lines, never on raw fence delimiter lines. Wrapping the composed
+   output in a new fence is the layout engine's job (step 6).
+3. Split into lines
+4. Measure visual width of each line (using unicode-width — handles box-drawing chars,
+   CJK at 2 columns, box-drawing at 1 column per L-5)
 
 ### Step 2: Normalize frames
 
 For each figure:
-1. **Frame width** = max visual width across all lines in that figure
+1. **Frame width** = max visual width across all content lines in that figure
 2. **Pad lines** to frame width (right-pad with spaces so all lines are equal width)
-3. **Frame height** = number of lines
+3. **Frame height** = number of content lines
+4. **Empty figure**: if a figure has 0 content lines, it produces a single blank line
+   padded to a minimum frame width of 1 (L-6).
 
 ### Step 3: Equalize heights
 
-All figures in a row must have the same number of lines (so their frames align):
+All figures in a row must have the same number of lines (so rows align across frames):
 - `max_height` = max(all frame heights in the row)
-- Short frames are padded with blank lines according to `align`:
+- Short frames are padded with blank lines (spaces × frame_width) according to `align`:
   - `top`: blank lines appended at bottom
   - `bottom`: blank lines prepended at top
-  - `center`: blank lines split top and bottom
+  - `center`: `floor((max_height - height) / 2)` blank lines at top, remainder at bottom
+
+Blank padding lines contain `frame_width` spaces — NOT zero-length. This is required
+for correct visual alignment when frames are joined with the gap. However, to avoid
+trailing-whitespace issues in the composed output, the final emit step (step 6) strips
+trailing spaces from every output line.
 
 ### Step 4: Add labels
 
-If `--labels` is provided, prepend one line per frame with the label text,
-centered over the frame width.
+If `--labels` is provided, prepend one label line per frame before the content lines.
+The label is centered over the frame width:
+
+```
+left_pad  = floor((frame_width - label_len) / 2)
+right_pad = frame_width - label_len - left_pad
+```
+
+When the label is longer than the frame width, it is truncated to `frame_width`
+characters. When centering produces a half-space (odd label width in even frame or
+vice versa), the extra space goes on the **right** side.
 
 ### Step 5: Compose rows
 
 For each row of frames (wrapping at `--cols`):
-- For each line number 0..max_height:
-  - Join `frames[0].lines[i]` + `" " * gap` + `frames[1].lines[i]` + ... 
-- Collect all rows, separated by a blank line
+- For each line index 0..max_height:
+  - Join `frames[0].lines[i]` + `" " * gap` + `frames[1].lines[i]` + ...
+- Rows are separated by exactly **one blank line** in the output.
+- The final emit step strips trailing whitespace from every output line (including
+  blank lines that were all-spaces from height equalization).
 
 ### Step 6: Emit as fenced code block
 
-Wrap the composition in a ` ``` ` fence with optional `proof:layout` info string
-(for compile-mode) or plain fence (for standalone use).
+Wrap the composition in a ` ``` ` fence:
+- Standalone CLI: plain ` ``` ` fence
+- Inside a source document after compile: the directive block is replaced with the
+  composed content (no extra outer fence — the compiled output is inline content)
 
 ---
 
@@ -155,7 +182,8 @@ md://languages/05-CSHARP.md#type-system-snapshot:table:0
 ````
 
 The compiler resolves each URI, applies the layout algorithm, and replaces the
-directive block with the composed output.
+directive block with the composed output inline (no wrapping code fence is added —
+the composed content is already ready to embed).
 
 ### Directive attributes
 
@@ -163,11 +191,22 @@ directive block with the composed output.
 |-----------|------|---------|-------------|
 | `gap` | integer | 3 | Spaces between frames |
 | `align` | top\|center\|bottom | top | Vertical alignment for unequal-height frames |
-| `labels` | comma-separated | (none) | Labels above each frame |
+| `labels` | comma-separated string | (none) | Labels above each frame |
 | `cols` | integer | N | Frames per row before wrapping |
 | `width` | integer | 120 | Max output width in columns |
-| `direction` | horizontal\|vertical | horizontal | Horizontal or vertical composition (CLI also accepts `h`/`v`) |
+| `direction` | horizontal\|vertical | horizontal | Composition direction (CLI also accepts `h`/`v`) |
 | `border` | bool | false | Add a thin border around each frame |
+
+### Cache key for layout config
+
+When a source document uses `proof:layout`, the compile cache key includes a
+`layout_config_hash`. This hash is computed from the **normalized** attribute set —
+all defaults are filled in before hashing. This guarantees that `gap=3` (explicit)
+and `gap` (omitted, using the default of 3) produce the same hash.
+
+`labels` is part of the layout config hash. Changing a label string ("Go" → "Golang")
+misses the compile cache but hits the resolve cache — the layout is recomputed with
+the new label, but figures are not re-resolved.
 
 ---
 
@@ -198,13 +237,14 @@ proof layout fig1.md fig2.md fig3.md fig4.md \
     --cols 4      # all 4 side-by-side
 ```
 
-If figures don't fit in `--width`, the layout wraps to multiple rows:
+If figures don't fit in `--width`, the layout wraps to multiple rows. Lone figures in
+the last row are left-aligned (not stretched to fill the row width):
 
 ```bash
 proof layout *.fig.md --width 200 --gap 3 --cols 3
 # Row 1: fig1 fig2 fig3
-# Row 2: fig4 fig5 fig6  
-# Row 3: fig7 (alone)
+# Row 2: fig4 fig5 fig6
+# Row 3: fig7            ← left-aligned, not stretched
 ```
 
 ---
@@ -249,9 +289,9 @@ figures/type-systems/go-types.md#:0
 
 The layout engine is the core primitive that `proof compile` uses. When a
 source document contains a `proof:layout` directive, the compile step:
-1. Resolves each URI (with Tier 2 cache)
-2. Calls the layout engine with the resolved content
-3. Embeds the composed output
+1. Resolves each URI (with Tier 2 cache) → gets fence content (delimiters stripped)
+2. Calls the layout engine with the resolved content lines
+3. Replaces the `proof:layout` directive block with the composed output inline
 4. Caches the result (Tier 3 cache key includes layout config hash)
 
 Changes to any figure in a layout → Tier 2 cache miss → Tier 3 cache miss →
@@ -265,11 +305,13 @@ layout recomputed on next compile.
 |-----------|-------|
 | L-1 | Output visual width ≤ input `--width` for all rows |
 | L-2 | All frames in a row have equal height after alignment padding |
-| L-3 | All lines in each frame have equal visual width |
+| L-3 | All content lines in each frame have equal visual width before emit |
 | L-4 | Gap between frames is exactly `gap` spaces (measured in visual columns) |
 | L-5 | Unicode box-drawing characters measured at 1 column (not 2) |
-| L-6 | An empty figure (no content) renders as a single blank line frame |
-| L-7 | Label, when provided, is centered over the frame width |
+| L-6 | An empty figure (no content) renders as a 1-line frame of width ≥ 1 |
+| L-7 | Label is centered over frame width; tie-break: extra space on right |
+| L-8 | Row separator between `--cols` wrapping rows is exactly 1 blank line |
+| L-9 | All output lines have trailing spaces stripped on emit |
 
 ---
 
@@ -283,5 +325,6 @@ Lens questions:
 - Does the gap measurement use visual column width (not byte count)?
 - Does vertical alignment (top/center/bottom) work for single-frame layouts?
 - Does wrapping at `--cols` produce clean row separations?
+- Are trailing spaces stripped from every output line (including blank pads)?
 
 Pulls against: PARSE (composition speed vs. correctness of unicode handling).
