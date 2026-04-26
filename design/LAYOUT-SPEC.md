@@ -166,7 +166,7 @@ directive block with the composed output.
 | `labels` | comma-separated | (none) | Labels above each frame |
 | `cols` | integer | N | Frames per row before wrapping |
 | `width` | integer | 120 | Max output width in columns |
-| `direction` | h\|v | h | Horizontal or vertical composition |
+| `direction` | horizontal\|vertical | horizontal | Horizontal or vertical composition (CLI also accepts `h`/`v`) |
 | `border` | bool | false | Add a thin border around each frame |
 
 ---

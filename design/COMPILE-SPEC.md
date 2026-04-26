@@ -57,6 +57,7 @@ The type system at a glance:
 md://languages/10-GO.md#type-system-snapshot:table.key-value:0
 ?select=Axis,Value&filter=Axis contains runtime
 ```
+<!-- filter/select syntax: see TABLE-FILTER-SPEC.md (planned) -->
 ````
 
 ### Directive types
@@ -91,9 +92,9 @@ Figure files live in a `figures/` directory (or anywhere) and are addressed by
 ## CLI commands
 
 ```bash
-proof compile input.md                    # compile to input.compiled.md
-proof compile input.md -o output.md       # explicit output path
-proof compile src/*.source.md             # batch compile
+proof compile input.source.md             # compile to input.md (drops .source.)
+proof compile input.source.md -o output.md  # explicit output path
+proof compile src/*.source.md             # batch compile all source files
 proof compile . --watch                   # watch mode: recompile on change
 proof compile . --check                   # validate without writing output
 proof compile . --cache-status            # show per-file cache tier hits/misses
@@ -134,7 +135,7 @@ Caches the `ParsedDocument` for each `.md` file.
 ```
 parse_key = SHA-256(
     file_content_hash,
-    mdpath_version
+    proof_version
 )
 ```
 
@@ -149,7 +150,7 @@ Caches the resolved content of each `md://` URI.
 resolve_key = SHA-256(
     parse_key,             ← from Tier 1 of the target file
     uri_string,
-    mdpath_version
+    proof_version
 )
 ```
 
@@ -264,25 +265,30 @@ proof compile source.md
     │
     ├── 2. Find all proof: directives (include, layout, table)
     │
-    ├── 3. For each directive:
-    │       ├── Resolve md:// URI via mdpath (Tier 2 cache check)
-    │       ├── Validate DaVinci invariants (FAIL if violated)
-    │       └── Stage resolved content
+    ├── 3. Compute resolve_keys for all directive URIs
+    │       ├── For each URI: hash target file content → parse_key → resolve_key
+    │       └── This checks Tier 2 key existence without fetching content
     │
-    ├── 4. For proof:layout directives:
-    │       └── Apply layout engine (see LAYOUT-SPEC.md)
-    │
-    ├── 5. Check Tier 3 compile cache
+    ├── 4. Compute compile_key from (source_parse_key, sorted_resolve_keys,
+    │       layout_config_hash, proof_version)
     │       ├── HIT → write cached output, done
     │       └── MISS → continue
     │
-    ├── 6. Compose final document:
+    ├── 5. For each directive:
+    │       ├── Fetch resolved content (Tier 2 cache read or full resolve)
+    │       ├── Validate DaVinci invariants (FAIL if violated)
+    │       └── Stage resolved content
+    │
+    ├── 6. For proof:layout directives:
+    │       └── Apply layout engine (see LAYOUT-SPEC.md)
+    │
+    ├── 7. Compose final document:
     │       ├── Replace each directive with resolved/composed content
     │       └── Embed proof:source comments for traceability
     │
-    ├── 7. Write output file (atomic)
+    ├── 8. Write output file (atomic)
     │
-    └── 8. Update Tier 3 cache
+    └── 9. Update Tier 3 cache
 ```
 
 ### DaVinci validation during compile
