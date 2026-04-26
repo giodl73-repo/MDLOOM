@@ -290,9 +290,17 @@ fn find_boxes(lines: &[&str]) -> Vec<BoxRegion> {
             let top_width = visual_width(lines[i]);
             let top_line = i;
 
-            // Scan forward for the matching bottom border
+            // Scan forward for the matching bottom border.
+            // Stop at a blank line: a blank line inside a code block separates
+            // independent box diagrams. Without this guard, two stacked boxes in
+            // the same code block get linked — the second box's top border becomes
+            // the "bottom" of the first, causing spurious width errors.
             let mut j = i + 1;
+            let mut found_bottom = false;
             while j < lines.len() {
+                if lines[j].trim().is_empty() {
+                    break; // blank line = end of this box's scope
+                }
                 if is_border_line(lines[j]) {
                     boxes.push(BoxRegion {
                         top_line,
@@ -300,12 +308,13 @@ fn find_boxes(lines: &[&str]) -> Vec<BoxRegion> {
                         expected_cols,
                         top_width,
                     });
-                    i = j; // continue from bottom border (it may be top of next box)
+                    i = j; // continue from bottom border
+                    found_bottom = true;
                     break;
                 }
                 j += 1;
             }
-            // If no bottom found, still record as unclosed (handled separately)
+            let _ = found_bottom; // recorded if needed for future unclosed-box checks
         }
         i += 1;
     }
