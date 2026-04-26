@@ -462,55 +462,77 @@ fn fix_table_cell_padding(line: &str) -> Option<String> {
 
 /// Escaped-pipe-aware cell splitter — used by the fix generator.
 /// Mirrors parse_row in markdown_table.rs but operates on the full line.
-/// Auto-generate a markdown link for a bare table cell.
-/// For a whole table row: finds the bare cell and wraps it in a link.
+/// Auto-generate markdown links for a table row where cells need links.
 ///
-/// Patterns:
-///   `| computing/ | ...` → `| [computing/](../computing/00-OVERVIEW.md) | ...`
-///   `| 01-PACKAGE.md — desc | ...` → `| [01-PACKAGE.md](../computing/01-PACKAGE.md) — desc | ...`
+/// Handles both bare and backtick-wrapped names:
+///   `computing/`          → `[computing/](../computing/00-OVERVIEW.md)`
+///   `` `computing/` ``    → `[computing/](../computing/00-OVERVIEW.md)`
+///   `01-PACKAGE.md — desc`→ `[01-PACKAGE.md](../DIRNAME/01-PACKAGE.md) — desc`
+///   `` `01-PKG.md` ``     → `[01-PKG.md](../DIRNAME/01-PKG.md)`
+///
+/// The dirname for file links is extracted from the first directory-like cell
+/// in the same row (the Directory column typically comes first).
 fn fix_missing_table_link(table_row: &str) -> Option<String> {
     if !table_row.starts_with('|') { return None; }
 
     let cells = parse_table_cells(table_row);
+
+    // Extract the directory from the first cell that looks like a dirname
+    // This is used as the parent path for file links in the same row.
+    let parent_dir: Option<String> = cells.iter().find_map(|cell| {
+        let raw = cell.trim();
+        let inner = raw.trim_matches('`').trim();
+        if inner.ends_with('/') && !inner.contains(' ') && !inner.contains('[') {
+            Some(inner.trim_end_matches('/').to_string())
+        } else { None }
+    });
+
     let mut any_fixed = false;
     let mut fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
-        let content = cell.trim();
-        // Already has a link → leave alone
-        if has_markdown_link_in_cell(content) { return cell; }
-        if content.is_empty() { return cell; }
+        let raw = cell.trim();
+        if raw.is_empty() { return cell; }
+        if has_markdown_link_in_cell(raw) { return cell; } // already linked
 
-        // Pattern: bare directory name (e.g. "computing/")
-        if content.ends_with('/') && !content.contains(' ') && !content.contains('[') {
-            let dir = content.trim_end_matches('/');
+        // Unwrap backtick code span if present: `content` → content
+        let (inner, had_backtick) = if raw.starts_with('`') && raw.ends_with('`') && raw.len() > 2 {
+            (&raw[1..raw.len()-1], true)
+        } else {
+            (raw, false)
+        };
+        let _ = had_backtick; // consumed; the link replaces the backtick wrapper
+
+        let leading = cell.len() - cell.trim_start().len();
+        let trailing = cell.len() - cell.trim_end().len();
+
+        // Pattern 1: directory name (ends with /, no spaces)
+        if inner.ends_with('/') && !inner.contains(' ') {
+            let dir = inner.trim_end_matches('/');
             any_fixed = true;
-            let leading = cell.len() - cell.trim_start().len();
-            let trailing = cell.len() - cell.trim_end().len();
             return format!(
                 "{}[{}/](../{}/00-OVERVIEW.md){}",
-                " ".repeat(leading), dir, dir,
-                " ".repeat(trailing)
+                " ".repeat(leading), dir, dir, " ".repeat(trailing)
             );
         }
 
-        // Pattern: bare filename (e.g. "01-PACKAGE.md" or "01-PACKAGE.md — description")
-        if let Some(fname_end) = content.find(".md") {
-            let fname = &content[..fname_end + 3]; // include ".md"
-            if fname.chars().next().map(|c| c.is_ascii_digit() || c == '0').unwrap_or(false) {
-                // Looks like a numbered guide file
-                // We don't know the parent directory without the schema context,
-                // so generate a placeholder: [filename](../DIRNAME/filename)
-                // The dirname will be wrong — mark as medium confidence
-                let rest = content[fname_end + 3..].trim();
-                let link_text = if rest.is_empty() {
-                    format!("[{}]({}/{})", fname, "DIRNAME", fname)
-                } else {
-                    format!("[{}]({}/{}) {}", fname, "DIRNAME", fname, rest)
-                };
-                any_fixed = true;
-                let leading = cell.len() - cell.trim_start().len();
-                let trailing = cell.len() - cell.trim_end().len();
-                return format!("{} {} {}", " ".repeat(leading.saturating_sub(1)), link_text, " ".repeat(trailing.saturating_sub(1)));
-            }
+        // Pattern 2: backtick-wrapped "filename.md" possibly with " — description" after
+        // Also handles "`01-FILE.md` — description" where inner is just "01-FILE.md"
+        // and Pattern 3: bare "01-FILE.md — description"
+        let (check_inner, description) = if let Some(dash_pos) = inner.find(" — ") {
+            (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
+        } else if let Some(dash_pos) = inner.find(" - ") {
+            (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
+        } else {
+            (inner, None)
+        };
+
+        // Detect if check_inner is a filename.md
+        if check_inner.ends_with(".md") && !check_inner.contains(' ') {
+            let fname = check_inner;
+            let dirname = parent_dir.as_deref().unwrap_or("DIRNAME");
+            let desc = description.as_deref().unwrap_or("");
+            any_fixed = true;
+            let link = format!("[{}](../{}/{}){}", fname, dirname, fname, desc);
+            return format!("{} {} {}", " ".repeat(leading.saturating_sub(1)), link, " ".repeat(trailing.saturating_sub(1)));
         }
 
         cell
