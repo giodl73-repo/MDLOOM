@@ -99,6 +99,12 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    Region {
+        name: String,
+        body: Vec<String>,
+        line_start: usize,
+        line_end: usize,
+    },
 }
 
 /// Parsed attributes from a proof:tree directive.
@@ -227,6 +233,7 @@ impl Directive {
             Directive::Row { line_start, .. } => *line_start,
             Directive::Symbol { line_start, .. } => *line_start,
             Directive::Shape { line_start, .. } => *line_start,
+            Directive::Region { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -239,6 +246,7 @@ impl Directive {
             Directive::Row { line_end, .. } => *line_end,
             Directive::Symbol { line_end, .. } => *line_end,
             Directive::Shape { line_end, .. } => *line_end,
+            Directive::Region { line_end, .. } => *line_end,
         }
     }
 }
@@ -521,6 +529,21 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         directives.push(Directive::Shape { attrs, line_start, line_end });
                     }
                 }
+                "region" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:region")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let name = extract_attr_value(&info_after, "name").unwrap_or_default();
+                    let body_owned: Vec<String> = body.iter().map(|s| s.to_string()).collect();
+                    directives.push(Directive::Region {
+                        name,
+                        body: body_owned,
+                        line_start,
+                        line_end,
+                    });
+                }
                 _ => {}
             }
         }
@@ -570,6 +593,7 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("row")     { Some("row") }
     else if rest.starts_with("symbol")  { Some("symbol") }
     else if rest.starts_with("shape")   { Some("shape") }
+    else if rest.starts_with("region")  { Some("region") }
     else { None }
 }
 
@@ -583,6 +607,16 @@ pub fn compile_file(
     root: &Path,
     config: &GlintConfig,
 ) -> Result<CompileResult> {
+    // Dispatch: .dashboard.source.md files use the canvas-based dashboard compiler.
+    if source_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with(".dashboard.source.md"))
+        .unwrap_or(false)
+    {
+        return compile_dashboard_file(source_path, output_path, root, config);
+    }
+
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
 
@@ -781,6 +815,26 @@ pub fn compile_file(
                         source_lines[line_start..=line_end].join("\n")
                     }
                 }
+            }
+
+            Directive::Region { name, .. } => {
+                // proof:region is only valid inside a .dashboard.source.md file —
+                // and dashboard files are routed through compile_dashboard_file before
+                // this loop is ever reached. Reaching this branch means the directive
+                // appeared in a non-dashboard file.
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!(
+                        "proof:region {:?} is only valid in .dashboard.source.md files",
+                        name
+                    ),
+                    source_line: line_start + 1,
+                });
+                source_lines[line_start..=line_end].join("\n")
             }
         };
 
@@ -1477,6 +1531,391 @@ fn compile_row(
     }
 }
 
+// ─────────────────────────────────────────────────────────
+// Dashboard compile pipeline
+// ─────────────────────────────────────────────────────────
+//
+// .dashboard.source.md files are routed here from compile_file. The pipeline:
+//   1. Read source, split YAML front-matter from body
+//   2. Parse front-matter → DashboardMeta + Vec<RegionGeometry>
+//   3. Validate region geometry (D-2, D-3) → DASHBOARD-001..003
+//   4. For each proof:region directive in body:
+//        - look up declared region by name (else DASHBOARD-004)
+//        - render body lines (literals verbatim; directives via inner compile pass
+//          with no-chrome implied)
+//   5. Hand the (meta, regions, content map) to dashboard::region::compile_dashboard
+//   6. Write the canvas string to the output path
+
+fn compile_dashboard_file(
+    source_path: &Path,
+    output_path: &Path,
+    root: &Path,
+    config: &GlintConfig,
+) -> Result<CompileResult> {
+    use crate::dashboard::region::{
+        compile_dashboard, parse_dashboard_frontmatter, DashboardError, RegionGeometry,
+    };
+
+    let source_text = std::fs::read_to_string(source_path)
+        .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
+
+    let mut violations: Vec<CompileViolation> = Vec::new();
+    let mut resolved_count = 0usize;
+
+    // ── 1. Split YAML front-matter from body ──────────────
+    let (frontmatter, body, body_offset) = split_frontmatter(&source_text);
+
+    // ── 2. Parse front-matter ─────────────────────────────
+    let (meta, regions) = parse_dashboard_frontmatter(&frontmatter);
+
+    // ── 3. Collect proof:region directives from the body ──
+    let directives = collect_directives(body);
+
+    // Build runner once for nested figure linting
+    let runner = Runner::new(root, config.clone())?;
+
+    // Build a map of region name → declared geometry for quick lookup
+    let mut region_by_name: std::collections::HashMap<String, &RegionGeometry> =
+        std::collections::HashMap::new();
+    for r in &regions {
+        region_by_name.insert(r.name.clone(), r);
+    }
+
+    // ── 4. Render each proof:region's content ─────────────
+    let mut region_contents: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+
+    for directive in &directives {
+        if let Directive::Region { name, body, line_start, .. } = directive {
+            let abs_line = body_offset + line_start;
+
+            // DASHBOARD-004: region name not declared in front-matter
+            if !region_by_name.contains_key(name) {
+                violations.push(CompileViolation {
+                    code: "DASHBOARD-004",
+                    severity: ViolationSeverity::Error,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!(
+                        "proof:region {:?} has no matching front-matter declaration",
+                        name
+                    ),
+                    source_line: abs_line + 1,
+                });
+                continue;
+            }
+
+            // Render body lines: literals verbatim, directives via inner compile pass
+            let rendered = render_region_body(
+                body,
+                root,
+                config,
+                &runner,
+                abs_line,
+                &mut violations,
+                &mut resolved_count,
+            );
+            region_contents.insert(name.clone(), rendered);
+        }
+    }
+
+    // Stop here on any error before painting the canvas
+    let has_errors = violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+    if has_errors {
+        return Ok(CompileResult {
+            output_path: output_path.to_path_buf(),
+            directives_resolved: resolved_count,
+            violations,
+            from_cache: false,
+            written: false,
+        });
+    }
+
+    // ── 5. Composite the canvas ───────────────────────────
+    let (canvas_text, dashboard_errors) =
+        compile_dashboard(&meta, &regions, &region_contents);
+
+    for de in dashboard_errors {
+        let DashboardError { code, message } = de;
+        let severity = match code {
+            // 005 (height overflow) is a warning per spec; 001/002/003/004 are errors
+            "DASHBOARD-005" => ViolationSeverity::Warning,
+            _ => ViolationSeverity::Error,
+        };
+        violations.push(CompileViolation {
+            code,
+            severity,
+            uri: String::new(),
+            figure_id: None,
+            invariant: String::new(),
+            message,
+            source_line: 1,
+        });
+    }
+
+    let has_errors = violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+    if has_errors {
+        return Ok(CompileResult {
+            output_path: output_path.to_path_buf(),
+            directives_resolved: resolved_count,
+            violations,
+            from_cache: false,
+            written: false,
+        });
+    }
+
+    // ── 6. Wrap in fence + traceability comment, write atomically ─
+    let title_attr = if meta.title.is_empty() {
+        String::new()
+    } else {
+        format!(" title=\"{}\"", meta.title)
+    };
+    let output_text = format!(
+        "<!-- proof:compiled from=\"proof:dashboard\"{} -->\n```dashboard\n{}```\n<!-- /proof:compiled -->\n",
+        title_attr, canvas_text
+    );
+
+    let tmp = output_path.with_extension("proof_tmp");
+    std::fs::write(&tmp, &output_text)
+        .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
+    std::fs::rename(&tmp, output_path)
+        .map_err(|e| anyhow::anyhow!("renaming output {}: {}", output_path.display(), e))?;
+
+    Ok(CompileResult {
+        output_path: output_path.to_path_buf(),
+        directives_resolved: resolved_count,
+        violations,
+        from_cache: false,
+        written: true,
+    })
+}
+
+/// Split a `.dashboard.source.md` source into (frontmatter_yaml, body, body_offset_in_lines).
+/// Front-matter is the block between the opening `---` on line 0 and the next `---`.
+/// If no front-matter is present, returns ("", source, 0).
+fn split_frontmatter(source: &str) -> (String, &str, usize) {
+    let lines: Vec<&str> = source.lines().collect();
+    if lines.first().map(|l| l.trim()) != Some("---") {
+        return (String::new(), source, 0);
+    }
+    // Find closing ---
+    let close_idx = match lines.iter().skip(1).position(|l| l.trim() == "---") {
+        Some(i) => i + 1,
+        None => return (String::new(), source, 0),
+    };
+    let fm = lines[1..close_idx].join("\n");
+    // Compute byte offset to end of closing --- + newline
+    let mut byte_offset = 0usize;
+    for line in &lines[..=close_idx] {
+        byte_offset += line.len() + 1; // +1 for the '\n'
+    }
+    let byte_offset = byte_offset.min(source.len());
+    let body = &source[byte_offset..];
+    let body_offset_lines = close_idx + 1;
+    (fm, body, body_offset_lines)
+}
+
+/// Render the body of a proof:region directive: literal lines kept verbatim,
+/// directive lines (proof:element/proof:row/proof:tree/proof:symbol/proof:shape)
+/// dispatched through the same per-directive renderers used by compile_file —
+/// with `no-chrome` implied so the canvas paste sees raw glyphs only.
+fn render_region_body(
+    body: &[String],
+    root: &Path,
+    config: &GlintConfig,
+    runner: &Runner,
+    abs_line: usize,
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> Vec<String> {
+    use crate::dashboard::region::{classify_region_line, RegionLine};
+
+    let mut output: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < body.len() {
+        let line = &body[i];
+        match classify_region_line(line) {
+            RegionLine::Literal(lit) => {
+                output.push(lit.to_string());
+                i += 1;
+            }
+            RegionLine::Directive(d) => {
+                // Strategy: build a synthetic ```proof:foo ...``` fenced block,
+                // run collect_directives on it, dispatch the resulting Directive
+                // through render_one_directive_no_chrome.
+                let synth = format!("```{}\n```", d);
+                let nested = collect_directives(&synth);
+                if let Some(directive) = nested.into_iter().next() {
+                    let rendered = render_one_directive_no_chrome(
+                        &directive, root, config, runner, abs_line + i,
+                        violations, resolved_count,
+                    );
+                    for line in rendered.lines() {
+                        output.push(line.to_string());
+                    }
+                } else {
+                    // Unrecognized directive — fall through as literal
+                    output.push(line.clone());
+                }
+                i += 1;
+            }
+        }
+    }
+    output
+}
+
+/// Render a single directive with `no-chrome` semantics — strips the
+/// traceability HTML comments and the surrounding fence so the canvas
+/// paste sees raw glyph rows. Returns the inner text (may be multi-line).
+fn render_one_directive_no_chrome(
+    directive: &Directive,
+    root: &Path,
+    config: &GlintConfig,
+    runner: &Runner,
+    abs_line: usize,
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    let line_start = directive.line_start();
+    match directive {
+        Directive::Symbol { name, size, .. } => {
+            let lib = crate::symbol::SymbolLibrary::new();
+            match crate::symbol::resolve(name, &lib) {
+                Some(sym) => {
+                    *resolved_count += 1;
+                    crate::symbol::render_symbol_block(&sym, *size)
+                }
+                None => {
+                    violations.push(CompileViolation {
+                        code: "SYMBOL-001",
+                        severity: ViolationSeverity::Warning,
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("symbol {:?} not found in library", name),
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        Directive::Shape { attrs, .. } => {
+            match crate::symbol::shape::render_shape(attrs) {
+                Ok(rendered) => { *resolved_count += 1; rendered }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: e.code,
+                        severity: ViolationSeverity::Error,
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: e.message,
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        Directive::Element { kind, source, field, inline_value, attrs, .. } => {
+            // Force no-chrome regardless of what the author wrote
+            let mut attrs = ElementAttrs {
+                width: attrs.width,
+                align: attrs.align.clone(),
+                format: attrs.format.clone(),
+                no_chrome: true,
+                max: attrs.max,
+                fill: attrs.fill,
+                empty: attrs.empty,
+            };
+            attrs.no_chrome = true;
+            // compile_element returns the rendered text directly when no_chrome=true
+            let dummy_src_lines: Vec<&str> = Vec::new();
+            compile_element(
+                kind, source.as_deref(), field.as_deref(), inline_value.as_deref(),
+                &attrs, root, line_start,
+                violations, &dummy_src_lines, line_start,
+                resolved_count,
+            )
+        }
+        Directive::Row { source_uri, separator, declared_width, elements, .. } => {
+            let dummy_src_lines: Vec<&str> = Vec::new();
+            compile_row(
+                source_uri, separator, *declared_width, elements,
+                /* no_chrome = */ true,
+                root, line_start, violations, &dummy_src_lines, line_start,
+                resolved_count,
+            )
+        }
+        Directive::Tree { kind, source, attrs, .. } => {
+            match generate_tree_block(kind, source.as_deref(), attrs, root, line_start, violations) {
+                Ok(block) => {
+                    // generate_tree_block wraps in chrome — strip it for canvas paste.
+                    strip_compiled_chrome(&block)
+                }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity: ViolationSeverity::Error,
+                        uri: source.clone().unwrap_or_default(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("tree generation failed: {}", e),
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        Directive::Include { uri, .. } => {
+            match resolve_uri(uri, root) {
+                Ok((content, fig_file)) => {
+                    lint_figure(uri, &content, &fig_file, abs_line + 1, runner, violations);
+                    validate_davinci(uri, &content, config, abs_line, violations);
+                    *resolved_count += 1;
+                    extract_content_lines(&content).join("\n")
+                }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity: ViolationSeverity::Error,
+                        uri: uri.clone(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("{}", e),
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        // Layout, Table, Region not supported inline within a region
+        _ => String::new(),
+    }
+}
+
+/// Strip `<!-- proof:compiled ... -->` HTML chrome and outer ``` fence from
+/// a rendered block, returning only the inner text rows.
+fn strip_compiled_chrome(block: &str) -> String {
+    let mut lines: Vec<&str> = block.lines().collect();
+    // Drop leading "<!-- proof:compiled ... -->" lines
+    while lines.first().map(|l| l.trim_start().starts_with("<!-- proof:compiled")).unwrap_or(false) {
+        lines.remove(0);
+    }
+    // Drop trailing "<!-- /proof:compiled -->" lines
+    while lines.last().map(|l| l.trim_start().starts_with("<!-- /proof:compiled")).unwrap_or(false) {
+        lines.pop();
+    }
+    // Drop a single outer ```...``` fence pair if present
+    if lines.first().map(|l| l.trim_start().starts_with("```")).unwrap_or(false) {
+        lines.remove(0);
+    }
+    if lines.last().map(|l| l.trim() == "```").unwrap_or(false) {
+        lines.pop();
+    }
+    lines.join("\n")
+}
+
 pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
     let name = source.file_name()?.to_str()?;
     let parent = source.parent().unwrap_or(Path::new("."));
@@ -1950,5 +2389,150 @@ mod tests {
         // Should emit ELEMENT-005 because source is None and inline_value is None
         let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
         assert!(codes.contains(&"ELEMENT-005"), "expected ELEMENT-005, got: {:?}", codes);
+    }
+
+    // ── Wave 3: dashboard pipeline ────────────────────────
+
+    #[test]
+    fn test_proof_directive_kind_region() {
+        assert_eq!(proof_directive_kind("```proof:region name=header"), Some("region"));
+    }
+
+    #[test]
+    fn test_collect_directives_region() {
+        let src = "```proof:region name=header\nHello world\nproof:element kind=label value=\"X\" width=5\n```";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Region { name, body, .. } => {
+                assert_eq!(name, "header");
+                assert_eq!(body.len(), 2);
+                assert_eq!(body[0], "Hello world");
+                assert!(body[1].starts_with("proof:element"));
+            }
+            _ => panic!("expected Region"),
+        }
+    }
+
+    #[test]
+    fn test_split_frontmatter_with_yaml() {
+        let src = "---\ndashboard:\n  width: 80\n---\nbody line 1\nbody line 2\n";
+        let (fm, body, offset) = split_frontmatter(src);
+        assert!(fm.contains("dashboard:"));
+        assert!(fm.contains("width: 80"));
+        assert!(body.starts_with("body line 1"));
+        assert_eq!(offset, 4); // lines: --- / dashboard: / width / --- → body at line 4
+    }
+
+    #[test]
+    fn test_split_frontmatter_no_yaml() {
+        let src = "no frontmatter here\nplain content\n";
+        let (fm, body, offset) = split_frontmatter(src);
+        assert!(fm.is_empty());
+        assert_eq!(body, src);
+        assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn test_strip_compiled_chrome_removes_html_and_fence() {
+        let block = "<!-- proof:compiled from=\"x\" -->\n```\ninner content\nrow 2\n```\n<!-- /proof:compiled -->";
+        let stripped = strip_compiled_chrome(block);
+        assert_eq!(stripped, "inner content\nrow 2");
+    }
+
+    #[test]
+    fn test_dashboard_compile_two_regions_e2e() {
+        // End-to-end: write a .dashboard.source.md to a temp dir, compile, read output
+        use std::io::Write;
+
+        let tmp = std::env::temp_dir().join(format!("proof-dash-{}.dashboard.source.md", std::process::id()));
+        let out = std::env::temp_dir().join(format!("proof-dash-{}.dashboard.md", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let src = "---\ndashboard:\n  width: 20\n  height: 4\n  title: \"Test\"\n  regions:\n    top: { x: 0, y: 0, width: 20, height: 2 }\n    bot: { x: 0, y: 2, width: 20, height: 2 }\n---\n\n```proof:region name=top\nHEADER LINE\n```\n\n```proof:region name=bot\nFOOTER LINE\n```\n";
+        let mut f = std::fs::File::create(&tmp).expect("create tmp");
+        f.write_all(src.as_bytes()).expect("write tmp");
+        drop(f);
+
+        let cfg = GlintConfig::default();
+        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
+            .expect("compile_file ok");
+
+        let _ = std::fs::remove_file(&tmp);
+
+        assert!(result.violations.iter().all(|v| v.severity != ViolationSeverity::Error),
+            "unexpected errors: {:?}",
+            result.violations.iter().map(|v| (v.code, &v.message)).collect::<Vec<_>>());
+        assert!(result.written, "should have written output");
+
+        let written = std::fs::read_to_string(&out).expect("read output");
+        let _ = std::fs::remove_file(&out);
+
+        assert!(written.contains("```dashboard"), "should have dashboard fence: {}", written);
+        assert!(written.contains("HEADER LINE"), "top region not rendered");
+        assert!(written.contains("FOOTER LINE"), "bot region not rendered");
+
+        // Verify D-6: every line inside the fence is exactly the canvas width
+        let inner: Vec<&str> = written.lines()
+            .skip_while(|l| !l.starts_with("```dashboard"))
+            .skip(1)
+            .take_while(|l| *l != "```")
+            .collect();
+        assert_eq!(inner.len(), 4, "canvas should be height=4 lines, got {}: {:?}", inner.len(), inner);
+        for line in &inner {
+            assert_eq!(line.chars().count(), 20, "row width != 20: {:?}", line);
+        }
+    }
+
+    #[test]
+    fn test_dashboard_unknown_region_emits_dashboard_004() {
+        use std::io::Write;
+        let tmp = std::env::temp_dir().join(format!("proof-dash-bad-{}.dashboard.source.md", std::process::id()));
+        let out = std::env::temp_dir().join(format!("proof-dash-bad-{}.dashboard.md", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        // front-matter declares only "header"; body has region "ghost" that's not declared
+        let src = "---\ndashboard:\n  width: 20\n  height: 2\n  regions:\n    header: { x: 0, y: 0, width: 20, height: 2 }\n---\n\n```proof:region name=ghost\nNo such region\n```\n";
+        let mut f = std::fs::File::create(&tmp).expect("create tmp");
+        f.write_all(src.as_bytes()).expect("write tmp");
+        drop(f);
+
+        let cfg = GlintConfig::default();
+        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
+            .expect("compile_file ok");
+
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(codes.contains(&"DASHBOARD-004"),
+            "expected DASHBOARD-004, got: {:?}", codes);
+    }
+
+    #[test]
+    fn test_dashboard_overlap_emits_dashboard_003() {
+        use std::io::Write;
+        let tmp = std::env::temp_dir().join(format!("proof-dash-ovl-{}.dashboard.source.md", std::process::id()));
+        let out = std::env::temp_dir().join(format!("proof-dash-ovl-{}.dashboard.md", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let src = "---\ndashboard:\n  width: 40\n  height: 10\n  regions:\n    a: { x: 0, y: 0, width: 30, height: 5 }\n    b: { x: 20, y: 0, width: 20, height: 5 }\n---\n";
+        let mut f = std::fs::File::create(&tmp).expect("create tmp");
+        f.write_all(src.as_bytes()).expect("write tmp");
+        drop(f);
+
+        let cfg = GlintConfig::default();
+        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
+            .expect("compile_file ok");
+
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(codes.contains(&"DASHBOARD-003"),
+            "expected DASHBOARD-003 (overlap), got: {:?}", codes);
     }
 }

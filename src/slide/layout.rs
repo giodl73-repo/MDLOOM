@@ -13,10 +13,110 @@ use crate::slide::{Slide, SlideLayout, SlideMeta, SlideTheme};
 // Body stub (Wave 2 — completed in Wave 3)
 // ─────────────────────────────────────────────────────────
 
-/// Stub: returns body content lines unchanged.
-/// Wave 3 replaces this with full proof: directive dispatch.
-pub(crate) fn render_body_lines(body: &str, _width: usize) -> Vec<String> {
-    body.lines().map(|l| l.to_string()).collect()
+/// Render body content — dispatches proof: directives, passes literal lines through.
+/// Handles: proof:bullets, proof:centered, proof:quote, proof:callout, proof:divider, proof:stat.
+/// proof:notes blocks are excluded from output (SL-5).
+pub(crate) fn render_body_lines(body: &str, width: usize) -> Vec<String> {
+    use crate::slide::bullets::{render_bullets, BulletConfig};
+    use crate::slide::inline::{render_quote, render_centered, render_callout,
+                                render_divider, CalloutStyle, DividerStyle};
+
+    let mut output: Vec<String> = Vec::new();
+    let lines: Vec<&str> = body.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        // proof:notes — skip until end of block (SL-5)
+        if line.starts_with("proof:notes") {
+            i += 1;
+            while i < lines.len() && !lines[i].trim().is_empty() { i += 1; }
+            i += 1;
+            continue;
+        }
+
+        // proof:bullets — collect lines until blank or next directive
+        if line.starts_with("proof:bullets") {
+            i += 1;
+            let mut bullet_lines = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                bullet_lines.push_str(lines[i]);
+                bullet_lines.push('\n');
+                i += 1;
+            }
+            let cfg = BulletConfig::default();
+            let (rendered, _) = render_bullets(&bullet_lines, width, &cfg);
+            output.extend(rendered);
+            continue;
+        }
+
+        // proof:centered — next non-empty lines until blank
+        if line.starts_with("proof:centered") {
+            i += 1;
+            let mut text = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                text.push_str(lines[i]);
+                text.push('\n');
+                i += 1;
+            }
+            output.extend(render_centered(text.trim(), width));
+            continue;
+        }
+
+        // proof:callout style=X — collect content
+        if line.starts_with("proof:callout") {
+            let style_str = line.split("style=").nth(1)
+                .and_then(|s| s.split_whitespace().next())
+                .unwrap_or("note");
+            let style = CalloutStyle::parse(style_str);
+            i += 1;
+            let mut text = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                text.push_str(lines[i]);
+                text.push('\n');
+                i += 1;
+            }
+            output.extend(render_callout(text.trim(), style, width));
+            continue;
+        }
+
+        // proof:divider style=X
+        if line.starts_with("proof:divider") {
+            let style_str = line.split("style=").nth(1)
+                .and_then(|s| s.split_whitespace().next())
+                .unwrap_or("thin");
+            let style = DividerStyle::parse(style_str);
+            output.push(render_divider(style, width));
+            i += 1;
+            continue;
+        }
+
+        // proof:quote attribution="..."
+        if line.starts_with("proof:quote") {
+            let attr = line.split("attribution=").nth(1)
+                .map(|s| s.trim().trim_matches('"').to_string());
+            i += 1;
+            let mut text = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                text.push_str(lines[i]);
+                text.push('\n');
+                i += 1;
+            }
+            output.extend(render_quote(text.trim(), attr.as_deref(), width));
+            continue;
+        }
+
+        // Literal line
+        output.push(lines[i].to_string());
+        i += 1;
+    }
+
+    output
 }
 
 // ─────────────────────────────────────────────────────────
