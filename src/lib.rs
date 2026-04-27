@@ -8,6 +8,7 @@ pub mod fix;
 pub mod layout;
 pub mod runner;
 pub mod spec_gen;
+pub mod tree;
 
 pub use config::GlintConfig;
 pub use diagnostic::{Diagnostic, RichContext, Severity};

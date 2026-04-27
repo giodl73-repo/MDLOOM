@@ -321,13 +321,41 @@ pub struct AsciiTreeConfig {
     /// None = validate all tree-kind fences (dirtree, tree, org, taxonomy, etc.)
     #[serde(default)]
     pub kind: Option<String>,
+    /// T-7: directories must end with /, files must not (dirtree kind only)
+    #[serde(default = "bool_true")]
+    pub check_dir_slash: bool,
+    /// T-8: duplicate entry names under the same parent are flagged
+    #[serde(default = "bool_true")]
+    pub check_duplicates: bool,
+    /// Verify that each path in the tree exists on disk (opt-in)
+    #[serde(default)]
+    pub verify_paths: bool,
+    /// Root directory for path verification (defaults to the directory containing proof.toml)
+    #[serde(default)]
+    pub verify_root: Option<String>,
 }
 
 fn default_indent_width() -> usize { 4 }
 
 impl Default for AsciiTreeConfig {
     fn default() -> Self {
-        Self { enabled: true, indent_width: 4, kind: None }
+        Self {
+            enabled: true,
+            indent_width: 4,
+            kind: None,
+            check_dir_slash: true,
+            check_duplicates: true,
+            verify_paths: false,
+            verify_root: None,
+        }
+    }
+}
+
+impl AsciiTreeConfig {
+    // Allow overriding defaults for tests
+    #[allow(dead_code)]
+    pub fn strict() -> Self {
+        Self::default()
     }
 }
 

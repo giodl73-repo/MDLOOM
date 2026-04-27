@@ -265,7 +265,7 @@ fn skip_connector_prefix(s: &str, kind: &str) -> usize {
 pub(crate) fn validate_tree(
     nodes: &[TreeNode],
     path: &Path,
-    _config: &AsciiTreeConfig,
+    config: &AsciiTreeConfig,
 ) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     diags.extend(validate_t1(nodes, path));
@@ -273,8 +273,19 @@ pub(crate) fn validate_tree(
     diags.extend(validate_t3(nodes, path));
     diags.extend(validate_t5(nodes, path));
     diags.extend(validate_t6(nodes, path));
-    // T-4 and T-12 are checked together (leaf-root is valid)
     diags.extend(validate_t4_t12(nodes, path));
+
+    // dirtree-specific (only when kind is dirtree or unspecified)
+    let is_dirtree = config.kind.as_deref().map(|k| k == "dirtree").unwrap_or(true);
+    if is_dirtree {
+        if config.check_dir_slash {
+            diags.extend(validate_t7(nodes, path));
+        }
+        if config.check_duplicates {
+            diags.extend(validate_t8(nodes, path));
+        }
+    }
+
     diags
 }
 
@@ -420,6 +431,77 @@ fn validate_t6(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
                     if node.connector == Connector::Tee { "├──" } else { "└──" }
                 ),
             ));
+        }
+    }
+    diags
+}
+
+/// T-7: directories end with `/`; files do not.
+/// Heuristic: if a label ends with `/` → treated as directory.
+/// If a label contains `.` after the last `/` → treated as file.
+/// Ambiguous labels (no slash, no extension) are not flagged.
+fn validate_t7(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    for node in nodes {
+        if node.connector == Connector::Continuation || node.label.is_empty() { continue; }
+        let label = &node.label;
+        // Strip trailing annotation (e.g. "src/ — entry point" → "src/")
+        let name = label.split(" — ").next().unwrap_or(label).trim();
+
+        let ends_slash = name.ends_with('/');
+        let looks_like_file = !ends_slash && name.contains('.') && !name.starts_with('.');
+
+        // We only flag when we're confident:
+        // - A name with an extension that ends with / is suspicious (unlikely real case)
+        // Skip ambiguous cases silently
+        if ends_slash && looks_like_file {
+            diags.push(Diagnostic::warning(
+                path.to_path_buf(), node.line_no, 1,
+                "tree_dir_slash",
+                format!("{:?} ends with / but looks like a file (has extension) (T-7)", name),
+            ));
+        }
+        // We don't flag files-without-slash because we can't distinguish dirs without /
+        // from files with no extension. Only flag the clear case above.
+    }
+    diags
+}
+
+/// T-8: no duplicate entry names under the same parent.
+fn validate_t8(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    use std::collections::HashMap;
+    let mut diags = Vec::new();
+
+    // Track: for each (parent_node_index, label) → first occurrence line
+    // We approximate "same parent" by tracking the current parent at each level.
+    // parent_stack[level] = line_no of the parent node at that level
+    let mut seen: HashMap<(usize, String), usize> = HashMap::new(); // (parent_line, label) → first line
+    let mut parent_stack: Vec<usize> = vec![0]; // line_no of parent at each level
+
+    for node in nodes {
+        if node.connector == Connector::Continuation || node.label.is_empty() { continue; }
+
+        // Update parent stack
+        let level = node.indent_level;
+        while parent_stack.len() <= level {
+            parent_stack.push(0);
+        }
+        let parent_line = if level == 0 { 0 } else { parent_stack[level - 1] };
+
+        let key = (parent_line, node.label.clone());
+        if let Some(&first_line) = seen.get(&key) {
+            diags.push(Diagnostic::error(
+                path.to_path_buf(), node.line_no, 1,
+                "tree_duplicate",
+                format!(
+                    "duplicate entry {:?} at line {} — first seen at line {} (T-8)",
+                    node.label, node.line_no, first_line
+                ),
+            ));
+        } else {
+            seen.insert(key, node.line_no);
+            // Update parent for children
+            parent_stack[level] = node.line_no;
         }
     }
     diags

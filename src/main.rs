@@ -6,6 +6,7 @@ use proof_lib::davinci::check_daVinci;
 use proof_lib::draft::build_draft_plan;
 use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
 use proof_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
+use proof_lib::tree::dirtree::{DirtreeOptions, SortOrder, generate as dirtree_generate, verify_paths as dirtree_verify};
 use proof_lib::spec_gen;
 use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
 use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
@@ -45,6 +46,37 @@ struct Cli {
     /// Write output to file instead of stdout
     #[arg(short = 'o', long, global = true)]
     output: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+enum TreeAction {
+    /// Generate a dirtree from the filesystem
+    Generate {
+        /// Root directory to walk
+        #[arg(long, default_value = ".")]
+        root: PathBuf,
+        /// Max depth to recurse (default: unlimited)
+        #[arg(long)]
+        max_depth: Option<usize>,
+        /// Glob patterns to exclude (comma-separated, e.g. "target/**,*.log")
+        #[arg(long)]
+        exclude: Option<String>,
+        /// Sort order: name | ext | size | mtime (default: name)
+        #[arg(long, default_value = "name")]
+        sort: String,
+        /// Put directories before files (default: true)
+        #[arg(long, default_value = "true")]
+        dirs_first: bool,
+        /// Indent width per level (default: 4)
+        #[arg(long, default_value = "4")]
+        indent_width: usize,
+        /// Don't wrap in ```dirtree fence
+        #[arg(long)]
+        no_fence: bool,
+        /// Write output to file (default: stdout)
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -146,6 +178,11 @@ enum Command {
         #[arg(long)]
         root: Option<PathBuf>,
     },
+    /// Generate or validate ASCII tree diagrams
+    Tree {
+        #[command(subcommand)]
+        action: TreeAction,
+    },
     /// Analyze a figure and generate suggested DaVinci invariants
     SpecGenerate {
         /// The md:// URI of the figure to analyze
@@ -231,6 +268,9 @@ fn main() -> Result<()> {
         Some(Command::Stats { paths, by_directory, by_code }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             return cmd_stats(paths, by_directory, by_code, &cli.config);
+        }
+        Some(Command::Tree { action }) => {
+            return cmd_tree(action);
         }
         Some(Command::SpecGenerate { uri, id, protection, root, output }) => {
             return cmd_spec_generate(uri, id, protection, root, output);
@@ -667,6 +707,52 @@ fn cmd_resolve(uri: String, root: Option<PathBuf>, format: String) -> Result<()>
         }
     }
 
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// tree
+// ─────────────────────────────────────────────────────────
+
+fn cmd_tree(action: TreeAction) -> Result<()> {
+    match action {
+        TreeAction::Generate {
+            root, max_depth, exclude, sort, dirs_first,
+            indent_width, no_fence, output,
+        } => {
+            let sort_order = match sort.as_str() {
+                "ext"   => SortOrder::Ext,
+                "size"  => SortOrder::Size,
+                "mtime" => SortOrder::Mtime,
+                _       => SortOrder::Name,
+            };
+
+            let exclude_patterns = exclude
+                .map(|s| s.split(',').map(|p| p.trim().to_string()).collect())
+                .unwrap_or_default();
+
+            let opts = DirtreeOptions {
+                root: root.clone(),
+                max_depth,
+                exclude: exclude_patterns,
+                dirs_first,
+                sort: sort_order,
+                wrap_fence: !no_fence,
+                indent_width,
+            };
+
+            let result = dirtree_generate(&opts)
+                .map_err(|e| anyhow::anyhow!("tree generate failed: {}", e))?;
+
+            match output {
+                Some(path) => {
+                    std::fs::write(&path, &result)?;
+                    eprintln!("{} dirtree written to {}", "✓".green(), path.display());
+                }
+                None => println!("{}", result),
+            }
+        }
+    }
     Ok(())
 }
 
