@@ -49,7 +49,8 @@ pub fn resolve<'a>(name: &str, lib: &'a SymbolLibrary) -> Option<ResolvedSymbol<
 // Emits SYMBOL-001 via return None (caller warns)
 
 pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWarning>)
-// Scan text for [sym:name] patterns (regex: \[sym:[a-zA-Z0-9_-]+\]).
+// Scan text for [sym:name] patterns using hand-rolled parsing (NOT the regex crate —
+// regex is not in Cargo.toml; use str::find("[sym:") + scan forward for ']').
 // Skips expansion inside: fenced code blocks (``` delimited), inline code (`backtick`),
 // URL paths. Returns expanded string + any SYMBOL-001/SYMBOL-002 warnings.
 // visual_width() is called on the final expanded string, not on the template.

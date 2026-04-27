@@ -1,7 +1,6 @@
 # SLIDE-IMPL-PLAN — proof:slide ASCII presentation composer
 
-> Prerequisite: DASHBOARD-IMPL-PLAN Wave 1 (`Canvas`, `paste`, `render`) must be complete before
-> Wave 2. Wave 1 (parser) is independent of the dashboard canvas.
+> Wave 1 (parser) is independent of the dashboard canvas.
 
 ---
 
@@ -17,6 +16,7 @@ data extraction and validation.
 src/slide/
   mod.rs       — pub re-exports, SlideDoc, Slide, SlideMeta, compile_slides()
   parser.rs    — parse_slide_doc(), front_matter parsing, slide separation
+  canvas.rs    — Lightweight canvas: Vec<char>, paste(region, lines), render() → String
 ```
 
 ### Key structs / functions
@@ -109,9 +109,16 @@ if let Some(stem) = name.strip_suffix(".slides.source.md") {
 }
 ```
 
-**SlideCanvas** — `src/slide/mod.rs` uses `dashboard::canvas::Canvas` directly. Each slide
-gets its own `Canvas::new(meta.width, meta.height)`. The dashboard `Canvas` is not extended;
-it is reused as-is.
+**SlideCanvas** — implemented in `src/slide/canvas.rs` (Wave 1). This eliminates the
+cross-plan dependency on DASHBOARD-IMPL-PLAN. The slide canvas is simpler than the dashboard
+canvas and does not need to wait. `src/slide/mod.rs` and `layout.rs` import from
+`slide::canvas::SlideCanvas`, not from `dashboard::canvas::Canvas`. Each slide gets its own
+`SlideCanvas::new(meta.width, meta.height)`.
+
+> **Cross-plan dependency resolved:** Wave 2 originally required DASHBOARD-IMPL-PLAN Wave 1
+> to provide a Canvas. By implementing `src/slide/canvas.rs` in Wave 1, slide development is
+> fully self-contained. If the dashboard Canvas is later unified, `SlideCanvas` can be replaced
+> or aliased at that time.
 
 ### Tests (12)
 
@@ -135,10 +142,18 @@ example from SLIDE-SPEC.md produces 5 slides with correct layouts and titles.
 
 ---
 
-## Wave 2 — Layout renderers (~400 LOC)
+## Wave 2 — Layout renderers (~500 LOC)
 
-**Goal**: Render each `SlideLayout` variant to a populated `Canvas`. Each renderer takes a
-`&Slide`, a `&SlideMeta`, and a mutable `&mut Canvas`. Title-bar sizing and body region
+> **Pre-condition:** `src/slide/canvas.rs` (Wave 1) must be complete. Wave 2 uses
+> `SlideCanvas` from that file — no dependency on DASHBOARD-IMPL-PLAN. The cross-plan
+> dependency is eliminated by implementing the canvas in Wave 1 (Option 1, chosen).
+
+> **LOC note:** Estimate raised from ~400 to ~500 to account for `render_body_lines` stub
+> (~20 LOC), full `apply_theme` with box-style border + `├──┤` mid-divider (~40 LOC), and
+> `## col:` suppression in heading checks.
+
+**Goal**: Render each `SlideLayout` variant to a populated `SlideCanvas`. Each renderer takes
+a `&Slide`, a `&SlideMeta`, and a mutable `&mut SlideCanvas`. Title-bar sizing and body region
 coordinates are layout-specific constants, not caller-configurable.
 
 ### New file
@@ -219,8 +234,20 @@ fn vertical_offset(content_lines: usize, height: usize) -> usize
 /// Apply theme chrome to canvas. `minimal`: draw ─── separator after title bar.
 /// `box`: draw ┌──┐/│/└──┘ border; title bar delimited by ├──┤.
 /// `none`: no-op.
-pub fn apply_theme(canvas: &mut Canvas, meta: &SlideMeta, title_bar_rows: usize)
+pub fn apply_theme(canvas: &mut SlideCanvas, meta: &SlideMeta, title_bar_rows: usize)
 ```
+
+**Wave 2 stub — `render_body_lines`**: This function is not complete in Wave 2 but is needed
+by `render_title_content`, `render_two_column`, and `render_blank`. Add a stub that returns
+the input lines unchanged:
+
+```rust
+pub(crate) fn render_body_lines(lines: &[&str], _width: usize) -> Vec<String> {
+    lines.iter().map(|l| l.to_string()).collect()
+}
+```
+
+Wave 3 replaces this stub with the full directive-dispatching implementation.
 
 **Content overflow** — if body rendering exceeds `height - title_bar_rows` rows, emit
 `SLIDE-003` (warning) and clip. Canvas `paste` handles clipping silently; the violation
@@ -228,21 +255,10 @@ is emitted by the layout renderer before calling `paste`.
 
 **Ratio rounding** — `two_column` and `proof:columns`:
 
-```rust
-fn split_ratio(total_width: usize, left_pct: u8, divider: bool) -> (usize, usize) {
-    let usable = if divider { total_width - 1 } else { total_width };
-    let left = (usable as f64 * left_pct as f64 / 100.0).floor() as usize;
-    let right = usable - left;  // remainder to first col, so right = usable - left
-    (left + (usable - left - right), right)  // left gets remainder
-}
-```
-
-Wait — per spec: "remainder to **first** column." Correct form:
-`left = floor(usable * left_pct / 100)`, `right = usable - left`. Left already holds the
-remainder naturally (floor rounds down right, leaving surplus in left's complement). Verify
-with the spec example: 119 wide, 60:40, no divider → floor(71.4)=71, right=48... but spec
-says right=47. Re-check: floor(119 × 0.60) = floor(71.4) = 71; floor(119 × 0.40) =
-floor(47.6) = 47; sum = 118; remainder 1 → left gets 72, right stays 47. Implement as:
+// The correct formula: `floor(content_width × ratio_a / (ratio_a + ratio_b))` for
+// column A, remainder to column B.
+// Spec example: 119 wide, 60:40, no divider → floor(71.4)=71, floor(47.6)=47, sum=118,
+// remainder 1 → left gets 72, right stays 47.
 
 ```rust
 fn split_ratio(total_width: usize, left_pct: u8, divider: bool) -> (usize, usize) {
@@ -589,11 +605,13 @@ inputs.
 src/slide/
   mod.rs        — SlideDoc, Slide, SlideMeta, SlideLayout, SlideTheme,
                   compile_slide_doc(), SlideCompileResult, SlideFormat
+  canvas.rs     — SlideCanvas: Vec<char>, new(width, height), paste(region, lines),
+                  render() → String  [Wave 1 — eliminates dashboard cross-dependency]
   parser.rs     — parse_slide_doc(), parse_front_matter(), split_slides(),
                   parse_slide(), parse_slide_attrs(), extract_notes()
   layout.rs     — render_slide(), render_title(), render_title_content(),
                   render_two_column(), render_section(), render_stats(),
-                  render_blank(), apply_theme(), render_body_lines(),
+                  render_blank(), apply_theme(), render_body_lines() [stub in W2, full in W3],
                   center_line(), vertical_offset(), split_ratio()
   bullets.rs    — render_bullets(), BulletConfig, parse_bullet_level()
   columns.rs    — render_columns(), parse_col_sections(), ColumnsConfig
@@ -601,14 +619,15 @@ src/slide/
                   render_callout(), render_divider()
 ```
 
-**Total estimated LOC**: ~350 (Wave 1) + ~400 (Wave 2) + ~350 (Wave 3) + ~200 (Wave 4) = **~1,300 LOC** excluding tests.
+**Total estimated LOC**: ~350 (Wave 1) + ~500 (Wave 2) + ~350 (Wave 3) + ~200 (Wave 4) = **~1,400 LOC** excluding tests.
 
 ---
 
 ## Cross-cutting notes
 
-- `dashboard::canvas::Canvas` is imported directly in `src/slide/mod.rs` and `layout.rs` —
-  no new canvas type. One `Canvas::new(meta.width, meta.height)` per slide.
+- `slide::canvas::SlideCanvas` (Wave 1, `src/slide/canvas.rs`) is used by `layout.rs` and
+  `compile_slide_doc`. One `SlideCanvas::new(meta.width, meta.height)` per slide. No
+  dependency on `dashboard::canvas::Canvas` — the slide canvas is self-contained.
 - `visual_width` from `src/layout.rs` is the only column-width measurer. `center_line`,
   `split_ratio`, and `render_columns` all use it for char-level measurement.
 - `## col:` sections inside a `proof:slide layout=two-column` or `proof:columns` fence are

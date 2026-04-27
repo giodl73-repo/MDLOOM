@@ -7,19 +7,30 @@
 
 ---
 
-## Dependency additions (Cargo.toml)
+## Wave 0 — Pre-conditions (before starting Wave 1)
+
+- Modify `src/layout.rs::visual_width()` to add Braille (U+2800–U+28FF) to the width=1
+  override list, alongside box-drawing and geometric shapes. This is required so braille
+  dither output measures correctly in column layouts.
+- Add test: `assert_eq!(visual_width("⠿"), 1); // U+28FF Braille`
+- This touches a file outside `src/figure/` but is a blocking pre-condition.
+  Estimated: 5 LOC + 1 test.
+
+---
+
+## Already added to Cargo.toml (dependency additions complete)
 
 ```toml
-[dependencies]
-image = "0.25"                            # PNG/JPG/GIF/BMP load, resize, grayscale
-
-[dependencies.resvg]                      # SVG rasterization — feature-flagged
-version = "0.42"
-optional = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
+resvg = { version = "0.44", optional = true }
 
 [features]
-svg = ["resvg"]
+figure = ["image"]
+svg = ["figure", "resvg"]
 ```
+
+Wave 1 must be compiled with `cargo build --features figure`. Wave 4 SVG support requires
+`cargo build --features svg`.
 
 `unicode-width` is already present (used by `visual_width` in `layout.rs`).
 `serde_json` is already present (used for `.proof-fetch-lock.json`).
@@ -82,8 +93,13 @@ pub fn import_image(path: &Path, opts: &ImportOptions) -> Result<String>
 //   8. join rows with '\n'
 
 pub fn load_image(path: &Path, opts: &ImportOptions) -> Result<image::DynamicImage>
-// Handles: PNG/JPG/GIF/BMP via image crate; .svg via resvg feature
+// Handles: PNG/JPG/GIF/BMP via image crate; .svg via resvg feature (Wave 4)
 // Remote URLs: requires opts.allow_fetch; fetches, checks .proof-fetch-lock.json
+//
+// SVG feature guard: all code paths that reference `resvg` types must be inside
+// `#[cfg(feature = "svg")]` blocks. The non-feature build (`cargo build --features figure`
+// without `svg`) must compile cleanly. In load_image(), add a `#[cfg(feature = "svg")]`
+// arm for `.svg` extension handling; the default arm returns Err("SVG requires --features svg").
 
 // src/figure/dither.rs
 pub fn dither_density(ctx: &DitherContext) -> Vec<String>   // " .:-=+*#%@"
@@ -170,6 +186,10 @@ test_gamma_contrast_applied_before_dither
 
 `import_image(path, &ImportOptions::default())` returns a non-empty ASCII string
 for a 1×1 black PNG.
+
+**Fixture note:** Create test images programmatically using `image::GrayImage::new(1, 1)` —
+do not require filesystem fixture files. This keeps tests self-contained and avoids binary
+test files in the repo.
 
 ---
 
@@ -417,11 +437,16 @@ Extend `proof_directive_kind` and `collect_directives` to recognize
 ```rust
 // proof_directive_kind — add:
 else if rest.starts_with("include") {
-    // Check for kind=figure attribute in the info string
-    if rest.contains("kind=figure") { Some("include_figure") }
+    // Check for kind=figure attribute in the info string — token-exact match required
+    if rest.split_whitespace().any(|tok| tok == "kind=figure") { Some("include_figure") }
     else { Some("include") }
 }
 ```
+
+**Implementation note:** Do NOT use `info_string.contains("kind=figure")` — this would
+false-positive on `kind=figure-sequence` or similar future attributes. Use token-exact
+matching: split the info string on whitespace and check for the exact token `"kind=figure"`
+as a complete element. Pattern: `info_string.split_whitespace().any(|tok| tok == "kind=figure")`.
 
 The body of an `include_figure` directive is a single URI line (same as `include`).
 The info string carries directive attributes: `kind=figure dither=block width=40 ...`
@@ -567,9 +592,9 @@ compiles successfully and emits FIGURE-005 warning (figure unpinned).
 
 ## Cross-wave constraints
 
-### `visual_width` fix (prerequisite for Wave 1)
+### `visual_width` fix (Wave 0 pre-condition — must precede Wave 1)
 
-Must be done before Wave 1 tests run. In `src/layout.rs`:
+See **Wave 0 — Pre-conditions** section above for full details. Code reference for `src/layout.rs`:
 
 ```rust
 pub fn visual_width(s: &str) -> usize {

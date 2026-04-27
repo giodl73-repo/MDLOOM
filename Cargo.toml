@@ -32,6 +32,10 @@ similar = "2"
 # Local development: uses sibling directory (cargo install --path . uses this)
 # Published: change to mdpath = "0.1" once crates.io is set up
 mdpath = { path = "../mdpath" }
+# Figure import — image-to-ASCII conversion
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
+# SVG rasterization (optional — enable with --features svg)
+resvg = { version = "0.44", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"
@@ -41,3 +45,7 @@ tempfile = "3"
 lto = true
 codegen-units = 1
 strip = true
+
+[features]
+figure = ["image"]
+svg = ["figure", "resvg"]
