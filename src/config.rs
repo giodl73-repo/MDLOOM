@@ -19,6 +19,8 @@ pub struct GlintConfig {
     #[serde(default)]
     pub ascii_char: AsciiCharConfig,
     #[serde(default)]
+    pub ascii_tree: AsciiTreeConfig,
+    #[serde(default)]
     pub ascii_flow: AsciiFlowConfig,
     #[serde(default)]
     pub markdown: MarkdownConfig,
@@ -307,6 +309,28 @@ impl Default for AsciiCharConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct AsciiTreeConfig {
+    /// Master switch
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+    /// Spaces per indentation level (default: 4)
+    #[serde(default = "default_indent_width")]
+    pub indent_width: usize,
+    /// Only validate code blocks with this specific info string.
+    /// None = validate all tree-kind fences (dirtree, tree, org, taxonomy, etc.)
+    #[serde(default)]
+    pub kind: Option<String>,
+}
+
+fn default_indent_width() -> usize { 4 }
+
+impl Default for AsciiTreeConfig {
+    fn default() -> Self {
+        Self { enabled: true, indent_width: 4, kind: None }
+    }
+}
+
 fn default_tab_width() -> usize { 4 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -570,6 +594,7 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
         ascii_box: child.ascii_box,   // scalars: child wins entirely
         ascii_barchart: child.ascii_barchart,
         ascii_char: child.ascii_char,
+        ascii_tree: child.ascii_tree,
         ascii_flow: child.ascii_flow,
         // markdown_table: child wins (schemas are per-directory, not additive)
         markdown_table: child.markdown_table,

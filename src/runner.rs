@@ -2,10 +2,11 @@ use crate::checks::ascii_barchart::AsciiBarchartCheck;
 use crate::checks::ascii_box::AsciiBoxCheck;
 use crate::checks::ascii_char::AsciiCharCheck;
 use crate::checks::ascii_flow::AsciiFlowCheck;
+use crate::checks::ascii_tree::AsciiTreeCheck;
 use crate::checks::markdown::MarkdownCheck;
 use crate::checks::markdown_table::MarkdownTableCheck;
 use crate::checks::Check;
-use crate::config::{AsciiBarchartConfig, AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
+use crate::config::{AsciiBarchartConfig, AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, AsciiTreeConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
@@ -143,6 +144,12 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
     if config.ascii_flow.enabled {
         checks.push(Box::new(AsciiFlowCheck {
             config: config.ascii_flow.clone(),
+        }));
+    }
+
+    if config.ascii_tree.enabled {
+        checks.push(Box::new(AsciiTreeCheck {
+            config: config.ascii_tree.clone(),
         }));
     }
 

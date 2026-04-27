@@ -44,6 +44,12 @@ check_cell_padding = true
 # Minimum spaces of padding required inside a cell: "| text |" = 1
 min_cell_padding = 1
 
+[ascii_tree]
+# Validate ASCII tree diagrams in dirtree/tree/org/taxonomy fenced code blocks.
+# Checks connector grammar (├──/└──/│), indentation consistency, and structural rules.
+enabled = true
+indent_width = 4
+
 # ─────────────────────────────────────────────
 # Markdown Structure Checks
 # ─────────────────────────────────────────────
