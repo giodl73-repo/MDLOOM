@@ -1,7 +1,10 @@
 pub mod canvas;
+pub mod layout;
 pub mod parser;
 
 pub use canvas::SlideCanvas;
+pub use layout::{render_slide, render_title, render_title_content, render_two_column,
+                 render_section, render_stats, render_blank, apply_theme, center_in_width};
 pub use parser::{parse_slide_doc, SlideError};
 
 // ─────────────────────────────────────────────────────────
