@@ -32,27 +32,58 @@ a common generation pipeline.
 
 ---
 
-## Chart kinds
+## Three categories of chart
 
-| Kind | ASCII form | Typical use |
-|------|-----------|------------|
-| `bar` | `████████` horizontal bars | rankings, comparisons |
-| `bar.vertical` | stacked columns | distributions |
-| `line` | plotted points + interpolation | trends, time series |
-| `scatter` | points on 2D axes, no lines | correlation, clustering |
-| `area` | filled region under a line | cumulative trends, volume |
-| `stacked-bar` | `████░░▒▒` multi-segment bars | part-to-whole composition |
-| `waterfall` | offset bars showing deltas | cumulative change, P&L |
-| `histogram` | equal-width bins, count y-axis | distribution, frequency |
-| `bullet` | bar + target marker | KPIs, performance vs target |
-| `lollipop` | `─────●` stem + dot | cleaner alternative to bar |
-| `candlestick` | OHLC range + body | financial time-series |
-| `sankey` | `══╗ ╠══` proportional flows | flow through stages |
-| `heatmap` | `░▒▓█` shading grid | density, correlation matrix |
-| `timeline` | `────●────●────` | history, schedule |
-| `sparkline` | `▁▂▄▇█▄▂` inline trend | in-table summary |
-| `gantt` | `░░░████░░` schedule bars | project planning |
-| `pie` | labeled wedge text | **experimental — not recommended** |
+Charts in ASCII documentation fall into three structurally distinct categories.
+The category determines the rendering pipeline, the source schema, and which
+invariants apply.
+
+### Category 1 — Table charts
+
+Data displayed in labelled rows with visual bar/dot/block encoding. **No axes.**
+Each row is a self-contained entry; the chart is essentially a rich table.
+
+| Kind | ASCII form | Source schema key |
+|------|-----------|-------------------|
+| `bar` | `████████` horizontal bars | `item \| value [\| max]` |
+| `bar.vertical` | column bars | `item \| value [\| max]` |
+| `stacked-bar` | `████░░▒▒` segmented bars | `item \| v1 \| v2 \| v3` |
+| `bullet` | bar + target marker `\|` | `metric \| actual \| target \| max` |
+| `lollipop` | `─────●` stem + dot | `item \| value [\| max]` |
+| `sparkline` | `▁▂▄▇█▄▂` inline trend | `period \| value` |
+| `gantt` | `░░████▒▒░` schedule bars | `task \| start \| end \| status` |
+| `heatmap` | `░▒▓█` shading grid | matrix table (rows × columns) |
+
+### Category 2 — Graph charts
+
+Data plotted on a 2D coordinate system with explicit **x / y axes**. Supports
+first-quadrant (all-positive) and four-quadrant (negative ranges) modes.
+
+| Kind | ASCII form | Source schema key |
+|------|-----------|-------------------|
+| `line` | points + interpolated connectors | `x \| y [\| series \| label]` |
+| `scatter` | points only, no connectors | `x \| y [\| series \| label]` |
+| `area` | filled region under a line | `x \| y [\| series]` |
+| `histogram` | equal-width bins, count y-axis | `value` (auto-bucketed) or `bin_start \| bin_end \| count` |
+| `candlestick` | OHLC range + body | `date \| open \| high \| low \| close` |
+
+### Category 3 — Flow and structure charts
+
+Charts that show **relationships, sequences, or cumulative flow** — not raw data
+on axes, not simple row-per-entry tables.
+
+| Kind | ASCII form | Source schema key |
+|------|-----------|-------------------|
+| `waterfall` | offset bars showing deltas | `step \| delta \| label` |
+| `timeline` | `────●────●────` | `date \| event [\| label]` |
+| `sankey` | `══╗ ╠══` proportional flows | `from \| to \| value` |
+
+---
+
+> **pie** is in a separate [Experimental](#experimental--limited-viability) section.
+> For composition data, use `bar` or `stacked-bar` instead.
+
+---
 
 ---
 
