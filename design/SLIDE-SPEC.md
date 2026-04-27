@@ -87,6 +87,8 @@ Body split into two columns. Configurable ratio (default 50:50).
 
 Large title, optional subtitle. Used as a visual break between presentation sections.
 
+**Compositor-driven:** The `section` layout automatically centers the `title` and (if provided) `subtitle` both vertically and horizontally. Authors do not use `proof:centered` — the layout renderer applies centering. This cannot be overridden within a section layout; use `blank` layout with `proof:centered` for custom alignment.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -111,6 +113,8 @@ Four quadrants with labels on axes. Used for strategic matrices (2×2 grids).
 
 One or more large statistics with labels, centered. Used for impact statements.
 
+**Renderer:** `stats` layout uses its own dedicated renderer (not `proof:columns`). It does not support `ratio=` or `divider=` attributes. SL-3 does not apply — column widths are computed as `floor(content_width / stat_count)` with remainders distributed to the rightmost stat. Each stat block is independently centered within its allocated width.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Key Numbers                                                                  │
@@ -131,6 +135,15 @@ Full canvas, author places all content manually using proof: directives.
 ---
 
 ## Source format (`.slides.source.md`)
+
+### Parser disambiguation rules
+
+**`---` disambiguation:** The parser uses these rules in order:
+1. If the file begins with `---` on line 1, the parser enters YAML front-matter mode and reads until the next `---` (the closer). The closer is NOT a slide separator.
+2. After the front-matter closer (or immediately if the file does not begin with `---`), the parser enters slide mode. Every subsequent `---` on its own line is a slide separator.
+3. Files with no front-matter: the first `---` is slide 2's separator. Slide 1 begins at line 1.
+
+SL-7 counts `---` separators in slide mode only — the front-matter closer is excluded.
 
 ```markdown
 ---
@@ -163,10 +176,10 @@ proof:bullets
 ---
 
 ```proof:slide layout=two-column title="McDavid vs Kucherov" ratio=50:50
-# Left
+## col:left
 proof:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#mcdavid[row=0]
 proof:mini-bar field=pts_82 max=200 width=30
-# Right
+## col:right
 proof:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#kucherov[row=0]
 proof:mini-bar field=pts_82 max=200 width=30
 ```
@@ -200,6 +213,8 @@ Bullet characters (configurable): `•` (level 1), `◦` (level 2), `▸` (level
 
 Max recommended bullets per slide: 6 (configurable via `max-bullets` in slide front-matter).
 
+**Depth limit:** `max-depth=4` (configurable) limits nesting. Levels beyond `max-depth` are rendered at the deepest defined bullet char. `SLIDE-007: bullet depth exceeds max-depth` (planned warning).
+
 ### `proof:quote`
 
 Centered block quote with attribution.
@@ -213,22 +228,26 @@ Rendered with `"` and `"` (curly quotes) and a `—` attribution line, centered 
 
 ### `proof:columns`
 
-Splits the content area into N columns. Column bodies are written under `# Column N` headings.
+Splits the content area into N columns. Column bodies are written under `## col:` prefixed headings.
+
+**Note:** Column sections use `## col:` prefix (H2 level, not H1) to avoid triggering `md_h1_count` checks. The compiler recognizes `## col:` inside a `proof:columns` or `proof:slide layout=two-column` fence as a structural delimiter, not a document heading — heading rules are suppressed for these markers.
 
 ```
 ```proof:slide layout=blank title="Comparison"
 proof:columns cols=2 ratio=60:40 divider=true
-# Column 1
+## col:left
 proof:bullets
 - Strengths
 - More strengths
-# Column 2
+## col:right
 proof:tree kind=org source=md://team.md#:table:0
 ```
 ```
 
 `ratio=60:40` — first column gets 60% of width, second gets 40%.
 `divider=true` — draws a `│` separator between columns.
+
+**Rounding rule:** Column widths are computed as `floor(content_width × ratio_fraction)`. Any remaining columns (due to integer rounding) are added to the **first** column. Example: 119 cols at 60:40 → floor(71.4)=71, floor(47.6)=47, remainder 1 → first column gets 72, second gets 47. This is consistent with the principle that the primary (left) column is the anchor.
 
 ### `proof:centered`
 
@@ -266,7 +285,10 @@ Horizontal rule across the content width.
 proof:divider style=thin    # ─────────────────────
 proof:divider style=double  # ═════════════════════
 proof:divider style=dotted  # ·····················
+proof:divider style=wave    # ~~~~~~~~~~~~~~~~~~~~ (see note)
 ```
+
+**Note:** `style=wave` uses `~` chars which may render as strikethrough delimiters in some markdown previewers (GFM extensions). Source files should not be previewed as raw markdown; the compiled `.slides.md` output is the canonical form. Alternative: `style=approx` uses `≈≈≈` (U+2248) instead.
 
 ### `proof:notes`
 
@@ -278,6 +300,8 @@ Talk about the contract situation here. Mention that his agent is Pat Brisson.
 The comparison to Gretzky is the key talking point — use it.
 ```
 
+**Check-time behavior:** When `proof check` runs on `.slides.source.md`, notes content IS linted — it passes through the full check pipeline including line-length and heading rules. This ensures notes quality for `proof compile --format notes` output. To suppress linting on notes, use `proof check --no-notes` (planned).
+
 ---
 
 ## Compilation
@@ -288,6 +312,7 @@ proof compile deck.slides.source.md
 
 proof compile deck.slides.source.md --slide 3
 # → render only slide 3
+# --slide is 1-indexed: --slide 1 is the first slide, --slide N where N > slide count emits SLIDE-006
 
 proof compile deck.slides.source.md --width 80 --height 24
 # → terminal-sized output (override front-matter dimensions)
@@ -376,6 +401,7 @@ Slide navigation in the TUI: `→`/`←` advances slides. `n` opens speaker note
 | `SLIDE-004` | error | `layout=two-column` has only one `# Column` section |
 | `SLIDE-005` | warning | `proof:stat` value is non-numeric |
 | `SLIDE-006` | error | `--slide N` references a slide that doesn't exist |
+| `SLIDE-007` | warning | Bullet depth exceeds `max-depth` (planned) |
 
 ---
 

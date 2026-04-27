@@ -85,6 +85,8 @@ The `--dither` flag selects the character mapping algorithm:
 | `binary` | `█ ` (threshold) | 1 | Silhouettes, logos at small size |
 | `edge` | `─│╱╲` | 1 | Outline-only mode |
 
+**Note:** Braille characters (U+2800–U+28FF) are forced to width=1 in `visual_width()`, consistent with how box-drawing characters are handled. This is required for correct column layout. Terminals that render Braille at width=2 will display output as wider than declared — `FIGURE-004` warns when `--dither braille` is used.
+
 ### Generation options
 
 | Option | Default | Description |
@@ -103,8 +105,12 @@ The `--dither` flag selects the character mapping algorithm:
 | `--label TEXT` | none | Overlay label text (centered) |
 | `--label-pos` | `center` | `center`, `top`, `bottom` |
 | `--svg-scale N` | 4 | Rasterization scale for SVG input |
-| `--allow-fetch` | false | Allow fetching remote image URLs |
-| `--output-file` | — | Write to file instead of stdout |
+| `--allow-fetch` | false | Allow fetching remote image URLs (see Content locking note below) |
+| `--output-file` | — | Write to file instead of stdout (see Output format note below) |
+
+**Content locking:** When a remote URL is fetched, proof writes a `.proof-fetch-lock.json` alongside the output file recording `{url, fetch_time, sha256_of_response}`. On subsequent compiles, the lock file is checked — if the SHA-256 still matches, the cache hits. If the remote content changes, the cache misses and the figure regenerates. Pinned figures (`proof pin`) that include a remote source must have their lock file committed.
+
+**`--output-file` format:** `--output-file` writes the **full markdown wrapper** including `<!-- proof:figure id="..." -->` marker, fenced code block, and `<!-- /proof:figure -->` closer — the same format as figure files. The raw ASCII content is always wrapped. Use `--output-file -` to write raw ASCII to stdout without the wrapper.
 
 ### Shape clipping
 
@@ -136,8 +142,12 @@ Output:
     ████████████████
 ```
 
+*(Illustrative — actual output varies by source image, dither mode, and shape geometry)*
+
 Available shapes: `circle`, `octagon` (stop sign), `shield` (NHL/heraldry),
 `star` (5-point), `heart`, `diamond`, `hexagon`, `pentagon`, `rounded-rect`.
+
+**Minimum sizes:** Shapes degrade at small widths. Recommended minimums: `circle` ≥ 10, `octagon` ≥ 14, `shield` ≥ 12, `star` ≥ 8. Below these thresholds, diagonal corners collapse to single characters and the shape may be unrecognizable. `FIGURE-003` fires on empty output but not on degraded-but-non-empty output — authors should preview at the target size.
 
 ---
 
@@ -168,6 +178,8 @@ proof figure generate --kind shape --name star --size 5 --id large-star
 | `portrait` | Human silhouette (stick figure or abstract) | — |
 | `banner` | Decorative text banner | `--text`, `--style` |
 | `seal` | Circular seal/emblem | `--text`, `--motto`, `--icon` |
+
+**Animal storage:** Built-in animal templates are embedded in the binary as static string data (Rust `include_str!` at compile time). Each animal is a ~20-line ASCII art block stored in `src/figure/animals/*.txt`. The full set adds ~8KB to the binary — acceptable for a CLI tool.
 
 ### Built-in animals
 
@@ -263,18 +275,19 @@ protection = "error"
 
 ## Integration with proof compile
 
-In `.source.md` files, use `proof:figure` as a directive to embed a named figure:
+### Cache key
+
+**Cache key:** The compile cache key for a figure include must incorporate directive attributes that affect output: `{resolve_key_of_source, dither, width, height, shape, label, invert, contrast, gamma}`. Changing any of these attributes produces a cache miss. Directive attributes are hashed alongside the source resolve_key before computing the compile_key — this is an extension to the standard three-tier model in COMPILE-SPEC.md.
+
+In `.source.md` files, use `proof:include kind=figure` to embed a named figure:
 
 ```
-```proof:figure
+```proof:include kind=figure
 md://figures/nhl/edm-logo.md#edm-logo:0
 ```
 ```
 
-This is identical to `proof:include` — the figure is resolved, validated against
-DaVinci invariants, and embedded with traceability. The distinction is semantic:
-`proof:include` for any element, `proof:figure` for figures specifically (enables
-`COMPILE-003` warning when figure has no DaVinci pin).
+Use `proof:include kind=figure` to embed a named figure. This is the preferred form — it triggers `FIGURE-005` (no DaVinci pin warning) when the `kind=figure` attribute is present, while plain `proof:include` without `kind=` does not. Authors using `proof:include` without `kind=figure` will not receive the pin reminder.
 
 ---
 
@@ -318,6 +331,8 @@ Source table (`nhl-teams.md`):
 ```
 
 Each team gets a `figures/nhl/{abbrev}-logo.md` with a `proof:figure id="{abbrev}-logo"` block.
+
+**Filename sanitization:** The `--text-field` value (e.g., `abbrev`) is used as the output filename stem. proof sanitizes it: lowercase, spaces → hyphens, non-alphanumeric (except `-_`) → stripped. `EDM` → `edm-logo.md`, `St. Louis` → `st-louis-logo.md`. The sanitized stem is also used as the figure `id`. Authors should verify sanitized names are unique across the team table.
 
 ---
 
