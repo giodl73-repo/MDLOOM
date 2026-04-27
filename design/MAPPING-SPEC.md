@@ -70,20 +70,20 @@ When no explicit mapping is provided, proof tries candidate names
 **Override always wins.** If you declare `name="Employee"`, auto-detection is
 skipped for that role.
 
-### Row binding (`foreach`)
+### Row binding (`proof:row source=`)
 
 In `proof:row`, `field=X` refers to the column `X` of the **current row** in
-the `foreach` loop:
+the `proof:row` loop:
 
 ```
-proof:row foreach=player in md://stats.md#edm:table:0
+proof:row source=md://stats.md#edm:table:0
   proof:element kind=label field=name width=24
   proof:element kind=value field=pts_82 width=6
 ```
 
-The variable `player` is bound to the current row object. `field=name` extracts
-`player["name"]` — the value of the `name` column in the current row.
-`field=` always refers to the current row's columns when inside a `foreach` loop.
+Each iteration binds the current row as an implicit context. `field=name` extracts
+the value of the `name` column in the current row.
+`field=` always refers to the current iteration's row — no variable name needed.
 
 ---
 
@@ -199,8 +199,7 @@ Each directive spec declares which roles it uses and their semantics:
 | `element/delta` | `field` | `field` | — |
 | `element/sparkline` | `field` (series) | `field` | — |
 | `element/mini-bar` | `field`, `max` | `field` | `max` |
-| `element/label` | `field` | `field` | — |
-| `element/badge` | `field` | `field` | — |
+| `element/label` | `field` | `field` | `style` (default\|badge) |
 
 ---
 
@@ -214,7 +213,7 @@ Each directive spec declares which roles it uses and their semantics:
 | `MAPPING-004` | warning | Multiple columns matched auto-detection — using first match; specify `field=` to be explicit |
 | `MAPPING-005` | error | Row selector `[row=X]` matched no rows |
 | `MAPPING-006` | warning | Filter matched 0 rows — source resolved to empty |
-| `MAPPING-007` | error | `foreach` loop source has no rows — nothing to render |
+| `MAPPING-007` | error | `proof:row source=` loop source has no rows — nothing to render |
 
 ---
 
@@ -233,7 +232,7 @@ Each directive spec declares which roles it uses and their semantics:
 - Query parameter parser (`?select=`, `?filter=`, `?top=`, `?sort=`)
 - Row selector parser (`[row=N]`, `[row=label]`)
 - Type coercion (`f64`, string, series)
-- `foreach` binding for `proof:row`
+- row source binding for `proof:row`
 
 ### File layout
 
@@ -245,7 +244,7 @@ src/mapping/
   query.rs      — ?filter=, ?select=, ?sort=, ?top=, ?skip= parsing
   selector.rs   — [row=N], [row=label] parsing
   coerce.rs     — type coercion (string → f64, etc.)
-  foreach.rs    — foreach loop binding for proof:row
+  row.rs      — source binding + field resolution for proof:row
 ```
 
 ---
@@ -255,5 +254,5 @@ src/mapping/
 - [Chart Spec](./chart-spec.md) — field roles for chart kinds
 - [Tree Spec](./tree-spec.md) — field roles for tree kinds (org, taxonomy, etc.)
 - [Element Spec](./element-spec.md) — field roles for element kinds
-- [Dashboard Spec](./dashboard-spec.md) — foreach and region content
+- [Dashboard Spec](./dashboard-spec.md) — proof:row source= and region content
 - [mdpath](../../mdpath/design/SPEC.md) — URI scheme (the addressing layer above mapping)

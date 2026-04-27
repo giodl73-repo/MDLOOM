@@ -47,7 +47,7 @@ md://stats/2025.md#edm-leaders:table:0
 ```
 
 ```proof:region name=player-table
-proof:row for=player source=md://stats/2025.md#edm:table:0 width=120
+proof:row source=md://stats/2025.md#edm:table:0 width=120
   proof:element kind=label field=name width=24
   proof:element kind=value field=pts_82 format="{:.1}" width=6
   proof:element kind=mini-bar field=pts_82 max=200 width=20 no-chrome
@@ -235,7 +235,7 @@ proof compile dashboard.source.md
 | D-2 | Every region: `x + width ≤ canvas width`, `y + height ≤ canvas height` |
 | D-3 | No two regions overlap (bounding boxes are disjoint) |
 | D-4 | Every `proof:element kind=value` resolves to a scalar |
-| D-5 | `proof:row` loop count (via `for=`/`source=`) matches source table row count |
+| D-5 | `proof:row` loop count (via `source=`) matches source table row count |
 | D-6 | Total canvas is exactly `width × height` characters (no jagged lines) |
 
 ---
