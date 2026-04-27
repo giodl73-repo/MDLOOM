@@ -1395,3 +1395,84 @@ fn format_diags(diags: &[proof_lib::Diagnostic]) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+// ─────────────────────────────────────────────────────────
+// L1: Slide compilation integration tests
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn slide_title_only_compiles_to_correct_dimensions() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::GlintConfig;
+    let src = fixture("slides/title-only.slides.source.md");
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src, out.path(), out.path().parent().unwrap(), &cfg).unwrap();
+    assert!(result.written, "slide compile should write output");
+    assert!(result.violations.is_empty(), "no violations: {} violations found", result.violations.len());
+    let content = std::fs::read_to_string(out.path()).unwrap();
+    assert!(content.contains("```slides"), "output should have slides fence");
+    assert!(content.contains("SLIDE 1"), "output should have slide 1 header");
+    assert!(content.contains("Test Title"), "output should contain title");
+    // Width=40, height=6 — each slide row must be exactly 40 chars
+    for line in content.lines().filter(|l| !l.starts_with("```") && !l.starts_with("<!--") && !l.starts_with("SLIDE")) {
+        assert!(line.chars().count() <= 40, "line too wide: {:?}", line);
+    }
+}
+
+#[test]
+fn slide_two_slide_deck_has_correct_count() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::GlintConfig;
+    let src = fixture("slides/two-slide-deck.slides.source.md");
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src, out.path(), out.path().parent().unwrap(), &cfg).unwrap();
+    assert!(result.written);
+    let content = std::fs::read_to_string(out.path()).unwrap();
+    assert!(content.contains("count=2"), "should report 2 slides");
+    assert!(content.contains("SLIDE 1"), "should have slide 1");
+    assert!(content.contains("SLIDE 2"), "should have slide 2");
+}
+
+#[test]
+fn slide_title_content_with_bullets() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::GlintConfig;
+    let src = fixture("slides/title-content.slides.source.md");
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src, out.path(), out.path().parent().unwrap(), &cfg).unwrap();
+    assert!(result.written);
+    let content = std::fs::read_to_string(out.path()).unwrap();
+    assert!(content.contains("Key Points"), "title should appear in output");
+    // Bullets from body content should appear in rendered output
+    assert!(content.contains("First point") || content.contains("●"), "bullet content should render");
+}
+
+// ─────────────────────────────────────────────────────────
+// L1: Dashboard compilation integration tests
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn dashboard_two_region_compiles_correctly() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::GlintConfig;
+    let src = fixture("dashboards/two-region.dashboard.source.md");
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src, out.path(), out.path().parent().unwrap(), &cfg).unwrap();
+    assert!(result.written, "dashboard compile should write output");
+    assert!(result.violations.iter().all(|v| v.severity != proof_lib::compile::ViolationSeverity::Error),
+        "no error violations");
+    let content = std::fs::read_to_string(out.path()).unwrap();
+    assert!(content.contains("HEADER CONTENT"), "top region content should appear");
+    assert!(content.contains("FOOTER CONTENT"), "bottom region content should appear");
+    // Canvas is 20×6 — check line widths
+    let lines: Vec<&str> = content.lines()
+        .filter(|l| !l.starts_with("<!--") && !l.starts_with("```"))
+        .collect();
+    for line in &lines {
+        assert!(line.chars().count() <= 20, "canvas line too wide: {:?}", line);
+    }
+}

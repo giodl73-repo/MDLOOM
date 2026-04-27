@@ -28,8 +28,12 @@ pub(crate) fn render_body_lines(body: &str, width: usize) -> Vec<String> {
     while i < lines.len() {
         let line = lines[i].trim();
 
-        // proof:notes — skip until end of block (SL-5)
-        if line.starts_with("proof:notes") {
+        // proof:notes — skip entire block until blank line (SL-5).
+        // Guard: only matches bare "proof:notes" directive, not prose containing the phrase.
+        // A line must be EXACTLY "proof:notes" (or "proof:notes" with only trailing spaces)
+        // to trigger the skip. This prevents "proof:notes are important" from being silently
+        // consumed.
+        if line == "proof:notes" {
             i += 1;
             while i < lines.len() && !lines[i].trim().is_empty() { i += 1; }
             i += 1;

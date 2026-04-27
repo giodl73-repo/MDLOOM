@@ -263,7 +263,7 @@ fn parse_slide_fence(
     let info = first.trim_start_matches('`').trim();
     let attrs_str = info.strip_prefix("proof:slide").unwrap_or("").trim();
 
-    let (layout, title, subtitle) = parse_slide_attrs(attrs_str, index)?;
+    let (layout, mut title, mut subtitle) = parse_slide_attrs(attrs_str, index)?;
 
     // Collect body lines until closing ```
     let mut body_lines: Vec<&str> = Vec::new();
@@ -275,7 +275,18 @@ fn parse_slide_fence(
         if t == "```" {
             break;
         }
-        // For title layout: extract YAML-style attrs from body
+        // Extract YAML-style key: "value" attrs from body lines.
+        // These override any values from the info string.
+        if t.starts_with("title:") {
+            let v = t["title:".len()..].trim().trim_matches('"').to_string();
+            if title.is_none() || !v.is_empty() { title = Some(v); }
+            continue;
+        }
+        if t.starts_with("subtitle:") {
+            let v = t["subtitle:".len()..].trim().trim_matches('"').to_string();
+            if subtitle.is_none() || !v.is_empty() { subtitle = Some(v); }
+            continue;
+        }
         if t.starts_with("author:") {
             author = Some(t["author:".len()..].trim().trim_matches('"').to_string());
             continue;

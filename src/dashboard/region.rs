@@ -7,6 +7,7 @@
 /// No nested fences. The proof:region fence IS the container.
 
 use crate::dashboard::canvas::Canvas;
+use unicode_width::UnicodeWidthChar;
 
 // ─────────────────────────────────────────────────────────
 // Region geometry
@@ -193,10 +194,11 @@ pub fn render_region_into_canvas(
         output_lines.truncate(region.height);
     }
 
-    // Pad each line to region width, then paste onto canvas
+    // Pad each line to region width using visual_width (not char count),
+    // then paste onto canvas. canvas.paste() also uses visual width internally.
     let padded: Vec<String> = output_lines.iter().map(|l| {
         let mut s = l.clone();
-        let w = s.chars().count(); // ASCII-safe for now
+        let w = crate::layout::visual_width(&s);
         if w < region.width { s.push_str(&" ".repeat(region.width - w)); }
         s
     }).collect();
@@ -208,14 +210,20 @@ pub fn render_region_into_canvas(
 }
 
 fn clip_to_width(s: &str, width: usize) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= width {
-        s.to_string()
-    } else {
-        let mut clipped: String = chars[..width.saturating_sub(1)].iter().collect();
-        clipped.push('…');
-        clipped
+    // Clip by visual_width, not char count, to handle wide chars correctly.
+    use crate::layout::visual_width;
+    let mut result = String::new();
+    let mut w = 0usize;
+    for ch in s.chars() {
+        let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
+        if w + cw > width.saturating_sub(1) {
+            result.push('…');
+            return result;
+        }
+        result.push(ch);
+        w += cw;
     }
+    result
 }
 
 // ─────────────────────────────────────────────────────────
@@ -237,7 +245,7 @@ impl Default for DashboardMeta {
 
 /// Parse dashboard front-matter. Hand-parsed — no YAML dependency.
 /// Expects:
-/// ```
+/// ```text
 /// dashboard:
 ///   width: 120
 ///   height: 40

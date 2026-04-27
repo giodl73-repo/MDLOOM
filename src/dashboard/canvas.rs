@@ -18,18 +18,25 @@ impl Canvas {
     }
 
     /// Paste `lines` at (x, y). Clips at canvas boundaries — no bleed.
+    /// Uses visual column position (visual_width per char) so wide chars (emoji,
+    /// CJK) do not cause column drift.
     pub fn paste(&mut self, x: usize, y: usize, lines: &[&str]) -> &mut Self {
+        use crate::layout::visual_width;
         for (dy, line) in lines.iter().enumerate() {
             let row = y + dy;
-            if row >= self.height {
-                break;
-            }
-            for (dx, ch) in line.chars().enumerate() {
-                let col = x + dx;
-                if col >= self.width {
-                    break;
-                }
+            if row >= self.height { break; }
+            let mut col = x; // visual column position
+            for ch in line.chars() {
+                if col >= self.width { break; }
                 self.buf[row * self.width + col] = ch;
+                let ch_w = if (0x2500..=0x28FF).contains(&(ch as u32))
+                    || (0x25A0..=0x25FF).contains(&(ch as u32)) { 1 }
+                    else { unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1) };
+                // Wide char: fill second column with space to avoid overlap
+                if ch_w >= 2 && col + 1 < self.width {
+                    self.buf[row * self.width + col + 1] = ' ';
+                }
+                col += ch_w;
             }
         }
         self

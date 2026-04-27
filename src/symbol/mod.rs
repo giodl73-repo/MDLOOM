@@ -73,18 +73,21 @@ impl Default for SymbolLibrary {
 // ─────────────────────────────────────────────────────────
 
 pub fn resolve<'a>(name: &str, lib: &'a SymbolLibrary) -> Option<ResolvedSymbol<'a>> {
-    // 1. Custom symbols (exact name match)
-    if let Some(c) = lib.custom.iter().find(|c| c.name == name) {
+    let lower = name.to_lowercase();
+    let lower = lower.as_str();
+
+    // 1. Custom symbols (case-insensitive name match, consistent with lookup())
+    if let Some(c) = lib.custom.iter().find(|c| c.name.to_lowercase() == lower) {
         return Some(ResolvedSymbol::Custom(c.clone()));
     }
 
-    // 2. Built-in exact name match
-    if let Some(entry) = BUILT_IN_SYMBOLS.iter().find(|s| s.name == name) {
+    // 2. Built-in exact name match (case-insensitive)
+    if let Some(entry) = BUILT_IN_SYMBOLS.iter().find(|s| s.name == lower) {
         return Some(ResolvedSymbol::BuiltIn(entry));
     }
 
-    // 3. Built-in alias match
-    if let Some(entry) = BUILT_IN_SYMBOLS.iter().find(|s| s.aliases.contains(&name)) {
+    // 3. Built-in alias match (case-insensitive)
+    if let Some(entry) = BUILT_IN_SYMBOLS.iter().find(|s| s.aliases.contains(&lower)) {
         return Some(ResolvedSymbol::BuiltIn(entry));
     }
 
@@ -141,13 +144,17 @@ pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWar
     let mut rest = text;
 
     while let Some(start) = rest.find("[sym:") {
-        // Check excluded context at the absolute position
+        // Check excluded context at the absolute position.
+        // Only count backticks on the CURRENT LINE (inline code can't cross line boundaries;
+        // fenced code blocks are pre-stripped by callers before this function is called).
         let abs_pos = text.len() - rest.len() + start;
         let before = &text[..abs_pos];
-        // Skip if inside inline code (odd backtick count)
-        let in_code = before.chars().filter(|&c| c == '`').count() % 2 != 0;
-        // Skip if inside a URL (preceded by scheme:// with no space)
-        let word_start = before.rfind(char::is_whitespace).map(|i| i + 1).unwrap_or(0);
+        let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let before_on_line = &before[line_start..];
+        // Skip if inside inline code (odd backtick count on current line only)
+        let in_code = before_on_line.chars().filter(|&c| c == '`').count() % 2 != 0;
+        // Skip if inside a URL (preceded by scheme:// with no whitespace gap)
+        let word_start = before_on_line.rfind(char::is_whitespace).map(|i| line_start + i + 1).unwrap_or(line_start);
         let word = &before[word_start..];
         let in_url = matches!(word.split_once("://"),
             Some((s, _)) if matches!(s, "http" | "https" | "md" | "ftp"));

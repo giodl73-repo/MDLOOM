@@ -15,8 +15,8 @@ use std::process::Command;
 // Helpers
 // ─────────────────────────────────────────────────────────
 
-fn glint_bin() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/glint")
+fn proof_bin() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/proof")
 }
 
 fn e2e_fixture(name: &str) -> PathBuf {
@@ -39,7 +39,7 @@ fn setup_workspace() -> tempfile::TempDir {
 }
 
 fn run_glint_in(dir: &Path, args: &[&str]) -> std::process::Output {
-    let bin = glint_bin();
+    let bin = proof_bin();
     if !bin.exists() {
         panic!("debug binary not found — run `cargo build` first");
     }
@@ -47,7 +47,7 @@ fn run_glint_in(dir: &Path, args: &[&str]) -> std::process::Output {
         .args(args)
         .current_dir(dir)
         .output()
-        .unwrap_or_else(|e| panic!("failed to run glint {args:?}: {e}"))
+        .unwrap_or_else(|e| panic!("failed to run proof {args:?}: {e}"))
 }
 
 // ─────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ fn run_glint_in(dir: &Path, args: &[&str]) -> std::process::Output {
 
 #[test]
 fn e2e_stage1_rich_output_contains_errors_with_context() {
-    if !glint_bin().exists() { return; }
+    if !proof_bin().exists() { return; }
     let ws = setup_workspace();
     let rich_path = ws.path().join("rich.json");
 
@@ -121,7 +121,7 @@ fn e2e_stage1_rich_output_contains_errors_with_context() {
 
 #[test]
 fn e2e_stage3_fix_plan_resolves_all_errors() {
-    if !glint_bin().exists() { return; }
+    if !proof_bin().exists() { return; }
     let ws = setup_workspace();
 
     // Verify errors exist before fixing
@@ -230,7 +230,7 @@ fn e2e_stage3_fix_plan_resolves_all_errors() {
 
 #[test]
 fn e2e_full_pipeline_check_rich_fix_verify() {
-    if !glint_bin().exists() { return; }
+    if !proof_bin().exists() { return; }
     let ws = setup_workspace();
 
     // Stage 1: generate rich.json
