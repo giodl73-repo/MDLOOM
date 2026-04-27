@@ -6,6 +6,8 @@ use crate::davinci::evaluate_invariant;
 use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use crate::runner::Runner;
 use crate::diagnostic::Severity;
+use crate::tree::schema::{FieldMap, generate_org, generate_taxonomy, generate_dependency, generate_outline};
+use crate::tree::dirtree::{DirtreeOptions, generate as dirtree_generate};
 
 // ─────────────────────────────────────────────────────────
 // Public result types
@@ -57,6 +59,67 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    Tree {
+        kind: String,                   // dirtree | org | taxonomy | dependency | outline
+        source: Option<String>,         // md:// URI for schema-driven kinds
+        attrs: TreeAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+}
+
+/// Parsed attributes from a proof:tree directive.
+#[derive(Debug, Default)]
+pub struct TreeAttrs {
+    pub name: Option<String>,
+    pub parent: Option<String>,
+    pub label: Option<String>,
+    pub format: String,              // "table" (default) or "json"
+    pub indent_width: usize,         // default: 4
+    pub root: Option<String>,        // for dirtree: filesystem root
+    pub max_depth: Option<usize>,
+    pub exclude: Vec<String>,
+}
+
+impl TreeAttrs {
+    fn parse(attrs_str: &str) -> Self {
+        let mut out = TreeAttrs {
+            format: "table".to_string(),
+            indent_width: 4,
+            ..Default::default()
+        };
+        let mut rest = attrs_str.trim();
+        while !rest.is_empty() {
+            if let Some(eq) = rest.find('=') {
+                let key = rest[..eq].trim();
+                rest = &rest[eq + 1..];
+                let (val, next) = if rest.starts_with('"') {
+                    if let Some(close) = rest[1..].find('"') {
+                        (&rest[1..close + 1], &rest[close + 2..])
+                    } else { ("", "") }
+                } else {
+                    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                    (&rest[..end], &rest[end..])
+                };
+                match key {
+                    "name"         => out.name = Some(val.to_string()),
+                    "parent"       => out.parent = Some(val.to_string()),
+                    "label"        => out.label = Some(val.to_string()),
+                    "format"       => out.format = val.to_string(),
+                    "indent-width" => out.indent_width = val.parse().unwrap_or(4),
+                    "root"         => out.root = Some(val.to_string()),
+                    "max-depth"    => out.max_depth = val.parse().ok(),
+                    "exclude"      => out.exclude = val.split(',').map(|s| s.trim().to_string()).collect(),
+                    _ => {}
+                }
+                rest = next.trim_start();
+            } else {
+                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                rest = &rest[end..].trim_start();
+            }
+        }
+        out
+    }
 }
 
 impl Directive {
@@ -65,6 +128,7 @@ impl Directive {
             Directive::Include { line_start, .. } => *line_start,
             Directive::Layout { line_start, .. } => *line_start,
             Directive::Table { line_start, .. } => *line_start,
+            Directive::Tree { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -72,6 +136,7 @@ impl Directive {
             Directive::Include { line_end, .. } => *line_end,
             Directive::Layout { line_end, .. } => *line_end,
             Directive::Table { line_end, .. } => *line_end,
+            Directive::Tree { line_end, .. } => *line_end,
         }
     }
 }
@@ -232,6 +297,37 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         directives.push(Directive::Table { uri, line_start, line_end });
                     }
                 }
+                "tree" => {
+                    // Info string: "proof:tree kind=org name="Employee" parent="Manager""
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:tree")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Extract kind from attrs (first key=value or standalone word)
+                    let kind = info_after
+                        .split_whitespace()
+                        .find_map(|tok| {
+                            if tok.starts_with("kind=") {
+                                Some(tok.strip_prefix("kind=").unwrap_or("dirtree")
+                                    .trim_matches('"').to_string())
+                            } else if !tok.contains('=') {
+                                Some(tok.to_string()) // bare kind name
+                            } else { None }
+                        })
+                        .unwrap_or_else(|| "dirtree".to_string());
+
+                    let attrs = TreeAttrs::parse(&info_after);
+
+                    // Source URI is the first md:// line in the body (for schema kinds)
+                    let source = body.iter().find_map(|l| {
+                        let t = l.trim();
+                        if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                    });
+
+                    directives.push(Directive::Tree { kind, source, attrs, line_start, line_end });
+                }
                 _ => {}
             }
         }
@@ -247,6 +343,7 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     if rest.starts_with("include") { Some("include") }
     else if rest.starts_with("layout") { Some("layout") }
     else if rest.starts_with("table")  { Some("table") }
+    else if rest.starts_with("tree")   { Some("tree") }
     else { None }
 }
 
@@ -375,6 +472,22 @@ pub fn compile_file(
                         source_lines[line_start..=line_end].join("\n")
                     }
                 }
+            }
+
+            Directive::Tree { kind, source, attrs, .. } => {
+                generate_tree_block(kind, source.as_deref(), attrs, root, line_start, &mut violations)
+                    .unwrap_or_else(|e| {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: source.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("tree generation failed: {}", e),
+                            source_line: line_start + 1,
+                        });
+                        source_lines[line_start..=line_end].join("\n")
+                    })
             }
         };
 
@@ -564,6 +677,67 @@ fn apply_replacements(source_lines: &[&str], replacements: &[(usize, usize, Stri
 /// Derive output path from source path.
 /// `foo.source.md` → `foo.md` (drops `.source.`).
 /// Any other `.md` file → None (require explicit -o).
+/// Generate a tree block for embedding in compiled output.
+fn generate_tree_block(
+    kind: &str,
+    source: Option<&str>,
+    attrs: &TreeAttrs,
+    root: &Path,
+    source_line: usize,
+    _violations: &mut Vec<CompileViolation>,
+) -> Result<String> {
+    let body = match kind {
+        "dirtree" => {
+            let tree_root = attrs.root.as_ref()
+                .map(|r| root.join(r))
+                .unwrap_or_else(|| root.to_path_buf());
+            let opts = DirtreeOptions {
+                root: tree_root,
+                max_depth: attrs.max_depth,
+                exclude: attrs.exclude.clone(),
+                wrap_fence: false,
+                indent_width: attrs.indent_width,
+                ..Default::default()
+            };
+            dirtree_generate(&opts)?
+        }
+        _ => {
+            let src_uri = source.ok_or_else(|| {
+                anyhow::anyhow!("proof:tree kind={} requires a source URI in the body", kind)
+            })?;
+            let content = resolve_source_for_compile(src_uri, root)?;
+            let mut map = FieldMap::default();
+            match kind {
+                "org"        => generate_org(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                "taxonomy"   => generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                "dependency" => generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                "outline"    => generate_outline(&content, attrs.indent_width)?,
+                other => anyhow::bail!("unknown tree kind {:?}", other),
+            }
+        }
+    };
+
+    let uris = source.map(|s| s.to_string()).unwrap_or_default();
+    Ok(format!(
+        "<!-- proof:compiled from=\"proof:tree kind={}\" uri=\"{}\" -->\n```{}\n{}\n```\n<!-- /proof:compiled -->",
+        kind, uris, kind, body
+    ))
+}
+
+fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
+    if src.starts_with("md://") {
+        let parsed = mdpath::parse(src)
+            .map_err(|e| anyhow::anyhow!("invalid URI {:?}: {}", src, e))?;
+        let element = mdpath::resolve(&parsed, root)
+            .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", src, e))?;
+        Ok(element.content)
+    } else {
+        let path = root.join(src);
+        std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))
+    }
+}
+
 pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
     let name = source.file_name()?.to_str()?;
     if let Some(stem) = name.strip_suffix(".source.md") {

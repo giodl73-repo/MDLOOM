@@ -547,53 +547,29 @@ pub fn generate_outline(content: &str, indent_width: usize) -> Result<String> {
 /// Render a Vec<TreeNode> to a formatted tree string (no fence).
 pub fn render_nodes(nodes: &[TreeNode], indent_width: usize) -> String {
     let iw = indent_width.max(1);
-    let mut lines: Vec<String> = Vec::new();
-
-    // Track which levels are still "open" (have more siblings below)
-    // This determines whether to use │    or     prefix
     let n = nodes.len();
-    let mut open_levels: HashSet<usize> = HashSet::new();
+    let mut lines: Vec<String> = Vec::new();
 
     for i in 0..n {
         let node = &nodes[i];
+        if node.connector == Connector::Continuation { continue; }
+
         let level = node.indent_level;
 
-        // Update open_levels: a level is open if there's a Tee node at that level below
-        // For simplicity, pre-compute: open_at_level[i][level] = true if any subsequent
-        // node at same or higher level has Tee connector.
-        // We do this inline: if current node is Tee, its level is open.
-        if node.connector == Connector::Tee {
-            open_levels.insert(level);
-        } else if node.connector == Connector::Corner {
-            open_levels.remove(&level);
-        }
-
-        // Build the prefix from open_levels
+        // Build prefix for ancestor levels 0..level-1.
+        // A level L is "open" at position i if a later node at level L exists
+        // (as a sibling) without first leaving level L (i.e. a node at level < L appears).
         let prefix = if level == 0 {
             String::new()
         } else {
             let mut p = String::new();
-            for l in 0..level {
-                // Check if level l is still open (has more siblings)
-                // We need to look at whether there are any Tee nodes at level l after position i
-                let level_open = nodes[i+1..].iter().any(|next| {
-                    next.indent_level == l && next.connector == Connector::Tee
-                }) || nodes[i+1..].iter().any(|next| {
-                    next.indent_level == l && next.connector != Connector::Continuation
-                    && nodes.iter().skip(i+1).take_while(|n| n.indent_level >= l)
-                        .any(|n| n.indent_level == l && n.connector == Connector::Tee)
-                });
-
-                // Simplified: a level is open if there's a same-level Tee connector later
-                let simply_open = nodes[i+1..].iter().any(|next| {
-                    next.indent_level == l
-                        && (next.connector == Connector::Tee || next.connector == Connector::Corner)
-                });
-                let _ = level_open;
-
-                if simply_open {
+            // Start from l=1: root (l=0) never needs a continuation │.
+            // Each ancestor level from 1..level adds │   (open) or     (closed).
+            for l in 1..level {
+                let open = is_level_open(nodes, i, l);
+                if open {
                     p.push('│');
-                    for _ in 0..iw-1 { p.push(' '); }
+                    for _ in 0..iw.saturating_sub(1) { p.push(' '); }
                 } else {
                     for _ in 0..iw { p.push(' '); }
                 }
@@ -605,13 +581,26 @@ pub fn render_nodes(nodes: &[TreeNode], indent_width: usize) -> String {
             Connector::None => "",
             Connector::Tee => "├── ",
             Connector::Corner => "└── ",
-            Connector::Continuation => "│",
+            Connector::Continuation => "",
         };
 
         lines.push(format!("{}{}{}", prefix, connector_str, node.label));
     }
 
     lines.join("\n")
+}
+
+/// Returns true if level `l` is still "open" at position `pos` — i.e. there
+/// is a sibling at level `l` after `pos` without any node at level < `l` in between.
+fn is_level_open(nodes: &[TreeNode], pos: usize, l: usize) -> bool {
+    for node in &nodes[pos + 1..] {
+        if node.connector == Connector::Continuation { continue; }
+        if node.indent_level < l { return false; } // left the branch
+        if node.indent_level == l {
+            return node.connector == Connector::Tee || node.connector == Connector::Corner;
+        }
+    }
+    false
 }
 
 // ─────────────────────────────────────────────────────────
