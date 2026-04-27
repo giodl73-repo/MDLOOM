@@ -23,47 +23,36 @@ dashboard:
   width: 120
   height: 40
   title: "EDM 2025-26 — Team Dashboard"
+  regions:
+    header:       { x: 0,  y: 0,  width: 120, height: 3  }
+    forwards:     { x: 0,  y: 3,  width: 40,  height: 20 }
+    defense:      { x: 41, y: 3,  width: 40,  height: 20 }
+    stats:        { x: 82, y: 3,  width: 38,  height: 20 }
+    player-table: { x: 0,  y: 24, width: 120, height: 16 }
 ---
-
-# Regions
-
-## header
-x: 0, y: 0, width: 120, height: 3
-
-## forwards-tree
-x: 0, y: 3, width: 40, height: 20
-
-## stats-chart
-x: 82, y: 3, width: 38, height: 20
-
-## player-table
-x: 0, y: 24, width: 120, height: 16
-
-# Content
 
 ```proof:region name=header
 proof:element kind=label value="EDMONTON OILERS" width=40
-proof:element kind=sparkline width=20 no-chrome
-md://stats/2025.md#edm:table:0?select=date,pts
+proof:element kind=sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
 ```
 
-```proof:region name=forwards-tree
+```proof:region name=forwards
 proof:tree kind=org name="Player" parent="Line" label="Score"
 md://reports/edm-forwards.md#depth:table:0
 ```
 
-```proof:region name=stats-chart
+```proof:region name=stats
 proof:chart kind=bar no-chrome
 md://stats/2025.md#edm-leaders:table:0
 ```
 
 ```proof:region name=player-table
-proof:row foreach=player in md://stats/2025.md#edm:table:0 width=120
+proof:row for=player source=md://stats/2025.md#edm:table:0 width=120
   proof:element kind=label field=name width=24
   proof:element kind=value field=pts_82 format="{:.1}" width=6
   proof:element kind=mini-bar field=pts_82 max=200 width=20 no-chrome
   proof:element kind=sparkline width=10 no-chrome field=career_arc
-  proof:element kind=badge field=expiry_type width=5
+  proof:element kind=label style=badge field=expiry_type width=5
   proof:element kind=delta field=improvement format="{:+.2}" width=6
 ```
 ```
@@ -85,6 +74,10 @@ clipped to their declared bounding box.
 │   player-table   [0,24 120×16]                             │
 (0,40)──────────────────────────────────────────────(120,40)
 ```
+
+### Canvas coordinate system
+
+Coordinates are **0-indexed**: column 0 is the leftmost character, row 0 is the top line. A region at `x: 41` starts at column index 41 (0-based). Canvas cells not covered by any region are filled with a **space** character (`' '`). The defense region example in the diagram (`[41,3 40×20]`) is a separate region from forwards (`[0,3 40×20]`) — column 40 (the border between them at 0-index) belongs to neither; it is a space. Authors who want a visual border between regions declare a narrow separator region.
 
 ---
 
@@ -114,6 +107,8 @@ proof compile report.dashboard.source.md
 proof compile report.dashboard.source.md --width 80 --height 24
 # → report.dashboard.md (canvas scaled to 80×24)
 ```
+
+Dashboard compile cache key includes: `source_parse_key`, all region `source` resolve_keys, layout config hash, **canvas_width, canvas_height**. Changing `--width` or `--height` produces a cache miss even if source data is unchanged.
 
 Output format:
 
@@ -151,6 +146,22 @@ Nikita Kucherov          130.2  ████████████████
 - If content overflows `width` → line truncated with `…`
 - If content overflows `height` → lines clipped at boundary
 - If content underflows → padded with spaces to fill the box
+
+### Region content parsing
+
+Inside a `proof:region` fenced block, lines are parsed as follows:
+
+- A line starting with `proof:element`, `proof:tree`, `proof:chart`, `proof:row` (after optional leading spaces) is a **directive line** — processed as a proof: directive
+- All other lines are **literal content** — rendered verbatim
+
+Directive lines do NOT use fenced blocks inside a region. They are single-line directives with their source URI on the next line:
+
+```
+proof:element kind=label value="EDMONTON OILERS" width=40 no-chrome
+proof:sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
+```
+
+The `proof:region` block itself is the container fence. No nested fences.
 
 ---
 
@@ -212,6 +223,7 @@ proof compile dashboard.source.md
 | `--height N` | Override canvas height |
 | `--region name` | Render only one region (for partial updates) |
 | `--no-chrome` | Suppress fence and traceability comment (raw canvas only) |
+| `--explain` | Write a JSON traceability manifest alongside the compiled output showing which source URI produced each canvas region |
 
 ---
 
@@ -223,7 +235,7 @@ proof compile dashboard.source.md
 | D-2 | Every region: `x + width ≤ canvas width`, `y + height ≤ canvas height` |
 | D-3 | No two regions overlap (bounding boxes are disjoint) |
 | D-4 | Every `proof:element kind=value` resolves to a scalar |
-| D-5 | `foreach` loop count matches source table row count |
+| D-5 | `proof:row` loop count (via `for=`/`source=`) matches source table row count |
 | D-6 | Total canvas is exactly `width × height` characters (no jagged lines) |
 
 ---
@@ -236,7 +248,7 @@ proof compile dashboard.source.md
 | `DASHBOARD-002` | error | Region `y + height` exceeds canvas height |
 | `DASHBOARD-003` | error | Two regions overlap |
 | `DASHBOARD-004` | error | Named region in content has no front-matter declaration |
-| `DASHBOARD-005` | warning | Region content overflows declared height — lines clipped |
+| `DASHBOARD-005` | warning | Region content overflows declared height — lines N..M clipped (N lines lost); use --explain to see clipped content |
 | `DASHBOARD-006` | warning | Region content underflows declared width — padded with spaces |
 
 ---

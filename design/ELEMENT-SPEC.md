@@ -25,8 +25,7 @@ is raw characters only.
 | `delta` | `+12.3` or `−4.1` | 1 | scalar, rendered with sign |
 | `sparkline` | `▁▂▅▇█▆▄` | 1 | series column from table |
 | `mini-bar` | `████░░░` | 1 | scalar + max → filled/empty bars |
-| `label` | `Connor McDavid` | 1 | string from table cell |
-| `badge` | `UFA` | 1 | enumerated string, styled |
+| `label` | `Connor McDavid` or `UFA` | 1 | string from table cell; `style=badge` for short enumerated values |
 
 ---
 
@@ -56,16 +55,17 @@ md://stats/2025.md#mcdavid:table:0[row=0]
 
 | Attribute | Kinds | Default | Description |
 |-----------|-------|---------|-------------|
-| `kind` | all | required | `value`, `delta`, `sparkline`, `mini-bar`, `label`, `badge` |
+| `kind` | all | required | `value`, `delta`, `sparkline`, `mini-bar`, `label` |
 | `width` | all | auto | Exact character budget. Element MUST fit in N chars |
 | `height` | all | 1 | Line budget (micro-elements default to 1 line) |
 | `no-chrome` | all | false | Strip all framing: no fence, label, axis, title. Output is raw chars |
-| `field` | value, delta, mini-bar, label, badge | — | Column/key to extract from source row |
+| `field` | value, delta, mini-bar, label | — | Column/key to extract from source row |
 | `format` | value, delta | `{}` | Rust-style format string for numerics (`{:.1}`, `{:+.2}`) |
 | `align` | all | left | `left`, `right`, `center` within width budget |
 | `max` | mini-bar | auto | Scale reference for bar fill (default: max across all rows) |
 | `fill` | mini-bar, sparkline | `█`, `░` | Fill and empty characters |
-| `value` | label, badge | — | Inline literal value (alternative to source URI) |
+| `style` | label | `default` | `badge` renders as short enumerated value (right-padded to `width`); `default` is plain string |
+| `value` | label | — | Inline literal value (alternative to source URI) |
 
 ---
 
@@ -121,13 +121,11 @@ proof:element kind=label field=name width=24 align=left
 → "Connor McDavid          "
 ```
 
-### `badge`
-
-Like `label` but for short enumerated strings (`UFA`, `RFA`, `ELC`, `LTIR`, `NTC`).
+With `style=badge` — for short enumerated strings (`UFA`, `RFA`, `ELC`, `LTIR`, `NTC`).
 Right-padded to `width` with spaces. Future: color coding via ANSI when terminal supports it.
 
 ```
-proof:element kind=badge field=expiry_type width=5
+proof:element kind=label style=badge field=expiry_type width=5
 → "UFA  "
 ```
 
@@ -135,11 +133,15 @@ proof:element kind=badge field=expiry_type width=5
 
 ## `no-chrome` mode
 
-When `no-chrome` is set, the output is:
-- No enclosing ` ``` ` fence
-- No `<!-- proof:compiled from=... -->` traceability comment
-- No labels, axes, titles, or padding beyond `width`
-- Raw characters only — suitable for embedding inside a GFM table cell or `proof:row`
+When `no-chrome` is set, the following are suppressed per kind:
+
+- **All kinds**: enclosing ` ``` ` fence lines, `<!-- proof:compiled -->` HTML comments, element-level title/heading above output
+- **`value`, `delta`, `label`**: axis labels, surrounding whitespace beyond width budget
+- **`sparkline`**: axis, legend, title
+- **`mini-bar`**: axis labels, scale labels, surrounding border
+- **`label` with `style=badge`**: any box/border styling
+
+NOT suppressed by `no-chrome`: the value itself, padding to `width`, alignment.
 
 Without `no-chrome` (default): the element is wrapped in a fenced code block with a traceability comment, same as `proof:include`.
 
@@ -164,20 +166,23 @@ In practice, `proof:row` is a cleaner way to build table rows — see DASHBOARD-
 `proof:row` renders a single horizontal line of elements side-by-side with column pinning.
 
 ```
-```proof:row foreach=player in md://stats/2025.md#edm:table:0 separator=" "
+```proof:row for=player source=md://stats/2025.md#edm:table:0 separator=" "
 proof:element kind=label field=name width=24 align=left
 proof:element kind=value field=pts_82 format="{:.1}" width=6 align=right
 proof:element kind=mini-bar field=pts_82 max=200 width=20 no-chrome
 proof:element kind=sparkline width=10 no-chrome field=career_arc
-proof:element kind=badge field=expiry_type width=5
+proof:element kind=label style=badge field=expiry_type width=5
 proof:element kind=delta field=improvement format="{:+.2}" width=6
 ```
 ```
 
-- `foreach` — iterate over rows of a source table, emit one line per row
+- `for` — declares the loop variable name; iterate over rows of a source table, emit one line per row
+- `source` — the data URI that resolves to the source table
 - Each element gets its exact `width` budget — no overflow permitted
 - `separator` — character(s) between elements (default: single space)
 - Column positions are pinned: element N always starts at the sum of widths 1..N-1
+
+**Field binding in foreach loops:** The loop variable (declared with `for=`) is bound to a `HashMap<String, String>` — one entry per column header in the source table. Inside the loop body, `field=name` extracts `current_row["name"]`. The `source=` URI resolves to a table; one output line is produced per table row.
 
 **Invariant R-1**: sum of element widths + separators must equal the declared row width.
 
@@ -193,6 +198,7 @@ proof:element kind=delta field=improvement format="{:+.2}" width=6
 | E-4 | `kind=mini-bar` fill proportion = `field / max` within ±1 char |
 | E-5 | `no-chrome` output contains no fence lines and no HTML comments |
 | E-6 | `align=right` right-aligns within `width`; `align=center` centers (tie-break: extra space on right) |
+| E-7 | `kind=label style=badge` right-pads to `width` with spaces; does not truncate unless value exceeds `width` |
 | R-1 | `proof:row` total column widths + separators = declared row width |
 
 ---
@@ -204,7 +210,7 @@ proof:element kind=delta field=improvement format="{:+.2}" width=6
 | `ELEMENT-001` | error | `width` exceeded — output would be wider than declared budget |
 | `ELEMENT-002` | error | `kind=value` resolved to non-scalar (list or empty) |
 | `ELEMENT-003` | warning | `kind=sparkline` series has fewer values than `width` — values repeated |
-| `ELEMENT-004` | error | `proof:row` column widths + separators ≠ declared row width |
+| `ELEMENT-004` | error | `proof:row` column widths + separators ≠ declared row width (found=X expected=Y) |
 | `ELEMENT-005` | error | `field` not found in source table |
 
 ---
