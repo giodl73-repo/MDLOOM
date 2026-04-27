@@ -157,27 +157,82 @@ and emits a formatted dirtree. Options:
 For non-dirtree kinds, the source data lives at an `md://` address. Proof reads the
 source, validates it against the kind's schema, and generates the tree.
 
-### Source schema format
+### Field mapping — flexible, not rigid
 
-Each tree kind defines a **source schema** — a markdown table or YAML front-matter block
-that proof can parse to produce a tree. The schema specifies the structure, and proof
-generates the ASCII tree from it.
+Proof does **not** require specific column names. Instead, it uses a field mapping
+strategy:
+
+1. **Explicit mapping** — you declare which field/column maps to which role via
+   directive attributes or `proof tree generate` flags.
+2. **Auto-detection** — if no mapping is provided, proof searches for common names
+   (case-insensitive) in the source table's headers or JSON keys.
+
+This means your existing data works as-is, with column names like `Employee`/`Manager`
+or `taxon`/`parent_taxon` — no renaming required.
+
+### Source formats
+
+| Format | How to address |
+|--------|----------------|
+| GFM markdown table | `md://path.md#section:table:0` |
+| JSON array of objects | `md://path.json` (future: `md://path.md#:json:0` for embedded JSON) |
+| YAML sequence | `md://path.yaml` (future) |
+
+For Wave 3, **markdown tables** and **inline JSON** are the primary formats.
+
+### Directive syntax (compile mode)
+
+```
+```proof:tree kind=org name="Employee" parent="Manager" label="Title"
+md://org/team.md#:table:0
+```
+```
+
+```
+```proof:tree kind=org format=json name="full_name" parent="reports_to" label="title"
+md://org/team.json
+```
+```
+
+### CLI syntax
 
 ```bash
-proof tree generate --kind org md://docs/team.md#engineering-org:table:0
-proof tree generate --kind taxonomy md://biology/vertebrates.md#:0
-proof tree generate --kind dependency md://docs/deps.md#:table:0
+proof tree generate --kind org \
+    --name "Employee" --parent "Manager" --label "Title" \
+    md://org/team.md#:table:0
+
+proof tree generate --kind org --format json \
+    --name "full_name" --parent "reports_to" \
+    md://org/team.json
 ```
+
+### Auto-detection defaults per kind
+
+If no field mapping is provided, proof tries these names (case-insensitive, first match wins):
+
+| Kind | name field | parent field | extra fields |
+|------|-----------|--------------|-------------|
+| `org` | `name`, `employee`, `person`, `member` | `parent`, `manager`, `reports_to`, `superior` | `label`, `title`, `role` |
+| `taxonomy` | `label`, `name`, `taxon`, `term` | `parent`, `parent_taxon`, `belongs_to` | `level`, `rank` |
+| `dependency` | `package`, `name`, `module`, `crate` | `depends_on`, `requires`, `dependency`, `uses` | `version` |
+| `decision` | `node`, `condition`, `question`, `id` | — (special: `yes`, `no` are branch targets) | `label` |
+| `outline` | uses heading text directly | uses heading level | — |
+
+### Root marker
+
+For tabular kinds (org, taxonomy, dependency), a node with no parent is the root.
+Accepted root markers (auto-detected): `—`, `-`, `none`, `null`, `` (empty), `0`.
+Override with `--root-marker "ROOT"`.
 
 ---
 
 ### `org` — organizational hierarchy
 
-**Source schema** (markdown table):
+**Source — any table with name + parent columns:**
 
 ```markdown
-| Name | Parent | Label |
-|------|--------|-------|
+| Employee | Manager | Title |
+|----------|---------|-------|
 | Gio | — | CTO |
 | Alice | Gio | VP Engineering |
 | Bob | Alice | Staff Engineer |
@@ -185,7 +240,20 @@ proof tree generate --kind dependency md://docs/deps.md#:table:0
 | Dave | Gio | VP Product |
 ```
 
-`Parent = —` marks the root. `Label` is optional display text (defaults to `Name`).
+Auto-detected: `Employee` → name, `Manager` → parent, `Title` → label.
+
+Or explicit: `name="Employee" parent="Manager" label="Title"`
+
+**JSON source:**
+
+```json
+[
+  {"id": "gio", "full_name": "Gio", "reports_to": null, "title": "CTO"},
+  {"id": "alice", "full_name": "Alice", "reports_to": "gio", "title": "VP Eng"}
+]
+```
+
+Directive: `kind=org format=json name="full_name" parent="reports_to" label="title"`
 
 **Generated tree:**
 ```
