@@ -192,10 +192,14 @@ or sparse. Invariant C-7 validates this.
 
 ---
 
-## Source schema — shared format
+## Source schema and field mapping
 
-All chart kinds read from a **markdown table** at the source `md://` address.
-The table structure is kind-specific but follows GFM table format.
+All chart kinds read from a source addressed via `md://`. Field binding
+(explicit overrides, auto-detection, query parameters, row selectors, type
+coercion, numeric formatting) follows **[MAPPING-SPEC.md](./mapping-spec.md)**.
+
+Per-kind roles are listed below. The source format defaults to GFM markdown
+table; override with `format=json` for JSON array sources.
 
 ### 2D graph (line / scatter)
 

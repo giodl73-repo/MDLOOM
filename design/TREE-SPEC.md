@@ -159,8 +159,12 @@ source, validates it against the kind's schema, and generates the tree.
 
 ### Field mapping — flexible, not rigid
 
-Proof does **not** require specific column names. Instead, it uses a field mapping
-strategy:
+Proof does **not** require specific column names. Field binding follows
+**[MAPPING-SPEC.md](./mapping-spec.md)** — the shared system for all proof
+directives. Summary below; the full spec covers query parameters, row selectors,
+type coercion, and numeric formatting.
+
+Proof uses a field mapping strategy:
 
 1. **Explicit mapping** — you declare which field/column maps to which role via
    directive attributes or `proof tree generate` flags.
