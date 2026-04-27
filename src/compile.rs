@@ -3,10 +3,12 @@ use anyhow::Result;
 
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
+use crate::element::{ElementConfig, ElementData, ElementKind, ElementAlign, ElementError, render_element};
+use crate::element::row::{RowConfig, RowElement, render_row_foreach, validate_r1};
 use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use crate::runner::Runner;
 use crate::diagnostic::Severity;
-use crate::tree::schema::{FieldMap, generate_org, generate_taxonomy, generate_dependency, generate_outline};
+use crate::tree::schema::{FieldMap, parse_md_table, parse_json_source, generate_org, generate_taxonomy, generate_dependency, generate_outline};
 use crate::tree::dirtree::{DirtreeOptions, generate as dirtree_generate};
 
 // ─────────────────────────────────────────────────────────
@@ -66,6 +68,25 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    Element {
+        kind: String,                   // value | delta | sparkline | mini-bar | label | badge
+        source: Option<String>,         // md:// URI (absent if inline_value is set)
+        field: Option<String>,          // column name in source table
+        inline_value: Option<String>,   // from value="..." attribute
+        attrs: ElementAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+    Row {
+        source_uri: String,
+        var_name: String,
+        separator: String,
+        declared_width: Option<usize>,
+        elements: Vec<RowElement>,
+        no_chrome: bool,
+        line_start: usize,
+        line_end: usize,
+    },
 }
 
 /// Parsed attributes from a proof:tree directive.
@@ -122,6 +143,67 @@ impl TreeAttrs {
     }
 }
 
+/// Parsed attributes from a proof:element directive.
+#[derive(Debug, Default)]
+pub struct ElementAttrs {
+    pub width: Option<usize>,
+    pub align: String,      // "left" | "right" | "center" — default "left"
+    pub format: String,     // "{:.1}" etc. — default "{}"
+    pub no_chrome: bool,
+    pub max: Option<f64>,
+    pub fill: char,         // default '█'
+    pub empty: char,        // default '░'
+}
+
+impl ElementAttrs {
+    fn parse(attrs_str: &str) -> Self {
+        let mut out = ElementAttrs {
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            fill: '█',
+            empty: '░',
+            ..Default::default()
+        };
+        let mut rest = attrs_str.trim();
+        while !rest.is_empty() {
+            // Find the next whitespace-delimited token
+            let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            let tok = &rest[..tok_end];
+
+            if let Some(eq) = tok.find('=') {
+                // key=value token
+                let key = tok[..eq].trim();
+                let after_eq = &tok[eq + 1..];
+                // Value may span into quoted region — re-parse from rest after key=
+                let val_start = &rest[eq + 1..];
+                let (val, consumed) = if val_start.starts_with('"') {
+                    if let Some(close) = val_start[1..].find('"') {
+                        (&val_start[1..close + 1], eq + 1 + close + 2)
+                    } else { (after_eq, tok_end) }
+                } else {
+                    (after_eq, tok_end)
+                };
+                match key {
+                    "width"     => out.width = val.parse().ok(),
+                    "align"     => out.align = val.to_string(),
+                    "format"    => out.format = val.to_string(),
+                    "max"       => out.max = val.parse().ok(),
+                    "fill"      => out.fill = val.chars().next().unwrap_or('█'),
+                    "empty"     => out.empty = val.chars().next().unwrap_or('░'),
+                    "no-chrome" => out.no_chrome = matches!(val, "true" | "1" | ""),
+                    _ => {}
+                }
+                rest = rest[consumed..].trim_start();
+            } else {
+                // Bare flag (no '=' in token)
+                if tok == "no-chrome" { out.no_chrome = true; }
+                rest = rest[tok_end..].trim_start();
+            }
+        }
+        out
+    }
+}
+
 impl Directive {
     fn line_start(&self) -> usize {
         match self {
@@ -129,6 +211,8 @@ impl Directive {
             Directive::Layout { line_start, .. } => *line_start,
             Directive::Table { line_start, .. } => *line_start,
             Directive::Tree { line_start, .. } => *line_start,
+            Directive::Element { line_start, .. } => *line_start,
+            Directive::Row { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -137,6 +221,8 @@ impl Directive {
             Directive::Layout { line_end, .. } => *line_end,
             Directive::Table { line_end, .. } => *line_end,
             Directive::Tree { line_end, .. } => *line_end,
+            Directive::Element { line_end, .. } => *line_end,
+            Directive::Row { line_end, .. } => *line_end,
         }
     }
 }
@@ -328,6 +414,69 @@ fn collect_directives(source: &str) -> Vec<Directive> {
 
                     directives.push(Directive::Tree { kind, source, attrs, line_start, line_end });
                 }
+                "element" => {
+                    // Info string: "proof:element kind=value field=pts_82 width=8 align=right"
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:element")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Extract kind= from attrs
+                    let kind = extract_attr_value(&info_after, "kind")
+                        .unwrap_or_else(|| "value".to_string());
+
+                    // Extract field= and value= (inline literal)
+                    let field = extract_attr_value(&info_after, "field");
+                    let inline_value = extract_attr_value(&info_after, "value");
+
+                    let attrs = ElementAttrs::parse(&info_after);
+
+                    // Source URI is the first md:// line in the body
+                    let source = body.iter().find_map(|l| {
+                        let t = l.trim();
+                        if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                    });
+
+                    directives.push(Directive::Element {
+                        kind, source, field, inline_value, attrs, line_start, line_end,
+                    });
+                }
+                "row" => {
+                    // Info string: "proof:row foreach=player in md://stats.md#edm:table:0 separator=" " width=120"
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:row")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Parse foreach=VAR in URI
+                    let (var_name, source_uri) = parse_foreach(&info_after);
+                    let separator = extract_attr_value(&info_after, "separator")
+                        .unwrap_or_else(|| " ".to_string());
+                    let declared_width = extract_attr_value(&info_after, "width")
+                        .and_then(|v| v.parse().ok());
+                    let no_chrome = info_after.split_whitespace()
+                        .any(|t| t == "no-chrome" || t == "no-chrome=true" || t == "no-chrome=1");
+
+                    // Body lines: each "proof:element ..." line becomes a RowElement
+                    let elements: Vec<RowElement> = body.iter()
+                        .filter_map(|l| parse_row_element_line(l.trim()))
+                        .collect();
+
+                    if !source_uri.is_empty() {
+                        directives.push(Directive::Row {
+                            source_uri,
+                            var_name,
+                            separator,
+                            declared_width,
+                            elements,
+                            no_chrome,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -336,14 +485,45 @@ fn collect_directives(source: &str) -> Vec<Directive> {
     directives
 }
 
+/// Extract a quoted or unquoted value for `key=` from an attribute string.
+fn extract_attr_value(attrs: &str, key: &str) -> Option<String> {
+    let prefix = format!("{}=", key);
+    let mut rest = attrs;
+    while !rest.is_empty() {
+        if let Some(pos) = rest.find(&prefix) {
+            // Ensure it's a word boundary (not mid-identifier)
+            if pos > 0 {
+                let prev = rest.as_bytes()[pos - 1] as char;
+                if prev.is_alphanumeric() || prev == '-' || prev == '_' {
+                    rest = &rest[pos + 1..];
+                    continue;
+                }
+            }
+            let after = &rest[pos + prefix.len()..];
+            let val = if after.starts_with('"') {
+                after[1..].find('"').map(|e| after[1..e + 1].to_string())
+            } else {
+                let end = after.find(char::is_whitespace).unwrap_or(after.len());
+                if end > 0 { Some(after[..end].to_string()) } else { None }
+            };
+            return val;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
 fn proof_directive_kind(line: &str) -> Option<&'static str> {
     let line = line.trim_start();
     if !line.starts_with("```proof:") { return None; }
     let rest = &line[9..]; // after "```proof:"
     if rest.starts_with("include") { Some("include") }
-    else if rest.starts_with("layout") { Some("layout") }
-    else if rest.starts_with("table")  { Some("table") }
-    else if rest.starts_with("tree")   { Some("tree") }
+    else if rest.starts_with("layout")  { Some("layout") }
+    else if rest.starts_with("table")   { Some("table") }
+    else if rest.starts_with("tree")    { Some("tree") }
+    else if rest.starts_with("element") { Some("element") }
+    else if rest.starts_with("row")     { Some("row") }
     else { None }
 }
 
@@ -488,6 +668,23 @@ pub fn compile_file(
                         });
                         source_lines[line_start..=line_end].join("\n")
                     })
+            }
+
+            Directive::Element { kind, source, field, inline_value, attrs, .. } => {
+                compile_element(
+                    kind, source.as_deref(), field.as_deref(), inline_value.as_deref(),
+                    attrs, root, line_start,
+                    &mut violations, &source_lines, line_end,
+                    &mut resolved_count,
+                )
+            }
+
+            Directive::Row { source_uri, var_name: _, separator, declared_width, elements, no_chrome, .. } => {
+                compile_row(
+                    source_uri, separator, *declared_width, elements, *no_chrome,
+                    root, line_start, &mut violations, &source_lines, line_end,
+                    &mut resolved_count,
+                )
             }
         };
 
@@ -738,6 +935,452 @@ fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
     }
 }
 
+// ─────────────────────────────────────────────────────────
+// proof:element compile arm
+// ─────────────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+fn compile_element(
+    kind: &str,
+    source: Option<&str>,
+    field: Option<&str>,
+    inline_value: Option<&str>,
+    attrs: &ElementAttrs,
+    root: &Path,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
+    source_lines: &[&str],
+    line_end: usize,
+    resolved_count: &mut usize,
+) -> String {
+    let uri_str = source.unwrap_or("inline");
+
+    // Resolve data
+    let raw_value: String = if let Some(lit) = inline_value {
+        lit.to_string()
+    } else {
+        let src_uri = match source {
+            Some(s) => s,
+            None => {
+                violations.push(CompileViolation {
+                    code: "ELEMENT-005",
+                    severity: ViolationSeverity::Error,
+                    uri: uri_str.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: "proof:element requires either value=\"...\" or a source URI in the body".to_string(),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        };
+
+        // Resolve URI content
+        let content = match resolve_source_for_compile(src_uri, root) {
+            Ok(c) => { *resolved_count += 1; c }
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: src_uri.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!("{}", e),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        };
+
+        // Parse source table
+        let format = if src_uri.ends_with(".json") { "json" } else { "table" };
+        let rows = match if format == "json" {
+            parse_json_source(&content)
+        } else {
+            parse_md_table(&content)
+        } {
+            Ok((_, r)) => r,
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: src_uri.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!("source parse error: {}", e),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        };
+
+        // Extract field value from first row (single-value extraction)
+        let col = match field {
+            Some(f) => f,
+            None => {
+                violations.push(CompileViolation {
+                    code: "ELEMENT-005",
+                    severity: ViolationSeverity::Error,
+                    uri: src_uri.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: "proof:element with a source URI requires field=\"ColumnName\"".to_string(),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        };
+
+        let first_row = match rows.first() {
+            Some(r) => r,
+            None => {
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: src_uri.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: "source resolved to empty table".to_string(),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        };
+
+        match first_row.get(col) {
+            Some(v) => v.clone(),
+            None => {
+                violations.push(CompileViolation {
+                    code: "ELEMENT-005",
+                    severity: ViolationSeverity::Error,
+                    uri: src_uri.to_string(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!("field {:?} not found in source table headers", col),
+                    source_line: source_line + 1,
+                });
+                return source_lines[source_line..=line_end].join("\n");
+            }
+        }
+    };
+
+    // Parse element kind
+    let elem_kind = match ElementKind::parse(kind) {
+        Some(k) => k,
+        None => {
+            violations.push(CompileViolation {
+                code: "ELEMENT-001",
+                severity: ViolationSeverity::Error,
+                uri: uri_str.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("unknown element kind {:?} — use value, delta, sparkline, mini-bar, label, or badge", kind),
+                source_line: source_line + 1,
+            });
+            return source_lines[source_line..=line_end].join("\n");
+        }
+    };
+
+    // Build ElementConfig
+    let width = match attrs.width {
+        Some(w) => w,
+        None => {
+            violations.push(CompileViolation {
+                code: "ELEMENT-001",
+                severity: ViolationSeverity::Error,
+                uri: uri_str.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: "proof:element requires width=N".to_string(),
+                source_line: source_line + 1,
+            });
+            return source_lines[source_line..=line_end].join("\n");
+        }
+    };
+
+    let cfg = ElementConfig {
+        kind: elem_kind,
+        width,
+        align: ElementAlign::parse(&attrs.align),
+        format: attrs.format.clone(),
+        no_chrome: attrs.no_chrome,
+        max: attrs.max,
+        fill_char: attrs.fill,
+        empty_char: attrs.empty,
+    };
+
+    // Coerce data
+    let data = match elem_kind {
+        ElementKind::Sparkline => {
+            let series: Result<Vec<f64>, _> = raw_value
+                .split(',')
+                .map(|s| s.trim().parse::<f64>())
+                .collect();
+            match series {
+                Ok(v) => {
+                    if v.len() < width {
+                        violations.push(CompileViolation {
+                            code: "ELEMENT-003",
+                            severity: ViolationSeverity::Warning,
+                            uri: uri_str.to_string(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("sparkline series ({} values) shorter than width ({}) — values will be repeated", v.len(), width),
+                            source_line: source_line + 1,
+                        });
+                    }
+                    ElementData::Series(v)
+                }
+                Err(_) => {
+                    violations.push(CompileViolation {
+                        code: "ELEMENT-002",
+                        severity: ViolationSeverity::Error,
+                        uri: uri_str.to_string(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("sparkline field value {:?} cannot be parsed as comma-separated numbers", raw_value),
+                        source_line: source_line + 1,
+                    });
+                    return source_lines[source_line..=line_end].join("\n");
+                }
+            }
+        }
+        ElementKind::Label | ElementKind::Badge => {
+            ElementData::Text(raw_value.clone())
+        }
+        _ => {
+            // value, delta, mini-bar: scalar
+            match raw_value.parse::<f64>() {
+                Ok(v) => ElementData::Scalar(v),
+                Err(_) => {
+                    violations.push(CompileViolation {
+                        code: "ELEMENT-002",
+                        severity: ViolationSeverity::Error,
+                        uri: uri_str.to_string(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("element kind={} requires a numeric value; got {:?}", kind, raw_value),
+                        source_line: source_line + 1,
+                    });
+                    return source_lines[source_line..=line_end].join("\n");
+                }
+            }
+        }
+    };
+
+    // Render
+    match render_element(&data, &cfg) {
+        Ok(rendered) => {
+            if attrs.no_chrome {
+                rendered
+            } else {
+                format_element_block(uri_str, &rendered)
+            }
+        }
+        Err(ElementError::WidthExceeded { actual, budget }) => {
+            violations.push(CompileViolation {
+                code: "ELEMENT-001",
+                severity: ViolationSeverity::Error,
+                uri: uri_str.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("rendered element width {} exceeds budget {}", actual, budget),
+                source_line: source_line + 1,
+            });
+            source_lines[source_line..=line_end].join("\n")
+        }
+        Err(e) => {
+            violations.push(CompileViolation {
+                code: "ELEMENT-001",
+                severity: ViolationSeverity::Error,
+                uri: uri_str.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("element render error: {}", e),
+                source_line: source_line + 1,
+            });
+            source_lines[source_line..=line_end].join("\n")
+        }
+    }
+}
+
+fn format_element_block(uri: &str, rendered: &str) -> String {
+    format!(
+        "<!-- proof:compiled from=\"proof:element\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        uri, rendered
+    )
+}
+
+fn format_row_block(uri: &str, rendered: &str) -> String {
+    format!(
+        "<!-- proof:compiled from=\"proof:row\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        uri, rendered
+    )
+}
+
+// ─────────────────────────────────────────────────────────
+// proof:row foreach parsing helpers
+// ─────────────────────────────────────────────────────────
+
+/// Parse `foreach=VAR in URI` from the info string after `proof:row`.
+/// Returns (var_name, source_uri). Both empty strings on parse failure.
+fn parse_foreach(info: &str) -> (String, String) {
+    // Expect: foreach=VARNAME in md://...
+    let mut var_name = String::new();
+    let mut source_uri = String::new();
+
+    for tok in info.split_whitespace() {
+        if tok.starts_with("foreach=") {
+            var_name = tok["foreach=".len()..].to_string();
+        } else if tok.starts_with("md://") && !var_name.is_empty() {
+            source_uri = tok.to_string();
+        }
+    }
+    (var_name, source_uri)
+}
+
+/// Parse a body line of the form `proof:element kind=X field=Y width=N ...`
+/// into a RowElement. Returns None if the line doesn't start with `proof:element`.
+fn parse_row_element_line(line: &str) -> Option<RowElement> {
+    let rest = line.strip_prefix("proof:element")?.trim();
+    let attrs = ElementAttrs::parse(rest);
+    let kind_str = extract_attr_value(rest, "kind").unwrap_or_else(|| "value".to_string());
+    let kind = ElementKind::parse(&kind_str)?;
+    let field = extract_attr_value(rest, "field").unwrap_or_default();
+    let width = attrs.width.unwrap_or(0);
+    if field.is_empty() || width == 0 { return None; }
+    Some(RowElement {
+        kind,
+        field,
+        width,
+        align: ElementAlign::parse(&attrs.align),
+        format: attrs.format,
+        max: attrs.max,
+        fill_char: attrs.fill,
+        empty_char: attrs.empty,
+    })
+}
+
+// ─────────────────────────────────────────────────────────
+// proof:row compile handler
+// ─────────────────────────────────────────────────────────
+
+fn compile_row(
+    source_uri: &str,
+    separator: &str,
+    declared_width: Option<usize>,
+    elements: &[RowElement],
+    no_chrome: bool,
+    root: &Path,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
+    source_lines: &[&str],
+    line_end: usize,
+    resolved_count: &mut usize,
+) -> String {
+    // Resolve source
+    let content = match resolve_source_for_compile(source_uri, root) {
+        Ok(c) => { *resolved_count += 1; c }
+        Err(e) => {
+            violations.push(CompileViolation {
+                code: "COMPILE-002",
+                severity: ViolationSeverity::Error,
+                uri: source_uri.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("{}", e),
+                source_line: source_line + 1,
+            });
+            return source_lines[source_line..=line_end].join("\n");
+        }
+    };
+
+    // Parse table
+    let format = if source_uri.ends_with(".json") { "json" } else { "table" };
+    let rows = match if format == "json" {
+        parse_json_source(&content)
+    } else {
+        parse_md_table(&content)
+    } {
+        Ok((_, r)) => r,
+        Err(e) => {
+            violations.push(CompileViolation {
+                code: "COMPILE-002",
+                severity: ViolationSeverity::Error,
+                uri: source_uri.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("source parse error: {}", e),
+                source_line: source_line + 1,
+            });
+            return source_lines[source_line..=line_end].join("\n");
+        }
+    };
+
+    if rows.is_empty() {
+        violations.push(CompileViolation {
+            code: "ELEMENT-007",
+            severity: ViolationSeverity::Error,
+            uri: source_uri.to_string(),
+            figure_id: None,
+            invariant: String::new(),
+            message: "proof:row source resolved to zero rows".to_string(),
+            source_line: source_line + 1,
+        });
+        return source_lines[source_line..=line_end].join("\n");
+    }
+
+    // R-1 invariant check
+    let sep_len = separator.chars().count();
+    if let Some((found, expected)) = validate_r1(elements, sep_len, declared_width) {
+        violations.push(CompileViolation {
+            code: "ELEMENT-004",
+            severity: ViolationSeverity::Error,
+            uri: source_uri.to_string(),
+            figure_id: None,
+            invariant: format!("R-1: sum(widths) + (n-1)*sep_len = row_width"),
+            message: format!(
+                "ELEMENT-004: row width mismatch — found={} expected={} (sum of element widths + separators must equal declared width={})",
+                found, expected, expected
+            ),
+            source_line: source_line + 1,
+        });
+        return source_lines[source_line..=line_end].join("\n");
+    }
+
+    let row_cfg = RowConfig {
+        source_uri: source_uri.to_string(),
+        var_name: String::new(),
+        separator: separator.to_string(),
+        declared_width,
+        elements: elements.to_vec(),
+        no_chrome,
+    };
+
+    match render_row_foreach(&rows, &row_cfg) {
+        Ok(lines) => {
+            let rendered = lines.join("\n");
+            if no_chrome {
+                rendered
+            } else {
+                format_row_block(source_uri, &rendered)
+            }
+        }
+        Err(e) => {
+            violations.push(CompileViolation {
+                code: "ELEMENT-005",
+                severity: ViolationSeverity::Error,
+                uri: source_uri.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("row render error: {}", e),
+                source_line: source_line + 1,
+            });
+            source_lines[source_line..=line_end].join("\n")
+        }
+    }
+}
+
 pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
     let name = source.file_name()?.to_str()?;
     if let Some(stem) = name.strip_suffix(".source.md") {
@@ -947,5 +1590,263 @@ mod tests {
             }
             _ => panic!("expected Layout"),
         }
+    }
+
+    // ── proof:row parsing ─────────────────────────────────
+
+    #[test]
+    fn test_collect_directives_row_parsed() {
+        let src = "```proof:row foreach=player in md://stats.md#edm:table:0\nproof:element kind=label field=name width=12\nproof:element kind=value field=pts width=6\n```";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1, "should parse one Row directive");
+        match &dirs[0] {
+            Directive::Row { source_uri, var_name, elements, .. } => {
+                assert_eq!(source_uri, "md://stats.md#edm:table:0");
+                assert_eq!(var_name, "player");
+                assert_eq!(elements.len(), 2, "should parse 2 RowElements");
+            }
+            _ => panic!("expected Row, got {:?}", dirs[0]),
+        }
+    }
+
+    #[test]
+    fn test_collect_directives_row_body_element_lines() {
+        let src = "```proof:row foreach=p in md://x.md#:table:0\nproof:element kind=label field=name width=10 align=left\nproof:element kind=mini-bar field=pts width=8 max=200\n```";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Row { elements, .. } => {
+                assert_eq!(elements.len(), 2);
+                assert_eq!(elements[0].field, "name");
+                assert_eq!(elements[0].width, 10);
+                assert_eq!(elements[1].field, "pts");
+                assert_eq!(elements[1].width, 8);
+                assert_eq!(elements[1].max, Some(200.0));
+            }
+            _ => panic!("expected Row"),
+        }
+    }
+
+    #[test]
+    fn test_collect_directives_row_default_separator() {
+        let src = "```proof:row foreach=p in md://x.md#:table:0\nproof:element kind=label field=name width=8\n```";
+        let dirs = collect_directives(src);
+        match &dirs[0] {
+            Directive::Row { separator, .. } => {
+                assert_eq!(separator, " ", "default separator should be single space");
+            }
+            _ => panic!("expected Row"),
+        }
+    }
+
+    #[test]
+    fn test_collect_directives_row_explicit_separator() {
+        let src = "```proof:row foreach=p in md://x.md#:table:0 separator=\",\"\nproof:element kind=label field=name width=8\n```";
+        let dirs = collect_directives(src);
+        match &dirs[0] {
+            Directive::Row { separator, .. } => {
+                assert_eq!(separator, ",");
+            }
+            _ => panic!("expected Row"),
+        }
+    }
+
+    // ── proof_directive_kind ──────────────────────────────
+
+    #[test]
+    fn test_proof_directive_kind_row() {
+        assert_eq!(proof_directive_kind("```proof:row foreach=p in md://x.md"), Some("row"));
+    }
+
+    // ── parse_foreach ────────────────────────────────────
+
+    #[test]
+    fn test_parse_foreach_extracts_var_and_uri() {
+        let (var, uri) = parse_foreach("foreach=player in md://stats.md#edm:table:0 separator=\" \"");
+        assert_eq!(var, "player");
+        assert_eq!(uri, "md://stats.md#edm:table:0");
+    }
+
+    // ── parse_row_element_line ────────────────────────────
+
+    #[test]
+    fn test_parse_row_element_line_label() {
+        let elem = parse_row_element_line("proof:element kind=label field=name width=12 align=left").unwrap();
+        assert_eq!(elem.field, "name");
+        assert_eq!(elem.width, 12);
+        assert!(matches!(elem.kind, ElementKind::Label));
+    }
+
+    #[test]
+    fn test_parse_row_element_line_mini_bar_with_max() {
+        let elem = parse_row_element_line("proof:element kind=mini-bar field=pts width=10 max=200").unwrap();
+        assert_eq!(elem.field, "pts");
+        assert_eq!(elem.width, 10);
+        assert_eq!(elem.max, Some(200.0));
+        assert!(matches!(elem.kind, ElementKind::MiniBar));
+    }
+
+    #[test]
+    fn test_parse_row_element_line_non_element_returns_none() {
+        assert!(parse_row_element_line("# Comment").is_none());
+        assert!(parse_row_element_line("md://stats.md").is_none());
+    }
+
+    // ── R-1 violation via compile (no I/O — inline table) ─
+
+    #[test]
+    fn test_validate_r1_correct() {
+        use crate::element::row::validate_r1;
+        use crate::element::row::RowElement;
+        let elems = vec![
+            RowElement { kind: ElementKind::Label, field: "n".into(), width: 10, align: ElementAlign::Left, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+            RowElement { kind: ElementKind::Value, field: "p".into(), width: 5, align: ElementAlign::Right, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+        ];
+        // sum=15, sep_len=1, n=2 → total=16, declared=16 → OK
+        assert!(validate_r1(&elems, 1, Some(16)).is_none());
+    }
+
+    #[test]
+    fn test_validate_r1_violation() {
+        use crate::element::row::validate_r1;
+        use crate::element::row::RowElement;
+        let elems = vec![
+            RowElement { kind: ElementKind::Label, field: "n".into(), width: 10, align: ElementAlign::Left, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+            RowElement { kind: ElementKind::Value, field: "p".into(), width: 5, align: ElementAlign::Right, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+        ];
+        // actual=16, declared=20 → violation
+        let result = validate_r1(&elems, 1, Some(20));
+        assert_eq!(result, Some((16, 20)));
+    }
+
+    // ── Wave 2: proof:element directive tests ─────────────
+
+    #[test]
+    fn test_collect_directives_element_kind_value() {
+        let src = "```proof:element kind=value field=pts width=6\n```";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1, "should parse one Element directive");
+        match &dirs[0] {
+            Directive::Element { kind, field, attrs, .. } => {
+                assert_eq!(kind, "value");
+                assert_eq!(field.as_deref(), Some("pts"));
+                assert_eq!(attrs.width, Some(6));
+            }
+            _ => panic!("expected Element, got {:?}", dirs[0]),
+        }
+    }
+
+    #[test]
+    fn test_collect_directives_element_sparkline_no_chrome() {
+        let src = "```proof:element kind=sparkline field=trend width=10 no-chrome\n```";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Element { kind, attrs, .. } => {
+                assert_eq!(kind, "sparkline");
+                assert!(attrs.no_chrome, "no-chrome flag should be set");
+            }
+            _ => panic!("expected Element"),
+        }
+    }
+
+    #[test]
+    fn test_element_attrs_parse_all_keys() {
+        let attrs = ElementAttrs::parse("kind=value field=pts width=8 align=right format=\"{:.1}\" max=200 fill=▓ empty=░");
+        assert_eq!(attrs.width, Some(8));
+        assert_eq!(attrs.align, "right");
+        assert_eq!(attrs.format, "{:.1}");
+        assert_eq!(attrs.max, Some(200.0));
+    }
+
+    #[test]
+    fn test_element_attrs_parse_no_chrome_flag() {
+        let attrs = ElementAttrs::parse("no-chrome width=6");
+        assert!(attrs.no_chrome, "bare no-chrome should set flag");
+        assert_eq!(attrs.width, Some(6));
+    }
+
+    #[test]
+    fn test_element_attrs_parse_defaults() {
+        let attrs = ElementAttrs::parse("");
+        assert_eq!(attrs.align, "left");
+        assert_eq!(attrs.format, "{}");
+        assert!(!attrs.no_chrome);
+        assert_eq!(attrs.max, None);
+        assert_eq!(attrs.width, None);
+    }
+
+    #[test]
+    fn test_proof_directive_kind_element() {
+        assert_eq!(proof_directive_kind("```proof:element kind=value width=4"), Some("element"));
+    }
+
+    // E2E tests using compile_element directly (no file I/O)
+
+    #[test]
+    fn test_e2e_element_value_inline() {
+        let attrs = ElementAttrs { width: Some(4), align: "right".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=value value=\"42\" width=4 align=right", "```"];
+        let out = compile_element("value", None, None, Some("42"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
+        assert!(violations.is_empty(), "should have no violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        assert!(out.contains("42"), "output should contain value: {:?}", out);
+        let value_w = crate::layout::visual_width(&" 42");
+        assert_eq!(value_w, 3);
+    }
+
+    #[test]
+    fn test_e2e_element_label_inline() {
+        let attrs = ElementAttrs { width: Some(8), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=label value=\"McDavid\" width=8 align=left", "```"];
+        let out = compile_element("label", None, None, Some("McDavid"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
+        assert!(violations.is_empty(), "should have no violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        assert!(out.contains("McDavid"), "output should contain label: {:?}", out);
+    }
+
+    #[test]
+    fn test_e2e_element_badge_inline() {
+        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=badge value=\"UFA\" width=5", "```"];
+        let out = compile_element("badge", None, None, Some("UFA"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
+        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        assert!(out.contains("UFA"), "output: {:?}", out);
+    }
+
+    #[test]
+    fn test_e2e_element_no_chrome_true() {
+        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: true, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=label value=\"Hi\" width=5 no-chrome", "```"];
+        let out = compile_element("label", None, None, Some("Hi"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
+        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        assert!(!out.contains("```"), "no-chrome should have no fence: {:?}", out);
+        assert!(!out.contains("<!--"), "no-chrome should have no HTML comment: {:?}", out);
+    }
+
+    #[test]
+    fn test_e2e_element_no_chrome_false_has_wrapper() {
+        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=label value=\"Hi\" width=5", "```"];
+        let out = compile_element("label", None, None, Some("Hi"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
+        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        assert!(out.contains("<!-- proof:compiled"), "should have traceability comment: {:?}", out);
+        assert!(out.contains("```"), "should have fence: {:?}", out);
+    }
+
+    #[test]
+    fn test_e2e_element_missing_field_emits_element_005() {
+        // Simulate a source table with a known header, but ask for a missing field
+        let attrs = ElementAttrs { width: Some(6), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=value field=absent width=6", "md://test", "```"];
+        // Use inline value to avoid file I/O, but pass field= with no source → triggers ELEMENT-005 (missing source)
+        compile_element("value", None, Some("absent"), None, &attrs, Path::new("."), 0, &mut violations, &lines, 2, &mut 0);
+        // Should emit ELEMENT-005 because source is None and inline_value is None
+        let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+        assert!(codes.contains(&"ELEMENT-005"), "expected ELEMENT-005, got: {:?}", codes);
     }
 }

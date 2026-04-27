@@ -1,5 +1,6 @@
 pub mod checks;
 pub mod compile;
+pub mod element;
 pub mod config;
 pub mod davinci;
 pub mod diagnostic;

@@ -67,9 +67,10 @@ impl Default for LayoutConfig {
 // Visual width
 // ─────────────────────────────────────────────────────────
 
-/// Visual column width of a string. Box-drawing characters (U+2500–U+259F)
-/// and arrow characters (U+2190–U+21FF) are measured at 1 column per L-5,
-/// regardless of what some terminals render. CJK ideographs remain at 2.
+/// Visual column width of a string. Box-drawing characters (U+2500–U+259F),
+/// arrow characters (U+2190–U+21FF), and Braille patterns (U+2800–U+28FF)
+/// are measured at 1 column per L-5, regardless of what some terminals render.
+/// CJK ideographs remain at 2.
 pub fn visual_width(s: &str) -> usize {
     s.chars()
         .map(|c| {
@@ -77,6 +78,7 @@ pub fn visual_width(s: &str) -> usize {
             if (0x2190..=0x21FF).contains(&cp)  // arrows
                 || (0x2500..=0x259F).contains(&cp)  // box-drawing + block elements
                 || (0x25A0..=0x25FF).contains(&cp)  // geometric shapes
+                || (0x2800..=0x28FF).contains(&cp)  // Braille patterns
             {
                 1
             } else {
@@ -386,6 +388,11 @@ mod tests {
     fn test_visual_width_arrows_at_1() {
         assert_eq!(visual_width("→"), 1);
         assert_eq!(visual_width("A→B"), 3);
+    }
+
+    #[test]
+    fn test_visual_width_braille_at_1() {
+        assert_eq!(visual_width("⠿"), 1);
     }
 
     // ── extract_content_lines ─────────────────────────────
