@@ -1,6 +1,9 @@
 pub mod checks;
+pub mod dashboard;
 pub mod compile;
 pub mod element;
+pub mod figure;
+pub mod symbol;
 pub mod config;
 pub mod davinci;
 pub mod diagnostic;
@@ -9,6 +12,7 @@ pub mod fix;
 pub mod layout;
 pub mod runner;
 pub mod spec_gen;
+pub mod slide;
 pub mod tree;
 
 pub use config::GlintConfig;

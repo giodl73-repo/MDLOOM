@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+﻿use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::config::GlintConfig;
@@ -84,6 +84,18 @@ enum Directive {
         declared_width: Option<usize>,
         elements: Vec<RowElement>,
         no_chrome: bool,
+        line_start: usize,
+        line_end: usize,
+    },
+    Symbol {
+        name: String,
+        size: usize,
+        align: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Shape {
+        attrs: crate::symbol::shape::ShapeAttrs,
         line_start: usize,
         line_end: usize,
     },
@@ -213,6 +225,8 @@ impl Directive {
             Directive::Tree { line_start, .. } => *line_start,
             Directive::Element { line_start, .. } => *line_start,
             Directive::Row { line_start, .. } => *line_start,
+            Directive::Symbol { line_start, .. } => *line_start,
+            Directive::Shape { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -223,6 +237,8 @@ impl Directive {
             Directive::Tree { line_end, .. } => *line_end,
             Directive::Element { line_end, .. } => *line_end,
             Directive::Row { line_end, .. } => *line_end,
+            Directive::Symbol { line_end, .. } => *line_end,
+            Directive::Shape { line_end, .. } => *line_end,
         }
     }
 }
@@ -477,6 +493,34 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         });
                     }
                 }
+                "symbol" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:symbol")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let name = extract_attr_value(&info_after, "name")
+                        .unwrap_or_default();
+                    let size = extract_attr_value(&info_after, "size")
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(1);
+                    let align = extract_attr_value(&info_after, "align")
+                        .unwrap_or_else(|| "left".to_string());
+                    if !name.is_empty() {
+                        directives.push(Directive::Symbol { name, size, align, line_start, line_end });
+                    }
+                }
+                "shape" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:shape")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let attrs = crate::symbol::shape::ShapeAttrs::parse(&info_after);
+                    if !attrs.name.is_empty() {
+                        directives.push(Directive::Shape { attrs, line_start, line_end });
+                    }
+                }
                 _ => {}
             }
         }
@@ -524,6 +568,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("tree")    { Some("tree") }
     else if rest.starts_with("element") { Some("element") }
     else if rest.starts_with("row")     { Some("row") }
+    else if rest.starts_with("symbol")  { Some("symbol") }
+    else if rest.starts_with("shape")   { Some("shape") }
     else { None }
 }
 
@@ -685,6 +731,56 @@ pub fn compile_file(
                     root, line_start, &mut violations, &source_lines, line_end,
                     &mut resolved_count,
                 )
+            }
+
+            Directive::Symbol { name, size, align: _, .. } => {
+                let lib = crate::symbol::SymbolLibrary::new();
+                match crate::symbol::resolve(name, &lib) {
+                    Some(sym) => {
+                        resolved_count += 1;
+                        let rendered = crate::symbol::render_symbol_block(&sym, *size);
+                        format!(
+                            "<!-- proof:compiled from=\"proof:symbol\" name=\"{}\" size=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                            name, size, rendered
+                        )
+                    }
+                    None => {
+                        violations.push(CompileViolation {
+                            code: "SYMBOL-001",
+                            severity: ViolationSeverity::Warning,
+                            uri: String::new(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("symbol {:?} not found in library", name),
+                            source_line: line_start + 1,
+                        });
+                        source_lines[line_start..=line_end].join("\n")
+                    }
+                }
+            }
+
+            Directive::Shape { attrs, .. } => {
+                match crate::symbol::shape::render_shape(attrs) {
+                    Ok(rendered) => {
+                        resolved_count += 1;
+                        format!(
+                            "<!-- proof:compiled from=\"proof:shape\" name=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                            attrs.name, rendered
+                        )
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: e.code,
+                            severity: ViolationSeverity::Error,
+                            uri: String::new(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: e.message,
+                            source_line: line_start + 1,
+                        });
+                        source_lines[line_start..=line_end].join("\n")
+                    }
+                }
             }
         };
 
@@ -1383,12 +1479,18 @@ fn compile_row(
 
 pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
     let name = source.file_name()?.to_str()?;
-    if let Some(stem) = name.strip_suffix(".source.md") {
-        let out_name = format!("{}.md", stem);
-        Some(source.parent().unwrap_or(Path::new(".")).join(out_name))
-    } else {
-        None
+    let parent = source.parent().unwrap_or(Path::new("."));
+    // Check longer suffixes before shorter ones (longest-first)
+    if let Some(stem) = name.strip_suffix(".slides.source.md") {
+        return Some(parent.join(format!("{}.slides.md", stem)));
     }
+    if let Some(stem) = name.strip_suffix(".dashboard.source.md") {
+        return Some(parent.join(format!("{}.dashboard.md", stem)));
+    }
+    if let Some(stem) = name.strip_suffix(".source.md") {
+        return Some(parent.join(format!("{}.md", stem)));
+    }
+    None
 }
 
 // ─────────────────────────────────────────────────────────
