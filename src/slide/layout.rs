@@ -16,7 +16,7 @@ use crate::slide::{Slide, SlideLayout, SlideMeta, SlideTheme};
 /// Render body content — dispatches proof: directives, passes literal lines through.
 /// Handles: proof:bullets, proof:centered, proof:quote, proof:callout, proof:divider, proof:stat.
 /// proof:notes blocks are excluded from output (SL-5).
-pub(crate) fn render_body_lines(body: &str, width: usize) -> Vec<String> {
+pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
     use crate::slide::bullets::{render_bullets, BulletConfig};
     use crate::slide::inline::{render_quote, render_centered, render_callout,
                                 render_divider, CalloutStyle, DividerStyle};

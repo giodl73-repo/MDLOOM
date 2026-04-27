@@ -1476,3 +1476,126 @@ fn dashboard_two_region_compiles_correctly() {
         assert!(line.chars().count() <= 20, "canvas line too wide: {:?}", line);
     }
 }
+
+// ─────────────────────────────────────────────────────────
+// L1: Additional coverage — slide render_slide dispatch
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn render_slide_dispatch_all_layouts_produce_correct_dimensions() {
+    use proof_lib::slide::{Slide, SlideLayout, SlideMeta, render_slide};
+    let meta = SlideMeta { width: 40, height: 8, ..SlideMeta::default() };
+    let layouts = vec![
+        SlideLayout::Title,
+        SlideLayout::TitleContent,
+        SlideLayout::TwoColumn { ratio: (50, 50) },
+        SlideLayout::Section,
+        SlideLayout::Stats,
+        SlideLayout::Blank,
+    ];
+    for layout in layouts {
+        let slide = Slide {
+            index: 1,
+            layout: layout.clone(),
+            title: Some("Test".into()),
+            subtitle: Some("Sub".into()),
+            author: None,
+            date: None,
+            body_content: "line one\nline two\n".into(),
+            notes_content: String::new(),
+            source_line: 0,
+        };
+        let lines = render_slide(&slide, &meta);
+        assert_eq!(lines.len(), meta.height,
+            "{:?} should produce {} rows, got {}", layout, meta.height, lines.len());
+        for (i, line) in lines.iter().enumerate() {
+            assert_eq!(line.chars().count(), meta.width,
+                "{:?} line {} width wrong: {:?}", layout, i, line);
+        }
+    }
+}
+
+#[test]
+fn render_body_lines_multi_directive_dispatch() {
+    use proof_lib::slide::layout::render_body_lines;
+    let body = "proof:divider\nproof:bullets\n- item A\n- item B\nproof:divider style=double\n";
+    let lines = render_body_lines(body, 40);
+    let flat = lines.join("\n");
+    // divider produces ── line
+    assert!(flat.contains('─') || flat.contains('═'), "dividers should render");
+    // bullets render items
+    assert!(flat.contains("item A"), "bullets should render items");
+}
+
+#[test]
+fn slide_notes_not_in_default_output() {
+    use proof_lib::slide::layout::render_body_lines;
+    // proof:notes content must be excluded (SL-5)
+    let body = "visible line\nproof:notes\nthis is a speaker note\nsecond note line\n\nback to body\n";
+    let lines = render_body_lines(body, 40);
+    let flat = lines.join("\n");
+    assert!(!flat.contains("speaker note"), "notes must not appear in default output");
+    assert!(flat.contains("visible line"), "visible content must appear");
+    assert!(flat.contains("back to body"), "content after notes block must appear");
+}
+
+#[test]
+fn notes_guard_does_not_match_prose_containing_proof_notes() {
+    use proof_lib::slide::layout::render_body_lines;
+    // "proof:notes are important" should NOT trigger the notes skip
+    let body = "proof:notes are important for speakers\nvisible content\n";
+    let lines = render_body_lines(body, 40);
+    let flat = lines.join("\n");
+    // The first line starts with "proof:notes" but has extra content —
+    // it should NOT be treated as a notes block
+    assert!(flat.contains("important"), "prose starting with proof:notes should NOT be skipped");
+}
+
+// ─────────────────────────────────────────────────────────
+// L1: Dashboard overlap validation
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn dashboard_overlapping_regions_produce_error() {
+    use proof_lib::dashboard::region::{validate_regions, RegionGeometry};
+    let regions = vec![
+        RegionGeometry { name: "a".into(), x: 0, y: 0, width: 60, height: 20 },
+        RegionGeometry { name: "b".into(), x: 40, y: 0, width: 60, height: 20 },
+    ];
+    let errs = validate_regions(&regions, 120, 40);
+    assert!(errs.iter().any(|e| e.code == "DASHBOARD-003"),
+        "overlapping regions should produce DASHBOARD-003");
+}
+
+#[test]
+fn dashboard_adjacent_regions_do_not_overlap() {
+    use proof_lib::dashboard::region::{validate_regions, RegionGeometry};
+    let regions = vec![
+        RegionGeometry { name: "left".into(), x: 0, y: 0, width: 40, height: 20 },
+        RegionGeometry { name: "right".into(), x: 40, y: 0, width: 40, height: 20 },
+    ];
+    let errs = validate_regions(&regions, 80, 20);
+    assert!(errs.is_empty(), "adjacent (not overlapping) regions: {:?}", errs);
+}
+
+// ─────────────────────────────────────────────────────────
+// L1: Symbol expansion in compiled output
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn symbol_expand_in_compiled_prose() {
+    use proof_lib::symbol::{SymbolLibrary, expand_symbols};
+    let lib = SymbolLibrary::new();
+    let (out, warns) = expand_symbols("Status: [sym:checkmark] all good", &lib);
+    assert_eq!(out, "Status: ✓ all good");
+    assert!(warns.is_empty());
+}
+
+#[test]
+fn symbol_resolve_case_insensitive() {
+    use proof_lib::symbol::{SymbolLibrary, resolve};
+    let lib = SymbolLibrary::new();
+    assert!(resolve("STAR", &lib).is_some(), "uppercase should resolve");
+    assert!(resolve("Star", &lib).is_some(), "mixed case should resolve");
+    assert!(resolve("CROSS", &lib).is_some(), "alias uppercase should resolve");
+}
