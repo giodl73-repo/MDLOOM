@@ -4,6 +4,25 @@
 
 ---
 
+## Namespace
+
+Two code namespaces coexist during the transition period:
+
+**`ascii_barchart_*`** — existing codes emitted by `src/checks/ascii_barchart.rs`.
+These are preserved unchanged so existing suppression comments and CI configs
+continue to work.
+
+**`ascii_chart_*`** — new codes used by the unified chart system covering all
+kinds (line, scatter, heatmap, area, stacked-bar, waterfall, histogram, bullet,
+lollipop, candlestick, sankey, timeline, sparkline, gantt, and the migrated bar).
+
+**Deprecation path for bar:** When the `bar` kind is migrated into the unified
+chart system, `ascii_barchart_scale` will be aliased to `ascii_chart_scale` and
+the old code deprecated with a migration warning. Until then, both codes may
+fire for bar charts depending on which checker runs first.
+
+---
+
 ## What it is
 
 `proof chart` validates existing ASCII charts in code blocks, generates charts
@@ -21,11 +40,19 @@ a common generation pipeline.
 | `bar.vertical` | stacked columns | distributions |
 | `line` | plotted points + interpolation | trends, time series |
 | `scatter` | points on 2D axes, no lines | correlation, clustering |
+| `area` | filled region under a line | cumulative trends, volume |
+| `stacked-bar` | `████░░▒▒` multi-segment bars | part-to-whole composition |
+| `waterfall` | offset bars showing deltas | cumulative change, P&L |
+| `histogram` | equal-width bins, count y-axis | distribution, frequency |
+| `bullet` | bar + target marker | KPIs, performance vs target |
+| `lollipop` | `─────●` stem + dot | cleaner alternative to bar |
+| `candlestick` | OHLC range + body | financial time-series |
+| `sankey` | `══╗ ╠══` proportional flows | flow through stages |
 | `heatmap` | `░▒▓█` shading grid | density, correlation matrix |
 | `timeline` | `────●────●────` | history, schedule |
 | `sparkline` | `▁▂▄▇█▄▂` inline trend | in-table summary |
 | `gantt` | `░░░████░░` schedule bars | project planning |
-| `pie` | labeled wedge text | composition (limited ASCII) |
+| `pie` | labeled wedge text | **experimental — not recommended** |
 
 ---
 
@@ -74,6 +101,25 @@ four quadrants are rendered. This supports:
           │
 ```
 
+**Label-width alignment:** Negative tick labels (e.g., `-10`, 3 chars) are wider
+than positive labels (e.g., `10`, 2 chars). The renderer must compute the
+maximum tick label width on each axis and pad all labels to that width for
+alignment. Failure to do so causes the axis line to shift position between
+positive and negative regions.
+
+**Asymmetric x-range origin:** When `x_min` and `x_max` have different absolute
+values, the origin column is at:
+
+```
+origin_col = round(abs(x_min) / (abs(x_min) + x_max) * chart_width)
+```
+
+For the y-axis, symmetrically:
+
+```
+origin_row = round(y_max / (y_max + abs(y_min)) * chart_height)
+```
+
 Axis configuration:
 
 ```toml
@@ -85,6 +131,21 @@ y_max = 3
 x_label = "x"
 y_label = "f(x)"
 ```
+
+### Tick interval algorithm
+
+For any axis with range `[min, max]`:
+
+1. Compute `range = max - min`.
+2. Compute `step_raw = range / 6` (targeting 6 intervals → ~7 ticks).
+3. Round `step_raw` up to the nearest **nice** value from the sequence:
+   `1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, …` (powers of 10 × {1, 2, 5}).
+4. The resulting tick count must fall in **[5, 8]**. If it falls outside this
+   range, adjust by stepping up or down one entry in the nice sequence.
+5. Align the first tick to a multiple of the chosen step that is ≥ `min`.
+
+This algorithm ensures ticks land on round numbers and axes never look crowded
+or sparse. Invariant C-7 validates this.
 
 ### Axis rendering
 
@@ -119,7 +180,10 @@ The table structure is kind-specific but follows GFM table format.
 ```
 
 - `x`, `y`: numeric coordinates
-- `series`: optional group name (for multi-series plots, different markers per series)
+- `series`: optional group name. If absent, all rows belong to a single implicit
+  series with marker `*`. Multiple series use distinct markers in order:
+  `*`, `●`, `○`, `+`, `·`. When two series overlap at the same grid cell, the
+  marker of the later-defined series wins and both are listed in the legend.
 - `label`: optional annotation placed next to the point
 
 ### Bar chart
@@ -135,7 +199,8 @@ The table structure is kind-specific but follows GFM table format.
 
 - `item`: row label
 - `value`: the data value (determines bar length)
-- `max`: the full-scale value (determines chart width reference)
+- `max`: optional. If absent, proof auto-scales to `max(value)` across all rows.
+  If present, bars exceeding `max` are clamped and flagged with `ascii_chart_scale`.
 - Optional: `color` column (future: ANSI color blocks)
 
 ### Timeline
@@ -227,10 +292,246 @@ Fill characters:
 - `░` planned / future
 - `·` optional / deferred
 
+### Area chart
+
+Fills the region under a line chart. Same source schema as `line`
+(`x | y | series | label`). The area under each point is filled with the
+`fill-char` attribute (default `█`).
+
+```
+y
+4 |   *
+3 | * █ *
+2 |*█████*
+1 |███████*
+──┼────────── x
+```
+
+Attribute: `fill-char` — one of `░`, `▒`, `▓`, `█` (default `█`).
+Multiple series each get their own fill character in the same order as
+point markers (`*`, `●`, `○`, `+`, `·`).
+
+### Stacked-bar chart
+
+Multiple value columns stacked in a single horizontal bar. Each column gets a
+fill character. A legend below the chart maps fill char → column name.
+
+Source schema:
+
+```markdown
+| item | v1 | v2 | v3 |
+|------|----|----|-----|
+| Go | 60 | 20 | 15 |
+| Rust | 70 | 13 | 12 |
+| Python | 45 | 25 | 25 |
+```
+
+Generated:
+
+```
+Go     ████████████████████░░░░░░░░▒▒▒▒▒
+Rust   █████████████████████████░░░▒▒▒▒
+Python ██████████████░░░░░░░░▒▒▒▒▒▒▒▒▒▒
+
+Legend: █ = v1   ░ = v2   ▒ = v3
+```
+
+Fill character assignment order: `█`, `░`, `▒`, `▓`, `·`. Columns beyond
+five reuse the sequence with a warning. The total bar width is proportional
+to `sum(v1 + v2 + v3)` relative to the row with the largest total.
+
+Diagnostic code: `ascii_chart_stacked_sum` — emitted if a stacked bar's
+segments don't add up to the expected total (rounding ±1 char allowed).
+
+### Waterfall chart
+
+Shows cumulative change. Each bar starts where the previous bar ended.
+Useful for P&L breakdowns, budget deltas, and stage-by-stage flows.
+
+Source schema:
+
+```markdown
+| step | delta | label |
+|------|-------|-------|
+| Start | 100 | |
+| +Q1 | 40 | |
+| -Q2 | -15 | |
+| +Q3 | 30 | |
+| End | 155 | total |
+```
+
+The first and last rows are rendered as full bars from zero (totals).
+Middle rows are deltas: positive extends right, negative retracts left.
+
+Generated:
+
+```
+Start   ████████
++Q1             ████████████
+-Q2                     ████
++Q3                         ████████
+End     ████████████████████████████
+```
+
+The `label` column is optional; if present, it appears to the right of the bar.
+
+Diagnostic code: `ascii_chart_waterfall_balance` — emitted if the final total
+bar does not equal `start + sum(deltas)` (rounding ±1 char allowed).
+
+### Histogram
+
+A bar chart where bars represent equal-width bins and the y-axis shows count
+(frequency). Can be driven by pre-binned data or raw values that proof buckets
+automatically.
+
+**Pre-binned source schema:**
+
+```markdown
+| bin_start | bin_end | count |
+|-----------|---------|-------|
+| 0 | 10 | 5 |
+| 10 | 20 | 12 |
+| 20 | 30 | 8 |
+```
+
+**Raw source schema (auto-binning):**
+
+```markdown
+| value |
+|-------|
+| 14 |
+| 7 |
+| 22 |
+```
+
+When using raw data, proof computes bin count using **Sturges' rule**:
+`bins = ceil(log2(n) + 1)`. Override with attribute `bins=N`.
+
+Bins are always equal-width. No gaps are rendered between adjacent bars
+(unlike a bar chart). X-axis labels show bin boundaries.
+
+### Bullet chart
+
+A bar with a target marker line. Used for KPI and performance displays.
+
+Source schema:
+
+```markdown
+| metric | actual | target | max |
+|--------|--------|--------|-----|
+| Revenue | 82 | 75 | 100 |
+| Margin | 63 | 70 | 100 |
+```
+
+Generated:
+
+```
+Revenue  ████████████████████████████|         (exceeded)
+Margin   ██████████████████████|████████        (missed)
+```
+
+The target `|` marker sits at `target / max * chart_width`. The fill bar
+extends to `actual / max * chart_width`. When actual > target the bar
+visually passes the marker; when actual < target the bar stops before it.
+
+Attribute `max` is optional — defaults to the largest `max` value across
+all rows (so all metrics share the same scale).
+
+### Lollipop chart
+
+A cleaner alternative to bar charts. A horizontal stem (`─`) with a circular
+marker (`●` by default) at the data value. Reduces ink compared to filled bars.
+
+Source schema: same as `bar` (`item | value | max`).
+
+Generated:
+
+```
+Go     ─────────────────────────────●
+Rust   ────────────────────────────────────●
+Python ────────────────────●
+```
+
+Attribute `marker` — default `●`. Other options: `○`, `◉`, `*`, `+`.
+The `max` column is optional (same auto-scale rule as `bar`).
+
+### Candlestick chart
+
+OHLC (open / high / low / close) chart for financial or time-series data.
+The high-to-low range is shown as a vertical stem (`│`). The open-to-close
+body is shown as a filled block (`▓`).
+
+Source schema:
+
+```markdown
+| date | open | high | low | close |
+|------|------|------|-----|-------|
+| Mon | 100 | 115 | 95 | 110 |
+| Tue | 110 | 120 | 105 | 108 |
+```
+
+Generated (vertical, one column per date):
+
+```
+High  │    │
+      │    │
+Open  ┤▓▓  │
+      │▓▓  ┤▓▓
+Close └▓▓  │▓▓
+      │    └▓▓
+Low   │
+```
+
+Orientation: vertical by default (time on x-axis, price on y-axis).
+Future attribute `orient=horizontal` for rotated display.
+
+### Sankey diagram
+
+Flow diagram showing volume through stages using width-proportional bars.
+Each flow's width is proportional to its `value`. Useful for budget flows,
+energy balances, and pipeline funnels.
+
+Source schema:
+
+```markdown
+| from | to | value |
+|------|----|-------|
+| Source A | Output X | 40 |
+| Source A | Output Y | 20 |
+| Source B | Output X | 30 |
+| Source C | Output Y | 10 |
+```
+
+Generated (approximate ASCII proportional flows):
+
+```
+Source A ══════════╗
+Source B ════╗     ╠══════ Output X
+Source C ═╗  ╠═════╣
+          ╚══╝     ╚══════ Output Y
+```
+
+The width of each flow segment is `round(value / total * chart_width)`.
+Nodes are labeled on the left (sources) and right (sinks). Multi-hop flows
+(source → intermediate → sink) are supported; proof lays out intermediate
+nodes between source and sink columns.
+
+Diagnostic code: `ascii_chart_sankey_balance` — emitted if the sum of
+outgoing flows from a node does not equal the sum of incoming flows
+(i.e., flow is not conserved at intermediate nodes).
+
+---
+
+## Experimental / limited viability
+
 ### Pie chart
 
-ASCII pie charts are approximate at best. proof renders them as labeled
-wedge text rather than a geometric arc:
+> **Not recommended.** ASCII pie charts are fundamentally limited — they cannot
+> represent angular geometry faithfully in a character grid. Use `bar` or
+> `stacked-bar` instead for composition displays. `pie` is included for
+> completeness and may be removed in a future version.
+
+proof renders pie charts as labeled wedge text rather than a geometric arc:
 
 ```markdown
 | slice | value | label |
@@ -242,6 +543,7 @@ wedge text rather than a geometric arc:
 ```
 
 Generated (text-layout approximation):
+
 ```
 ┌─────────────────────────────────────┐
 │  ████████████  Rust    35%  Systems │
@@ -251,9 +553,7 @@ Generated (text-layout approximation):
 └─────────────────────────────────────┘
 ```
 
-Pie charts in ASCII are fundamentally limited — for meaningful composition
-display, use a bar chart instead. proof warns if pie is used with < 3 slices
-or > 8 slices.
+proof warns if pie is used with < 3 slices or > 8 slices.
 
 ---
 
@@ -261,12 +561,20 @@ or > 8 slices.
 
 ```bash
 # Validate an existing chart code block
-proof chart check [--kind bar|line|scatter|...] <uri>
+proof chart check [--kind bar|line|scatter|area|stacked-bar|waterfall|histogram|bullet|lollipop|candlestick|sankey|...] <uri>
 
 # Generate a chart from source data
 proof chart generate --kind bar md://data/perf.md#results:table:0
 proof chart generate --kind line --x-min -4 --x-max 4 --y-min -3 --y-max 3 \
     md://math/sin-cos.md#data:table:0
+proof chart generate --kind area --fill-char ░ md://data/volume.md#:table:0
+proof chart generate --kind stacked-bar md://data/breakdown.md#:table:0
+proof chart generate --kind waterfall md://finance/pnl.md#deltas:table:0
+proof chart generate --kind histogram --bins 10 md://data/raw.md#:table:0
+proof chart generate --kind bullet md://kpis/q4.md#metrics:table:0
+proof chart generate --kind lollipop md://data/perf.md#results:table:0
+proof chart generate --kind candlestick md://finance/ohlc.md#:table:0
+proof chart generate --kind sankey md://finance/budget.md#flows:table:0
 proof chart generate --kind timeline md://history/computing.md#timeline:table:0
 proof chart generate --kind sparkline md://metrics/monthly.md#traffic:table:0
 proof chart generate --kind gantt md://project/plan.md#schedule:table:0
@@ -303,19 +611,21 @@ md://history/unix.md#milestones:table:0
 | Attribute | Kinds | Default | Description |
 |-----------|-------|---------|-------------|
 | `kind` | all | required | Chart type |
-| `width` | bar, line, scatter | 60 | Chart width in columns |
-| `height` | line, scatter, heatmap | 20 | Chart height in rows |
-| `x-min` | line, scatter | 0 | X-axis minimum |
-| `x-max` | line, scatter | auto | X-axis maximum |
-| `y-min` | line, scatter | 0 | Y-axis minimum |
-| `y-max` | line, scatter | auto | Y-axis maximum |
-| `x-label` | line, scatter | x | X-axis label |
-| `y-label` | line, scatter | y | Y-axis label |
-| `points` | line, scatter | all | Number of plotted points |
-| `interpolate` | line | true | Connect points with line segments |
-| `marker` | line, scatter | `*` | Point marker character |
+| `width` | bar, line, scatter, area, stacked-bar, waterfall, histogram, bullet, lollipop, candlestick | 60 | Chart width in columns |
+| `height` | line, scatter, area, heatmap, candlestick | 20 | Chart height in rows |
+| `x-min` | line, scatter, area, histogram | 0 | X-axis minimum |
+| `x-max` | line, scatter, area, histogram | auto | X-axis maximum |
+| `y-min` | line, scatter, area | 0 | Y-axis minimum |
+| `y-max` | line, scatter, area | auto | Y-axis maximum |
+| `x-label` | line, scatter, area, histogram | x | X-axis label |
+| `y-label` | line, scatter, area, histogram | y | Y-axis label |
+| `points` | line, scatter, area | all | Number of plotted points |
+| `interpolate` | line, area | true | Connect points with line segments |
+| `marker` | line, scatter, lollipop | `*` / `●` | Point marker character |
 | `shading` | heatmap | `░▒▓█` | 4-char shading scale low→high |
 | `bar-char` | bar | `█` | Bar fill character |
+| `fill-char` | area | `█` | Fill character under line (`░`, `▒`, `▓`, `█`) |
+| `bins` | histogram | Sturges | Number of equal-width bins (default: `ceil(log2(n)+1)`) |
 | `show-axis` | all | true | Render axis lines |
 | `show-labels` | all | true | Render axis tick labels |
 
@@ -331,23 +641,39 @@ md://history/unix.md#milestones:table:0
 | C-4 | Heatmap cells use the declared shading scale, min→max maps to first→last char |
 | C-5 | Gantt bars are non-overlapping for the same row |
 | C-6 | 2D graph: origin `┼` is at coordinates (0,0) in four-quadrant mode |
-| C-7 | 2D graph: axis tick spacing is consistent (equal intervals) |
+| C-7 | 2D graph: axis ticks use consistent equal intervals; tick count is 5–8 per axis; step is a "nice" value (see Tick interval algorithm); labels are padded to uniform width |
 | C-8 | Sparkline: 8-level block chars, min value → `▁`, max value → `█` |
 | C-9 | Pie: slice values sum to 100% (or normalized to 100%) |
+| C-10 | Stacked-bar: sum of all segments equals the total bar length (±1 char) |
+| C-11 | Waterfall: final total bar equals start + sum(deltas) (±1 char) |
+| C-12 | Histogram: all bins are equal width; no gaps between adjacent bars |
+| C-13 | Sankey: flow is conserved at intermediate nodes (in = out, ±1 char) |
 
 ---
 
 ## Diagnostic codes
 
+**`ascii_barchart_*` codes** (existing checker — `src/checks/ascii_barchart.rs`):
+
 | Code | Severity | Meaning |
 |------|----------|---------|
-| `ascii_chart_scale` | error | Bar length not proportional to value |
+| `ascii_barchart_scale` | error | Bar length not proportional to value (legacy bar checker) |
+
+**`ascii_chart_*` codes** (unified chart system):
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| `ascii_chart_scale` | error | Bar or segment length not proportional to value; also emitted when a bar exceeds a declared `max` and is clamped |
 | `ascii_chart_origin` | error | 2D graph origin not at (0,0) in 4-quadrant mode |
 | `ascii_chart_sort` | error | Timeline events not in chronological order |
 | `ascii_chart_sum` | error | Pie slices don't sum to 100% |
 | `ascii_chart_shading` | error | Heatmap shading chars not from declared scale |
+| `ascii_chart_stacked_sum` | error | Stacked-bar segments don't add up to expected total (±1 char) |
+| `ascii_chart_waterfall_balance` | error | Waterfall final total ≠ start + sum(deltas) |
+| `ascii_chart_sankey_balance` | error | Sankey flow not conserved at an intermediate node |
 | `ascii_chart_kind` | warning | Chart kind not declared — cannot validate |
 | `ascii_chart_pie_count` | warning | Pie chart has < 3 or > 8 slices |
+| `ascii_chart_deprecated_pie` | warning | `pie` kind used — consider `bar` or `stacked-bar` |
 
 ---
 
@@ -355,12 +681,22 @@ md://history/unix.md#milestones:table:0
 
 | File | Purpose |
 |------|---------|
-| `src/checks/ascii_barchart.rs` | Existing bar chart validation (extend) |
+| `src/checks/ascii_barchart.rs` | Existing bar chart validation (legacy `ascii_barchart_*` codes) |
+| `src/chart/bar.rs` | Unified bar chart (emits `ascii_chart_*` codes; replaces legacy on migration) |
 | `src/chart/line.rs` | Line/scatter 2D graph generation |
+| `src/chart/area.rs` | Area chart (fill under line) |
+| `src/chart/stacked_bar.rs` | Stacked-bar generation and segment validation |
+| `src/chart/waterfall.rs` | Waterfall chart (cumulative delta bars) |
+| `src/chart/histogram.rs` | Histogram binning and bar generation |
+| `src/chart/bullet.rs` | Bullet chart with target marker |
+| `src/chart/lollipop.rs` | Lollipop chart (stem + marker) |
+| `src/chart/candlestick.rs` | OHLC candlestick chart |
+| `src/chart/sankey.rs` | Sankey flow diagram |
 | `src/chart/heatmap.rs` | Heatmap shading generation |
 | `src/chart/timeline.rs` | Timeline generation |
 | `src/chart/sparkline.rs` | Sparkline block-char encoding |
 | `src/chart/gantt.rs` | Gantt bar generation |
+| `src/chart/ticks.rs` | Shared tick interval algorithm (used by all axis-bearing kinds) |
 | `src/chart/schema.rs` | Source table parsing shared across kinds |
 | `src/commands/chart.rs` | CLI surface |
 

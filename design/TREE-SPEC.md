@@ -46,18 +46,21 @@ ASCII fallbacks (`+`, `\`, `|`, `-`) are also accepted.
 Each level adds a fixed number of spaces. The default is **4 spaces** per level
 (the width of `│   ` or `    ` continuation prefix). Configurable via `indent_width`.
 
+**Choosing indent_width:** The default `indent_width = 4` works well in code contexts. For wide documentation prose or MkDocs sidebars, `indent_width = 2` is recommended to prevent deep trees from exceeding 80 columns.
+
 ---
 
 ## Structural invariants (all kinds)
 
 | Invariant | Rule |
 |-----------|------|
-| T-1 | `└──` must be the last child at its indentation level — no `├──` at the same level after a `└──` |
+| T-1 | `└──` must be the last child at its indentation level — no `├──` at the same level after a `└──`. **Note:** validating T-1 requires 1-token lookahead (the validator must buffer one line ahead to know whether a `└──` is truly the last sibling). This is not streaming-compatible without that one-line buffer. |
 | T-2 | `│` continuation lines must align with the `├` or `│` of their parent |
 | T-3 | Indentation must be consistent — each level adds exactly `indent_width` spaces |
-| T-4 | Every non-leaf node must have at least one child |
+| T-4 | Every non-leaf non-root node must have at least one child |
 | T-5 | The root has no connector prefix (it is left-aligned or at indent=0) |
 | T-6 | `├──` and `└──` must be followed by a space and then the node label |
+| T-12 | A root with zero children is a valid leaf-root tree (emitted as a single line with no connectors) |
 
 ---
 
@@ -103,6 +106,8 @@ src/
 | Annotation format | `tree_annotation` | Annotation must use ` — ` (em-dash with spaces) |
 | Path existence | `tree_path_missing` | (opt-in) resolved path does not exist on disk |
 | Duplicate entry | `tree_duplicate` | Same name appears twice under same parent |
+
+**Note on false positives:** The tree validator only runs inside code blocks tagged with a `dirtree` info string (e.g. ` ```dirtree `) or identified as a tree by a `proof:tree` directive. It does not scan arbitrary code blocks, so `│` characters inside `ascii_box` diagrams or other fenced blocks do not trigger `tree_orphan`.
 
 ### Filesystem validation
 
@@ -192,7 +197,7 @@ CTO: Gio
 ```
 
 **Validation rules:**
-- Exactly one root (Parent = —)
+- Exactly one root (Parent = —); if no row has Parent = — emit `tree_no_root`
 - No cycles
 - No orphaned nodes (parent name must exist)
 
@@ -232,6 +237,7 @@ Kingdom: Animals
 ```
 
 **Validation rules:**
+- Exactly one root (Parent = —); if no row has Parent = — emit `tree_no_root`
 - Levels must follow declared order (can't skip)
 - Each node's level must be exactly one below its parent's level
 
@@ -265,7 +271,7 @@ myapp
 
 **Validation rules:**
 - Cycles detected and reported as `tree_cycle`
-- Deduplication: repeated nodes show `(deduped ↑)` suffix
+- Deduplication: the tree is rendered depth-first. The first occurrence of a package (in DFS order) is rendered fully; subsequent occurrences show `(deduped ↑ N)` where N is the line number of the first occurrence (e.g. `└── mdpath 0.5.0 (deduped ↑ 3)`)
 - Optional: cross-reference against `Cargo.toml` or `package.json` for version accuracy
 
 ---
@@ -326,6 +332,7 @@ Is the file .md?
 - Every non-leaf node has exactly 2 branches (Yes/No)
 - Every branch leads to either a child node or a leaf label
 - No unreachable nodes
+- A leaf is a node whose Node value does not appear in any `Yes →` or `No →` column. If a `Yes →` or `No →` references a node name that does not appear in the Node column, emit `tree_orphan` (schema form: referenced target does not exist as a declared node)
 
 ---
 
@@ -390,6 +397,10 @@ src/
 | `sort` | dirtree, org | Sort order: `name`, `alpha`, `mtime` |
 | `dirs-first` | dirtree | Directories before files (default: true) |
 
+**Attribute naming convention:** Directive attributes use hyphenated names (e.g. `max-depth`). The corresponding `proof.toml` keys use underscores (e.g. `max_depth`). CLI flags use `--max-depth`. This follows the same convention as all other proof directives.
+
+**Canonical triple for boolean options** (e.g. path verification): directive attribute = `verify-paths`, CLI flag = `--verify-paths`, proof.toml key = `verify_paths`.
+
 ---
 
 ## Cache key for tree generation
@@ -408,17 +419,18 @@ regeneration on the next compile.
 
 | Invariant | Claim |
 |-----------|-------|
-| T-1 | `└──` is always the last child — no `├──` follows at the same indent level |
+| T-1 | `└──` is always the last child — no `├──` follows at the same indent level. Requires 1-line lookahead during parsing (not streaming-compatible without a one-line buffer). |
 | T-2 | `│` continuation lines align exactly to their parent's indent |
 | T-3 | Indentation per level is consistent (detected from the first two levels) |
-| T-4 | Every non-leaf has at least one child |
+| T-4 | Every non-leaf non-root node has at least one child |
 | T-5 | Root has no connector prefix |
 | T-6 | `├──` and `└──` are followed by exactly one space then the label |
 | T-7 | (dirtree) Directories end with `/`; files do not |
 | T-8 | (dirtree) No duplicate entry names under the same parent |
-| T-9 | (org/taxonomy) Exactly one root node (Parent = —) |
+| T-9 | (org/taxonomy) Exactly one root node (Parent = —); zero roots emits `tree_no_root`, multiple roots emits `tree_connector` |
 | T-10 | (org/taxonomy) No cycles |
 | T-11 | (decision) Every non-leaf has exactly 2 children |
+| T-12 | A root with zero children is a valid leaf-root tree (emitted as a single line with no connectors) |
 
 ---
 
@@ -428,11 +440,12 @@ regeneration on the next compile.
 |------|----------|---------|
 | `tree_connector` | error | Wrong connector for position (├ vs └) |
 | `tree_indent` | error | Inconsistent indentation width |
-| `tree_orphan` | error | Continuation `│` with no parent |
+| `tree_orphan` | error | Continuation `│` with no parent; or (decision) a `Yes →` / `No →` references a node name that is not declared in the Node column |
 | `tree_dir_slash` | warning | Directory missing trailing `/` or file has one |
 | `tree_duplicate` | error | Duplicate entry under same parent |
 | `tree_path_missing` | error | (dirtree, verify-paths) Path does not exist on disk |
 | `tree_cycle` | error | (dependency, org) Cycle detected |
+| `tree_no_root` | error | (org, taxonomy) Source table has no row with Parent = — (or equivalent null/dash marker) — tree has no declared root |
 | `tree_level_skip` | error | (taxonomy) Level skipped in hierarchy |
 | `tree_annotation` | warning | Annotation not using ` — ` format |
 | `tree_child_count` | error | (decision) Non-leaf node does not have exactly 2 children |
