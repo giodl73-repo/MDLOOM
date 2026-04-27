@@ -607,6 +607,16 @@ pub fn compile_file(
     root: &Path,
     config: &GlintConfig,
 ) -> Result<CompileResult> {
+    // Dispatch: .slides.source.md files use the slide compositor.
+    if source_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.ends_with(".slides.source.md"))
+        .unwrap_or(false)
+    {
+        return compile_slides_file(source_path, output_path, config);
+    }
+
     // Dispatch: .dashboard.source.md files use the canvas-based dashboard compiler.
     if source_path
         .file_name()
@@ -1546,6 +1556,88 @@ fn compile_row(
 //   5. Hand the (meta, regions, content map) to dashboard::region::compile_dashboard
 //   6. Write the canvas string to the output path
 
+/// Compile a .slides.source.md file into a .slides.md output.
+/// Each slide is rendered as a fixed-width ASCII canvas block, separated
+/// by a slide divider header showing the slide number.
+fn compile_slides_file(
+    source_path: &Path,
+    output_path: &Path,
+    config: &GlintConfig,
+) -> Result<CompileResult> {
+    use crate::slide::parser::parse_slide_doc;
+    use crate::slide::layout::render_slide;
+
+    let source_text = std::fs::read_to_string(source_path)
+        .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
+
+    let violations: Vec<CompileViolation> = Vec::new();
+
+    let doc = match parse_slide_doc(&source_text) {
+        Ok(d) => d,
+        Err(errs) => {
+            let mut vv = Vec::new();
+            for e in errs {
+                vv.push(CompileViolation {
+                    code: "SLIDE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: e.to_string(),
+                    source_line: 0,
+                });
+            }
+            return Ok(CompileResult {
+                output_path: output_path.to_path_buf(),
+                directives_resolved: 0,
+                violations: vv,
+                from_cache: false,
+                written: false,
+            });
+        }
+    };
+
+    let total = doc.slides.len();
+    let meta = &doc.meta;
+
+    // Build output: separator header + slide canvas per slide
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!(
+        "<!-- proof:compiled from=\"proof:slides\" count={} -->",
+        total
+    ));
+    parts.push(format!("```slides"));
+
+    for slide in &doc.slides {
+        let n = slide.index; // parser already 1-indexes slides
+        let separator = format!("SLIDE {} {}", n,
+            "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len())));
+        parts.push(format!("{} {}/{}", separator, n, total));
+
+        let rendered = render_slide(slide, meta);
+        parts.extend(rendered);
+    }
+    parts.push("```".to_string());
+    parts.push("<!-- /proof:compiled -->".to_string());
+
+    let output_text = parts.join("\n") + "\n";
+
+    // Atomic write
+    let tmp = output_path.with_extension("proof_tmp");
+    std::fs::write(&tmp, &output_text)
+        .map_err(|e| anyhow::anyhow!("writing {}: {}", tmp.display(), e))?;
+    std::fs::rename(&tmp, output_path)
+        .map_err(|e| anyhow::anyhow!("renaming output: {}", e))?;
+
+    Ok(CompileResult {
+        output_path: output_path.to_path_buf(),
+        directives_resolved: doc.slides.len(),
+        violations,
+        from_cache: false,
+        written: true,
+    })
+}
+
 fn compile_dashboard_file(
     source_path: &Path,
     output_path: &Path,
@@ -1819,7 +1911,7 @@ fn render_one_directive_no_chrome(
         }
         Directive::Element { kind, source, field, inline_value, attrs, .. } => {
             // Force no-chrome regardless of what the author wrote
-            let mut attrs = ElementAttrs {
+            let attrs = ElementAttrs {
                 width: attrs.width,
                 align: attrs.align.clone(),
                 format: attrs.format.clone(),
@@ -1828,7 +1920,6 @@ fn render_one_directive_no_chrome(
                 fill: attrs.fill,
                 empty: attrs.empty,
             };
-            attrs.no_chrome = true;
             // compile_element returns the rendered text directly when no_chrome=true
             let dummy_src_lines: Vec<&str> = Vec::new();
             compile_element(
