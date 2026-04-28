@@ -39,17 +39,31 @@ proof check . --fail-on-error      # CI mode: non-zero exit on errors
 proof validates:
 
 - **ASCII art** — box widths, column separator alignment, connector continuity
-- **Markdown structure** — required headings, heading order, file length
+- **Markdown structure** — required headings, heading order, file length, H2 allowlists
 - **Tables** — column count, required columns, required row keys, allowed values
 - **Links** — targets exist on disk
-- **Source documents** — broken `md://` references caught before compile time
+- **Source documents** — broken `md://` references and **missing heading paths** caught before compile time
 
-Every diagnostic includes file, line, column, code, and message:
+Every diagnostic includes file, line, column, code, and message. Did-you-mean suggestions appear for typos:
 
 ```
-languages/08-TYPESCRIPT.md:34:1  error    ascii_box_width   bottom border 64, top 63
-docs/api.md:112:1                warning  md_missing_h2     required ## "Summary" absent
-src/guides/math.source.md:45:1   error    md_broken_uri     md:// URI references missing file
+languages/08-TYPESCRIPT.md:34:1  error    ascii_box_width     bottom border 64, top 63
+src/guides/math.source.md:45:1   error    md_broken_uri       Reference to 'fig.md' not found — did you mean 'figs.md'?
+src/guides/math.source.md:18:1   error    md_broken_heading   Heading 'authenticaton' not found in 'api.md'
+src/guides/math.source.md:22:1   warning  SYMBOL-001          Unknown symbol 'checkmar' — did you mean 'checkmark'?
+```
+
+At corpus scale, group identical warnings with `--deduplicate`:
+
+```bash
+proof check . --deduplicate
+# 42x warning [SLIDE-001]: Slide has 5 bullets — reduce to 4 or fewer  in docs/slides/*.md
+```
+
+Reverse dependency lookup — find everything that would break if a heading is renamed:
+
+```bash
+proof depends md://api.md#authentication
 ```
 
 ---
@@ -201,9 +215,13 @@ Each region is a mini-document supporting any `proof:` directive.
 ````markdown
 ```proof:toc max-depth=3 style=list
 ```
+```proof:toc section="API Reference" max-depth=4 style=numbered
+```
 ````
 
 Auto-generates from headings in the current file or any `source=md://` file.
+`section=` scopes the TOC to a subsection — only headings nested under that heading are listed.
+Styles: `list` (default) · `numbered` · `tree`
 
 ---
 
@@ -216,6 +234,43 @@ Named Unicode glyphs that expand in prose, bullets, and slide titles:
 [sym:star][sym:star][sym:star][sym:star-empty][sym:star-empty]  →  ★★★☆☆
 [sym:warning] check this  →  ⚠ check this
 ```
+
+---
+
+### Cross-references — `proof:xref`
+
+Resolves a heading from another document at compile time and renders a formatted link:
+
+````markdown
+```proof:xref uri="md://api.md#authentication" format=note
+```
+````
+
+Formats: `inline` (default) → `*See: [Authentication](api.md#authentication)*`
+· `note` → `> **See also:** [Authentication](api.md#authentication)`
+· `callout` → `→ [Authentication](api.md#authentication)`
+
+When the heading is renamed, recompile updates every `proof:xref` that pointed to it.
+
+---
+
+### Progressive reveal — `proof:bullets` with `[N]` markers
+
+Slide bullet lists support progressive reveal for live presenting. Each
+`[N]` prefix assigns that bullet to step N. Compile produces one canvas per step:
+
+````markdown
+```proof:slide layout=title-content
+title: Key Points
+---
+proof:bullets
+- Always visible
+[2] - Appears on click 2
+[3] - Appears on click 3
+```
+````
+
+The compiled output contains multiple canvas blocks (one per step) for use with any terminal slide viewer.
 
 ---
 
