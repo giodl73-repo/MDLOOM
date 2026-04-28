@@ -5,8 +5,10 @@ All notable changes to **proof** (formerly **glint**), in [Keep a Changelog](htt
 The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → compile** — with stable figure addressing, invariant pinning, and a math/diagram/slide rendering pipeline on top.
 
 ```
-v0.5  ┌──────────────────────────────────────────────────────────────┐
-      │ math · watch · multi-target compile · guides · source-link    │
+v0.6  ┌──────────────────────────────────────────────────────────────┐
+      │ xref · chart · reveal · AI CLI · author experience            │
+      ├──────────────────────────────────────────────────────────────┤
+v0.5  │ math · watch · multi-target compile · guides · source-link    │
       ├──────────────────────────────────────────────────────────────┤
 v0.4  │ slides · dashboard · figures · symbols · elements             │
       ├──────────────────────────────────────────────────────────────┤
@@ -17,6 +19,75 @@ v0.2  │ fix pipeline · draft · baseline                               │
 v0.1  │ check · ASCII box / flow / tree · markdown rules              │
       └──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## [0.6.0] — 2026-04-28 — *the author experience release*
+
+The focus shifts from "can proof render this?" to "does proof help you author well?" v0.6 closes the authoring loop: cross-references that update themselves, diagnostics that suggest fixes, AI-assisted invariant generation, and a full corpus-scale toolset. The slide system matures from a renderer into a presentation platform.
+
+### Added
+
+#### New compile directives
+
+- **`proof:chart`** — bar and line charts rendered to ASCII from a markdown table source. Supports axis labels, title, configurable width. Used inside any `.source.md` document or dashboard region.
+- **`proof:xref`** — cross-reference directive that resolves the target heading text at compile time. `uri="md://api.md#authentication"` renders as `*See: [Authentication](api.md#authentication)*`. Three formats: `inline`, `note`, `callout`. When a heading is renamed, recompile updates every `proof:xref` automatically.
+- **`proof:blockquote`** — prose document block quote with a left margin bar (`│`). Distinct from `proof:quote` (slide-only, centered); `proof:blockquote` is for document context with optional `attribution=` and `style=` (`bar` | `indented` | `double`).
+- **`proof:include pin=id`** — declare the expected DaVinci invariant ID inline on an include directive. Emits COMPILE-007 warning when no matching `[[davinci]]` entry exists in `proof.toml`, prompting `proof pin <uri> --id <id>`. When the pin exists, invariant validation runs as before.
+
+#### Slide system — presentation platform
+
+- **Progressive reveal** — bullets prefixed `[N]` (N ≥ 2) are assigned to reveal step N. `proof compile` produces one canvas block per step, cumulative. The `[N]` syntax works inside any `proof:bullets` block in a `.slides.source.md` file.
+- **Slide footer** — `footer: true` in front-matter stamps author, date, and deck title on the last row of every slide canvas. `footer-text: "Custom"` overrides the auto format.
+- **`layout=agenda`** — auto-generates a bullet list of all `layout=section` slide titles from the deck. The agenda lists section slides that appear *after* it — no manual maintenance.
+- **Slide progress bar** — `progress-bar: true` emits a `████░░░ N/M` proportional bar between the SLIDE separator and the canvas content. Outside the canvas (SL-1 invariant still holds).
+- **Two-column default ratio 60:40** — changed from 50:50. Presentation best practice; `ratio=50:50` in existing source files still works unchanged.
+
+#### Corpus-scale tools
+
+- **`proof status`** — one-screen corpus health summary: source count, compiled count, stale files, last compile time, cached error/warning counts, config summary. `proof check` now writes `.proof/last-check.json` after every run so `proof status` can display live diagnostic counts.
+- **`proof depends`** — reverse dependency lookup: `proof depends md://api.md#authentication` lists every `.source.md` file that references that URI. Find everything that breaks before renaming a heading or moving a figure.
+- **`proof check --unused`** — find `.md` figures that no `.source.md` references via `proof:include`, `proof:layout`, or `source=md://...`. Emits `unused_figure` warnings. Off by default (full corpus walk); enable with `--unused`.
+- **`proof check --deduplicate`** — at corpus scale, collapses repeated identical diagnostics into `42x warning [SLIDE-001]: ... in docs/slides/*.md`. Singletons still render normally.
+
+#### AI-assisted authoring
+
+- **`[ai]` config block** — configures any external AI CLI for `proof spec-generate --ai` and future commands. `command` + `args` with `{prompt}` substitution. Default: `claude -p "{prompt}"` (Claude Code). Works with `llm`, `ollama`, `aichat`, or any CLI that reads a prompt and writes a response.
+
+```toml
+[ai]
+command = "claude"
+args    = ["-p", "{prompt}"]
+```
+
+- **`proof spec-generate --ai`** — calls the configured AI CLI with the figure content and asks it to suggest `[[davinci]]` invariants. Without `--ai`, the existing static heuristic analysis runs with no dependencies.
+
+#### Schema — section rules
+
+- **`optional_h2`** in `[markdown]` and `[[section_schemas]]` — H2 headings that are allowed but not required. When any of `required_h2`, `required_h2_all`, or `optional_h2` is non-empty, H2s not in any list emit `md_unexpected_section` (H2 allowlist).
+- **`forbidden_h2`** in `[markdown]` and `[[section_schemas]]` — H2 sections that must NOT appear. Emits `md_forbidden_section`. Use to keep authoring scaffolds (`## Draft`, `## TODO`) out of production guides.
+
+#### Diagnostic improvements
+
+- **Did-you-mean for symbols** — `Unknown symbol 'checkmar' — did you mean 'checkmark'?` Levenshtein distance search across names + aliases.
+- **Did-you-mean for `md://` URIs** — `Reference to 'fig.md' not found — did you mean 'figs.md'?` Filesystem walk for closest match within edit distance 3.
+- **`md://` heading path validation in `proof check`** — verifies that heading slugs in URIs (e.g. `md://api.md#authentication`) resolve to real headings in the target file. Emits `md_broken_heading` when the heading doesn't exist. Previously only the file's existence was checked.
+- **`SLIDE-001` message** — now reads `"Slide has 6 bullets — reduce to 4 or fewer (30-second rule)"` with actionable count and threshold. Default `max_bullets` changed from 6 → 4.
+- **Bullet continuation paragraphs** — indented prose under a bullet item renders with the parent bullet's content-column indent and no glyph. Does not count toward `max_bullets`.
+
+#### Dashboard
+
+- **DASHBOARD-006** — warning when canvas `width` exceeds 220 columns (standard terminal threshold). Emitted at compile time.
+
+### Changed
+
+- `proof spec-generate` signature: now accepts `--ai` flag and reads `[ai]` config from `proof.toml`.
+- `proof:toc section=` parameter (already in v0.5) documented and tested with 7 dedicated tests.
+- All design spec status lines updated from "not yet implemented" to reflect actual implementation state.
+
+### What it enables
+
+Authors can now write a 50-slide deck, reference 300 figures by name, and know that every cross-reference is alive, every invariant is enforced, and any heading rename ripples through automatically on the next compile. The `proof status` + `proof depends` + `proof check --unused` triad gives full corpus visibility without running the full check pipeline. The `[ai]` block turns any installed AI CLI into a first-class authoring assistant — no API keys in config, no SDK dependencies.
 
 ---
 
