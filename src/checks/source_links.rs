@@ -168,9 +168,81 @@ fn validate_uri(
         return;
     }
 
-    // If the URI has a heading path, check it resolves
-    // (skip full element resolution — file existence is the main check for `proof check`)
-    // Full element resolution happens at compile time.
+    // If the URI has a heading path, validate that each heading slug exists in the file.
+    // We check the heading_path sequence by walking the document and verifying that the
+    // requested heading appears (at any level) after the previous match — a lightweight
+    // structural check that catches typos without full element resolution.
+    if !parsed.heading_path.is_empty() {
+        match std::fs::read_to_string(&file_path) {
+            Ok(content) => {
+                if let Some(missing) = find_missing_heading_slug(&content, &parsed.heading_path) {
+                    let full_path = parsed.heading_path.join("/");
+                    diags.push(Diagnostic::error(
+                        path.to_path_buf(),
+                        line_no,
+                        1,
+                        "md_broken_heading",
+                        format!(
+                            "Heading '{}' not found in '{}' (looking for '#{}' in heading path '#{}') ",
+                            missing, parsed.path, missing, full_path
+                        ),
+                    ));
+                }
+            }
+            Err(_) => {} // file read error — silently skip; the file-existence check already passed
+        }
+    }
+}
+
+/// Walk the heading path and return the first slug that cannot be found
+/// sequentially in the document headings. Returns `None` if all slugs resolve.
+fn find_missing_heading_slug<'a>(content: &str, heading_path: &'a [String]) -> Option<&'a str> {
+    // Collect all heading slugs in document order (skipping code blocks).
+    let slugs: Vec<String> = collect_heading_slugs(content);
+
+    // Walk the heading_path: each element must appear in `slugs` at or after
+    // the position of the previous match (loose sequence, not strict nesting).
+    let mut search_from = 0usize;
+    for slug in heading_path {
+        let target = slug.as_str();
+        let found = slugs[search_from..].iter().position(|s| s == target);
+        match found {
+            Some(rel_pos) => search_from += rel_pos + 1,
+            None => return Some(target),
+        }
+    }
+    None
+}
+
+/// Extract heading slugs from a markdown document (skipping code fences).
+fn collect_heading_slugs(content: &str) -> Vec<String> {
+    let mut slugs = Vec::new();
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence { continue; }
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let text = trimmed[level..].trim();
+            if !text.is_empty() {
+                slugs.push(heading_slug(text));
+            }
+        }
+    }
+    slugs
+}
+
+/// GitHub-style heading slug: lowercase, spaces → hyphens, strip non-alnum/non-hyphen.
+fn heading_slug(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
 }
 
 /// Find the closest `.md` file name under `root` to the missing `path`.
@@ -277,5 +349,88 @@ mod tests {
         let check = SourceLinkCheck { root: dir.path().to_path_buf() };
         let diags = check.check(&path, content);
         assert!(diags.is_empty(), "compiled .md files should not be checked");
+    }
+
+    // ── heading path validation ───────────────────────────────────────────────
+
+    #[test]
+    fn valid_heading_in_uri_produces_no_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("api.md"), "# API\n\n## Authentication\n\nContent.\n").unwrap();
+        let content = "```proof:include\nmd://api.md#authentication\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(diags.is_empty(), "existing heading should not produce error, got: {:?}", diags);
+    }
+
+    #[test]
+    fn missing_heading_in_uri_produces_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("api.md"), "# API\n\n## Overview\n\nContent.\n").unwrap();
+        let content = "```proof:include\nmd://api.md#nonexistent-section\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(
+            diags.iter().any(|d| d.code == "md_broken_heading"),
+            "missing heading should produce md_broken_heading, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn heading_check_skipped_for_file_only_uri() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("data.md"), "# Data\n\nContent.\n").unwrap();
+        let content = "```proof:include\nmd://data.md\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(diags.is_empty(), "file-only URI (no heading) must not trigger heading check");
+    }
+
+    #[test]
+    fn heading_inside_code_fence_does_not_count() {
+        let dir = tempfile::tempdir().unwrap();
+        // The only ## heading is inside a code fence — should not satisfy the heading check
+        std::fs::write(dir.path().join("doc.md"),
+            "# Title\n\n```\n## code-section\n```\n").unwrap();
+        let content = "```proof:include\nmd://doc.md#code-section\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(
+            diags.iter().any(|d| d.code == "md_broken_heading"),
+            "heading inside code fence must not satisfy heading path check, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn nested_heading_path_validated() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("guide.md"),
+            "# Guide\n\n## API Reference\n\n### Authentication\n\nContent.\n").unwrap();
+        // md://guide.md#api-reference/authentication — both slugs must be found
+        let content = "```proof:include\nmd://guide.md#api-reference/authentication\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(diags.is_empty(), "nested heading path that exists must not produce error, got: {:?}", diags);
+    }
+
+    #[test]
+    fn nested_heading_path_missing_child_warns() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("guide.md"),
+            "# Guide\n\n## API Reference\n\nContent only, no sub-headings.\n").unwrap();
+        let content = "```proof:include\nmd://guide.md#api-reference/missing-child\n```\n";
+        let diags = check_source(content, dir.path());
+        assert!(
+            diags.iter().any(|d| d.code == "md_broken_heading"),
+            "missing child heading should produce md_broken_heading, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn collect_heading_slugs_basic() {
+        let content = "# Title One\n\n## Section A\n\n### Sub Section\n\nProse\n";
+        let slugs = collect_heading_slugs(content);
+        assert_eq!(slugs, vec!["title-one", "section-a", "sub-section"]);
+    }
+
+    #[test]
+    fn heading_slug_strips_special_chars() {
+        assert_eq!(heading_slug("What's New?"), "whats-new");
+        assert_eq!(heading_slug("API Reference"), "api-reference");
     }
 }
