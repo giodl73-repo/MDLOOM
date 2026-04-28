@@ -38,12 +38,29 @@ pub use tokenizer::{MathDiag, DiagSeverity};
 pub use render::{render_display_math, MathAlign};
 
 // ─────────────────────────────────────────────────────────
-// Internal visual width — no dependency on proof::layout
+// Visual width — public API for terminal layout
 // ─────────────────────────────────────────────────────────
 
 /// Visual column width of a string under East Asian Width rules.
-/// Box-drawing and Braille block characters are always 1 column.
-pub(crate) fn visual_width(s: &str) -> usize {
+///
+/// Box-drawing characters (U+2500..U+257F), Braille (U+2800..U+28FF), and
+/// geometric shapes (U+25A0..U+25FF) are always 1 column wide regardless of
+/// what `unicode-width` reports for them. Everything else uses the standard
+/// East Asian Width tables: ASCII and Latin-1 are 1 column, CJK and other
+/// Wide/Fullwidth characters are 2 columns, combining marks are 0 columns.
+///
+/// Use this when laying out mixed ASCII/Unicode content in a terminal —
+/// counting `chars()` overcounts wide CJK glyphs and undercounts combining
+/// marks, while raw `unicode-width` overcounts box-drawing characters that
+/// most terminal fonts render at 1 column.
+///
+/// ```
+/// use proof_math::visual_width;
+/// assert_eq!(visual_width("hello"), 5);
+/// assert_eq!(visual_width("─┼─"), 3);   // box-drawing forced to 1 col each
+/// assert_eq!(visual_width("日本"), 4);  // CJK wide, 2 cols each
+/// ```
+pub fn visual_width(s: &str) -> usize {
     use unicode_width::UnicodeWidthChar;
     s.chars().map(|ch| {
         let cp = ch as u32;

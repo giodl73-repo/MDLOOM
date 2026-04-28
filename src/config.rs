@@ -450,6 +450,13 @@ pub struct MarkdownConfig {
     /// Warn when `>` block quotes are missing the required space (`>text` vs `> text`)
     #[serde(default)]
     pub check_blockquote_spacing: bool,
+
+    // ── Link target checks ───────────────────────────────────────────────────
+
+    /// Verify cross-document `[text](path.md)` links resolve to a file on disk.
+    /// Skips http(s)://, mailto:, md://, and `#anchor` links.
+    #[serde(default = "bool_true")]
+    pub check_links: bool,
 }
 
 impl Default for MarkdownConfig {
@@ -467,6 +474,7 @@ impl Default for MarkdownConfig {
             check_duplicate_headings: false,
             thematic_break_style: None,
             check_blockquote_spacing: false,
+            check_links: true,
         }
     }
 }
@@ -726,6 +734,7 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
         check_duplicate_headings: child.check_duplicate_headings,
         thematic_break_style: child.thematic_break_style.or(parent.thematic_break_style),
         check_blockquote_spacing: child.check_blockquote_spacing,
+        check_links: child.check_links,
     }
 }
 

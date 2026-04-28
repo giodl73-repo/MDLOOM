@@ -137,6 +137,7 @@ fn markdown_h1_count_enforced() {
             max_h1: Some(1),
             ..Default::default()
         },
+        root: None,
     };
     let diags = check.check(Path::new("test.md"), content);
     let h1_warns: Vec<_> = diags.iter()
@@ -155,6 +156,7 @@ fn markdown_required_section_missing() {
             required_h2_all: vec!["Decision Cheat Sheet".to_string()],
             ..Default::default()
         },
+        root: None,
     };
     let diags = check.check(Path::new("test.md"), content);
     assert!(
@@ -172,6 +174,7 @@ fn markdown_required_section_present() {
             required_h2_all: vec!["Decision Cheat Sheet".to_string()],
             ..Default::default()
         },
+        root: None,
     };
     let diags = check.check(Path::new("test.md"), content);
     assert!(
@@ -193,6 +196,7 @@ fn markdown_required_pattern_missing() {
             }],
             ..Default::default()
         },
+        root: None,
     };
     let diags = check.check(Path::new("test.md"), content);
     assert!(
@@ -210,6 +214,7 @@ fn markdown_max_lines_exceeded() {
             max_lines: Some(50),
             ..Default::default()
         },
+        root: None,
     };
     let diags = check.check(Path::new("test.md"), &content);
     assert!(

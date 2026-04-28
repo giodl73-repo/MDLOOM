@@ -1,0 +1,10 @@
+[files]
+root = false
+
+[ascii_box]
+enabled = true
+tolerance = 0
+code_blocks_only = true
+
+[markdown]
+enabled = true

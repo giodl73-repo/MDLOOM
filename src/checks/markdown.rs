@@ -7,10 +7,13 @@
 use crate::checks::Check;
 use crate::config::{MarkdownConfig, PatternSeverity};
 use crate::diagnostic::Diagnostic;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct MarkdownCheck {
     pub config: MarkdownConfig,
+    /// Runner root used to resolve cross-document links. When `None`, links
+    /// are resolved only against the file's parent directory.
+    pub root: Option<PathBuf>,
 }
 
 impl Check for MarkdownCheck {
@@ -259,8 +262,171 @@ impl Check for MarkdownCheck {
             }
         }
 
+        // ── Cross-document link target verification ───────────────────────────
+        if self.config.check_links {
+            check_link_targets(path, self.root.as_deref(), &lines, &in_code_block, &mut diags);
+        }
+
         diags
     }
+}
+
+/// Extract every `[text](url)` link from the file (outside fenced code blocks
+/// and outside backtick code spans) and verify that file-path links resolve
+/// to a target that exists on disk. Skips http(s)://, mailto:, md://, and
+/// `#anchor` links — those are handled by other checks or are out of scope.
+fn check_link_targets(
+    path: &Path,
+    root: Option<&Path>,
+    lines: &[&str],
+    in_code_block: &[bool],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+
+    for (i, &line) in lines.iter().enumerate() {
+        if in_code_block[i] { continue; }
+        let opaque = backtick_spans(line);
+        for span in extract_md_links(line, &opaque) {
+            // Trim a fragment so that `path.md#section` still resolves on disk
+            let url = span.url.trim();
+            if url.is_empty() { continue; }
+            if is_external_or_anchor(url) { continue; }
+            // mdpath URIs are validated by SourceLinkCheck on .source.md files
+            if url.starts_with("md://") { continue; }
+
+            let path_part = match url.find('#') {
+                Some(h) => &url[..h],
+                None => url,
+            };
+            if path_part.is_empty() { continue; }
+
+            // Reject explicit empty links and obvious non-paths
+            let target = resolve_link_target(parent, root, path_part);
+            if !target.exists() {
+                diags.push(Diagnostic::warning(
+                    path.to_path_buf(),
+                    i + 1,
+                    span.col + 1,
+                    "link_broken_target",
+                    format!("link target {:?} does not exist", path_part),
+                ));
+            }
+        }
+    }
+}
+
+/// Resolve a relative link path against the source file's parent. Absolute-
+/// looking paths (leading `/`) are resolved against the runner root if one
+/// was supplied; otherwise they fall through to the file's parent.
+fn resolve_link_target(parent: &Path, root: Option<&Path>, link: &str) -> PathBuf {
+    if let Some(stripped) = link.strip_prefix('/') {
+        if let Some(r) = root {
+            return r.join(stripped);
+        }
+    }
+    parent.join(link)
+}
+
+/// `true` for links the link-target check should ignore.
+fn is_external_or_anchor(url: &str) -> bool {
+    url.starts_with('#')
+        || url.starts_with("http://")
+        || url.starts_with("https://")
+        || url.starts_with("mailto:")
+        || url.starts_with("ftp://")
+        || url.starts_with("ftps://")
+        || url.starts_with("tel:")
+        || url.starts_with("data:")
+}
+
+#[derive(Debug)]
+struct LinkSpan<'a> {
+    /// 0-based column where the `[` begins.
+    col: usize,
+    url: &'a str,
+}
+
+/// Extract `[text](url)` spans from a single line, skipping spans that fall
+/// inside a backtick code span. Image syntax (`![alt](url)`) is also caught,
+/// since the leading `!` does not change the URL parsing.
+fn extract_md_links<'a>(line: &'a str, opaque: &[(usize, usize)]) -> Vec<LinkSpan<'a>> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'[' { i += 1; continue; }
+        if in_opaque(i, opaque) { i += 1; continue; }
+
+        // Find matching `](` — text portion may contain nested brackets, but
+        // we keep this simple: find the next `](` not inside a code span.
+        let after_open = i + 1;
+        let close_text = match find_unopaque(line, after_open, "](", opaque) {
+            Some(p) => p,
+            None => { i += 1; continue; }
+        };
+        let url_start = close_text + 2;
+        let close_url = match find_unopaque(line, url_start, ")", opaque) {
+            Some(p) => p,
+            None => { i += 1; continue; }
+        };
+
+        let url = &line[url_start..close_url];
+        out.push(LinkSpan { col: i, url });
+        i = close_url + 1;
+    }
+    out
+}
+
+fn find_unopaque(line: &str, from: usize, needle: &str, opaque: &[(usize, usize)]) -> Option<usize> {
+    let mut search_from = from;
+    while let Some(rel) = line[search_from..].find(needle) {
+        let abs = search_from + rel;
+        if !in_opaque(abs, opaque) {
+            return Some(abs);
+        }
+        search_from = abs + needle.len();
+    }
+    None
+}
+
+fn in_opaque(pos: usize, opaque: &[(usize, usize)]) -> bool {
+    opaque.iter().any(|(s, e)| pos >= *s && pos < *e)
+}
+
+/// Byte ranges of every backtick code span in the line. A code span runs from
+/// an opening backtick run to the next backtick run of the same length.
+fn backtick_spans(line: &str) -> Vec<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'`' { i += 1; continue; }
+        let run_start = i;
+        let mut run = 0usize;
+        while i < bytes.len() && bytes[i] == b'`' { i += 1; run += 1; }
+        // Find a matching backtick run of the same length
+        let mut j = i;
+        while j < bytes.len() {
+            if bytes[j] == b'`' {
+                let mut close_run = 0usize;
+                while j < bytes.len() && bytes[j] == b'`' { j += 1; close_run += 1; }
+                if close_run == run {
+                    out.push((run_start, j));
+                    i = j; // advance past close backtick so it isn't treated as new open
+                    break;
+                }
+            } else {
+                j += 1;
+            }
+        }
+        // If unterminated, treat rest of line as opaque to be safe
+        if j == bytes.len() && out.last().map(|(s, _)| *s) != Some(run_start) {
+            out.push((run_start, bytes.len()));
+            break;
+        }
+    }
+    out
 }
 
 fn is_thematic_break(trimmed: &str) -> bool {
@@ -325,6 +491,7 @@ mod tests {
                 max_h1: Some(1),
                 ..Default::default()
             },
+            root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
         let h1_warns: Vec<_> = diags.iter().filter(|d| d.code == "md_h1_count").collect();
@@ -342,6 +509,7 @@ mod tests {
                 max_h1: Some(1),
                 ..Default::default()
             },
+            root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
         assert!(diags.iter().any(|d| d.code == "md_h1_count"),
@@ -358,6 +526,7 @@ mod tests {
                 required_h2_all: vec!["Decision Cheat Sheet".to_string()],
                 ..Default::default()
             },
+            root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
         assert!(diags.iter().any(|d| d.code == "md_missing_section"),
@@ -373,9 +542,146 @@ mod tests {
                 max_h1: Some(1),
                 ..Default::default()
             },
+            root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
         assert!(diags.iter().all(|d| d.code != "md_h1_count"),
             "# inside tilde fence must not be counted as H1");
+    }
+
+    // ── link_broken_target ────────────────────────────────────────────────────
+
+    fn link_check(root: Option<&Path>) -> MarkdownCheck {
+        MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                check_links: true,
+                ..Default::default()
+            },
+            root: root.map(|p| p.to_path_buf()),
+        }
+    }
+
+    #[test]
+    fn link_to_existing_sibling_passes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("other.md"), "# Other\n").unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [other](other.md) for details.\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "link to existing file must not be flagged: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn link_to_missing_file_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [other](missing.md) for details.\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        let broken: Vec<_> = diags.iter().filter(|d| d.code == "link_broken_target").collect();
+        assert_eq!(broken.len(), 1, "expected exactly one broken link, got {:?}", diags);
+        assert!(broken[0].message.contains("missing.md"));
+    }
+
+    #[test]
+    fn http_links_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [the spec](https://example.com/spec) and [mailto](mailto:x@y).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(diags.iter().all(|d| d.code != "link_broken_target"));
+    }
+
+    #[test]
+    fn anchor_only_links_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [the section below](#decision-cheat-sheet).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(diags.iter().all(|d| d.code != "link_broken_target"));
+    }
+
+    #[test]
+    fn fragment_after_existing_path_passes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("other.md"), "# Other\n").unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [section](other.md#some-section).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "path#fragment must resolve against the path: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn link_inside_fenced_code_block_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\n```\n[bogus](does-not-exist.md)\n```\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "links inside fenced code blocks must not be checked"
+        );
+    }
+
+    #[test]
+    fn link_inside_backtick_span_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nUse the syntax `[text](url)` to add a link, see [README](README.md).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        // The README.md doesn't exist, so we expect exactly one diagnostic — not two.
+        let broken: Vec<_> = diags.iter().filter(|d| d.code == "link_broken_target").collect();
+        assert_eq!(broken.len(), 1, "code-span link must be ignored; only README.md is real: {:?}", broken);
+        assert!(broken[0].message.contains("README.md"));
+    }
+
+    #[test]
+    fn md_uri_links_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\nSee [figure](md://path/to/file.md#section:0).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "md:// URIs are validated by SourceLinkCheck, not the prose link checker"
+        );
+    }
+
+    #[test]
+    fn check_disabled_via_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content = "# Doc\n\n[broken](no-such-file.md)\n";
+        let check = MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                check_links: false,
+                ..Default::default()
+            },
+            root: Some(dir.path().to_path_buf()),
+        };
+        let diags = check.check(&path, content);
+        assert!(diags.iter().all(|d| d.code != "link_broken_target"));
+    }
+
+    #[test]
+    fn absolute_path_resolves_against_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("at-root.md"), "# Root\n").unwrap();
+        let path = sub.join("doc.md");
+        let content = "# Doc\n\nSee [root](/at-root.md).\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "leading-slash path must resolve against the runner root: {:?}", diags
+        );
     }
 }

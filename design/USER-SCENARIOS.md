@@ -301,7 +301,7 @@ Run: `proof compile src/user-scenarios/ --output-dir docs/user-scenarios/`
 | US-04 | ✓ compiles | Status deck — 6 slides, stats layout, bullets |
 | US-05 | ✓ CLI | `proof spec-generate` — generates DaVinci TOML block |
 | US-06 | ✓ CLI | `proof fix --min-confidence high` — fix pipeline works |
-| US-07 | note | proof-canvas is a Rust library — see `crates/proof-canvas/` |
+| US-07 | note | proof-canvas is a Rust library — see `src/user-scenarios/26-canvas-tui/main.rs` |
 | US-08 | ✓ compiles | Model comparison — proof:row from data/models.md |
 | US-09 | ✓ compiles | Dependencies — dirtree + bullet lists |
 | US-10 | ✓ compiles | Calculus deck — 6 slides, inline + display math |
@@ -315,13 +315,18 @@ Run: `proof compile src/user-scenarios/ --output-dir docs/user-scenarios/`
 | US-18 | ✓ compiles | Architecture — dirtree + bullet org chart |
 | US-19 | ✓ compiles | Problem set — 4 display math blocks, limits, matrices |
 | US-20 | ✓ check | Source link checking — `proof check src/` catches broken md:// |
-| US-21 | note | proof-math is a Rust library — see `crates/proof-math/` |
+| US-21 | note | proof-math is a Rust library — see `src/user-scenarios/27-proof-math-binary/main.rs` |
 | US-22 | ✓ compiles | Status board — 6-region dashboard, no panic |
 | US-23 | ✓ compiles | ADR with TOC — `proof:toc` generates numbered outline |
 | US-24 | ✓ CLI | Multi-target `[[compile]]` — guides + presentations route correctly |
 | US-25 | ✓ compiles | WIP guide — placeholder text while data files are pending |
+| US-26 | ✓ library | proof-canvas in ratatui TUI — `src/user-scenarios/26-canvas-tui/main.rs` |
+| US-27 | ✓ library | proof-math binary — `src/user-scenarios/27-proof-math-binary/main.rs` |
+| US-28 | ✓ compiles | Large corpus scan — 2,703-file baseline check, 0 errors |
+| US-29 | ✓ CLI | Fix pipeline on 47 errors — `proof fix --min-confidence high` |
+| US-30 | ✓ compiles | CI `--delete-on-error` workflow — stale output cleaned on failure |
 
-**Passed**: 23/25 runnable (US-07 and US-21 are library crates, not CLI scenarios)
+**Passed**: 28/30 runnable (US-07 and US-21 are library usage examples, not standalone CLI scenarios)
 
 ## Bugs found during scenario validation
 
@@ -336,10 +341,82 @@ Run: `proof compile src/user-scenarios/ --output-dir docs/user-scenarios/`
    element inline values hit ELEMENT-002. The F79 fix (Text fallback) was also reverted.
    Workaround: use `kind=label` for pre-formatted display strings.
 
-## Future scenarios to add
+---
 
-- US-26: proof-canvas embedded in a real Rust TUI (ratatui + proof-canvas side by side)
-- US-27: proof-math standalone Rust binary using the crate API
-- US-28: Large corpus scan (maxim — 2,703 files, 0 errors baseline check)
-- US-29: proof fix pipeline on a corpus with 47 errors
-- US-30: proof compile --delete-on-error CI workflow
+## US-26 — proof-canvas in a ratatui TUI
+
+**Who**: A Rust developer building a terminal monitoring app.
+**Goal**: Use proof-canvas as the layout primitive — paste regions at exact positions — then hand the rendered string to ratatui for display.
+
+`src/user-scenarios/26-canvas-tui/main.rs`
+
+Key pattern: `Canvas::new(80, 20)` → `paste()` for each panel → `Canvas::render()` → `ratatui::widgets::Paragraph::new(text)`.
+
+**Covers**: Canvas::new, paste, draw_border, scroll_clip, render; ratatui integration point
+
+---
+
+## US-27 — proof-math standalone binary
+
+**Who**: A Rust developer who needs terminal math rendering in a CLI tool.
+**Goal**: Read prose from stdin, expand all `$...$` inline math and `$$...$$` display blocks, write expanded output to stdout.
+
+`src/user-scenarios/27-proof-math-binary/main.rs`
+
+```bash
+echo 'The energy $E = mc^2$ is famous.' | cargo run --example proof-math-binary
+# → The energy E = mc² is famous.
+```
+
+**Covers**: expand_inline_math, render_display_math, MathAlign, MathDiag stderr reporting
+
+---
+
+## US-28 — Large corpus scan (maxim)
+
+**Who**: An author maintaining the maxim reference library (2,703 files, 217 directories).
+**Goal**: Establish a zero-error baseline before authoring; catch any regressions after edits.
+
+`src/user-scenarios/28-large-corpus-scan.source.md`
+
+```bash
+proof check . --errors-only
+# → Checked 2703 files — 0 errors, 0 warnings
+```
+
+**Covers**: --errors-only, large corpus performance, per-section scoping, fix workflow
+
+---
+
+## US-29 — proof fix pipeline on 47 errors
+
+**Who**: A maintainer who inherited docs with 47 box alignment errors.
+**Goal**: Apply all high-confidence fixes without reviewing each one manually.
+
+`src/user-scenarios/29-fix-pipeline/before.md` — sample of the broken files.
+`src/user-scenarios/29-fix-pipeline/proof.toml` — zero-tolerance config for checking.
+
+```bash
+proof check src/user-scenarios/29-fix-pipeline/ --errors-only
+proof fix   src/user-scenarios/29-fix-pipeline/ --min-confidence high --dry-run
+proof fix   src/user-scenarios/29-fix-pipeline/ --min-confidence high
+proof check src/user-scenarios/29-fix-pipeline/ --errors-only
+```
+
+**Covers**: fix pipeline, confidence levels, --dry-run, bottom-up application order
+
+---
+
+## US-30 — proof compile --delete-on-error CI workflow
+
+**Who**: A CI engineer who wants docs to never deploy with stale compiled output.
+**Goal**: `proof compile --delete-on-error` removes old output when a source fails to compile, so the deploy step always sees either fresh or absent output — never stale.
+
+`src/user-scenarios/30-delete-on-error.source.md`
+
+```yaml
+- name: Compile docs
+  run: proof compile --delete-on-error
+```
+
+**Covers**: --delete-on-error, [[compile]] multi-target, exit codes, GitHub Actions integration

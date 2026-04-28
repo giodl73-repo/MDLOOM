@@ -11,7 +11,7 @@ use proof_lib::tree::schema::{FieldMap, generate_org, generate_taxonomy, generat
 use proof_lib::spec_gen;
 use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
 use proof_lib::{Confidence, Diagnostic, FixPlan, GlintConfig, Runner, Severity};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
 #[derive(Parser)]
@@ -1155,6 +1155,7 @@ fn cmd_compile_watch(
     config_override: &Option<PathBuf>,
 ) -> Result<()> {
     use notify::{RecommendedWatcher, RecursiveMode, Watcher, Event, EventKind};
+    use std::collections::{HashMap, HashSet};
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
@@ -1202,10 +1203,11 @@ fn cmd_compile_watch(
     }
     eprintln!();
 
-    // Initial compile pass for all targets
-    for (src_dir, out_dir) in &watch_targets {
-        compile_watch_pass(&[src_dir.clone()], out_dir, &root, &config)?;
-    }
+    // Reverse-dependency index. dep_to_sources[F] = every source file whose
+    // last successful compile pulled F in via an md:// URI. When F changes,
+    // every source listed under it gets recompiled.
+    let mut dep_to_sources: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
+    let mut watched_deps: HashSet<PathBuf> = HashSet::new();
 
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
     let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
@@ -1216,11 +1218,27 @@ fn cmd_compile_watch(
         }
     }
 
+    // Initial compile pass for all targets — collect dependencies as we go.
+    for (src_dir, out_dir) in &watch_targets {
+        let sources = compile_watch_pass(&[src_dir.clone()], out_dir, &root, &config)?;
+        for source_path in &sources {
+            update_deps_for_source(
+                source_path, &root, &mut dep_to_sources,
+                &mut watched_deps, &mut watcher,
+            );
+        }
+    }
+    if !watched_deps.is_empty() {
+        eprintln!("{} watching {} md:// dependency file{}",
+            "→".cyan(), watched_deps.len(),
+            if watched_deps.len() == 1 { "" } else { "s" });
+    }
+
     // Build a lookup: source path prefix → output_dir
     let target_map: Vec<(PathBuf, Option<PathBuf>)> = watch_targets.clone();
 
     let debounce = Duration::from_millis(100);
-    let mut pending: Vec<PathBuf> = Vec::new();
+    let mut pending_sources: HashSet<PathBuf> = HashSet::new();
     let mut last_event = Instant::now();
 
     loop {
@@ -1228,11 +1246,21 @@ fn cmd_compile_watch(
             Ok(Ok(event)) => {
                 if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                     for path in event.paths {
-                        if path.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
-                            if !pending.contains(&path) {
-                                pending.push(path);
-                            }
+                        let is_source = path.to_str()
+                            .map(|s| s.ends_with(".source.md"))
+                            .unwrap_or(false);
+                        if is_source {
+                            pending_sources.insert(path);
                             last_event = Instant::now();
+                        } else {
+                            // Non-source file: check the reverse dep index
+                            let key = std::fs::canonicalize(&path).unwrap_or(path);
+                            if let Some(dependents) = dep_to_sources.get(&key) {
+                                for dep_src in dependents {
+                                    pending_sources.insert(dep_src.clone());
+                                }
+                                last_event = Instant::now();
+                            }
                         }
                     }
                 }
@@ -1242,14 +1270,18 @@ fn cmd_compile_watch(
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
 
-        if !pending.is_empty() && last_event.elapsed() >= debounce {
-            let changed = std::mem::take(&mut pending);
+        if !pending_sources.is_empty() && last_event.elapsed() >= debounce {
+            let changed: Vec<PathBuf> = pending_sources.drain().collect();
             for source_path in &changed {
                 // Find the matching target's output_dir
                 let out_dir = target_map.iter()
                     .find(|(src, _)| source_path.starts_with(src))
                     .and_then(|(_, out)| out.clone());
                 compile_one_watch(source_path, &out_dir, &root, &config);
+                update_deps_for_source(
+                    source_path, &root, &mut dep_to_sources,
+                    &mut watched_deps, &mut watcher,
+                );
             }
         }
     }
@@ -1257,13 +1289,114 @@ fn cmd_compile_watch(
     Ok(())
 }
 
+/// Re-scan the source file for md:// URIs, resolve each to a filesystem path,
+/// refresh `dep_to_sources` for this source, and add newly discovered deps to
+/// the watcher (keeping `watched_deps` as the dedupe set). Existing dep
+/// entries that no longer apply to this source are pruned.
+fn update_deps_for_source<W: notify::Watcher>(
+    source_path: &Path,
+    root: &Path,
+    dep_to_sources: &mut std::collections::HashMap<PathBuf, std::collections::HashSet<PathBuf>>,
+    watched_deps: &mut std::collections::HashSet<PathBuf>,
+    watcher: &mut W,
+) {
+    use notify::RecursiveMode;
+    let canonical_source = std::fs::canonicalize(source_path)
+        .unwrap_or_else(|_| source_path.to_path_buf());
+
+    let new_deps = scan_md_uri_deps(source_path, root);
+
+    // Prune stale entries: anything in dep_to_sources that pointed to this
+    // source but isn't in the fresh set anymore.
+    let stale: Vec<PathBuf> = dep_to_sources.iter()
+        .filter(|(dep, srcs)| srcs.contains(&canonical_source) && !new_deps.contains(*dep))
+        .map(|(dep, _)| dep.clone())
+        .collect();
+    for dep in stale {
+        if let Some(srcs) = dep_to_sources.get_mut(&dep) {
+            srcs.remove(&canonical_source);
+            if srcs.is_empty() {
+                dep_to_sources.remove(&dep);
+            }
+        }
+    }
+
+    // Insert / update for current deps and watch each one.
+    for dep in &new_deps {
+        dep_to_sources.entry(dep.clone())
+            .or_insert_with(std::collections::HashSet::new)
+            .insert(canonical_source.clone());
+
+        if !watched_deps.contains(dep) && dep.exists() {
+            // Watch the file's parent directory non-recursively so we get
+            // notified about edits without explicit recursive coverage. (notify
+            // on Windows is happier watching directories than individual files
+            // for cross-editor compatibility — many editors atomic-rename.)
+            let watch_target = dep.parent().unwrap_or(dep);
+            match watcher.watch(watch_target, RecursiveMode::NonRecursive) {
+                Ok(_) => { watched_deps.insert(dep.clone()); }
+                Err(_) => {
+                    // Already watched (parent matches an existing recursive
+                    // watch on a source dir), or transient permission issue —
+                    // record as watched anyway so we don't retry on every
+                    // recompile.
+                    watched_deps.insert(dep.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Scan a `.source.md` file for `md://` URIs and resolve each one to its
+/// filesystem path via mdpath. Failed resolutions are silently skipped — the
+/// compiler will surface the error on the next compile pass with proper
+/// diagnostics; for the watcher we just want the paths we CAN resolve.
+fn scan_md_uri_deps(source_path: &Path, root: &Path) -> std::collections::HashSet<PathBuf> {
+    use std::collections::HashSet;
+    let mut deps: HashSet<PathBuf> = HashSet::new();
+    let content = match std::fs::read_to_string(source_path) {
+        Ok(c) => c,
+        Err(_) => return deps,
+    };
+
+    // Find every md:// literal in the source. Each URI runs from `md://` up to
+    // (but not including) the first whitespace, quote, backtick, or `>` —
+    // robust enough for all directive arg styles (`source=md://...`,
+    // bare-line bodies, `[[davinci]] uri = "md://..."`, etc.).
+    let mut idx = 0;
+    while let Some(pos) = content[idx..].find("md://") {
+        let start = idx + pos;
+        let rest = &content[start..];
+        let end_off = rest.find(|c: char| {
+            c.is_whitespace() || c == '"' || c == '`' || c == '>' || c == '<'
+        }).unwrap_or(rest.len());
+        let uri = &rest[..end_off];
+        idx = start + end_off.max(1);
+
+        let parsed = match mdpath::parse(uri) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if let Ok(element) = mdpath::resolve(&parsed, root) {
+            let canonical = std::fs::canonicalize(&element.file)
+                .unwrap_or(element.file);
+            // Don't add the source file itself — that's covered by
+            // `.source.md` event handling and would cause feedback loops.
+            if canonical != source_path {
+                deps.insert(canonical);
+            }
+        }
+    }
+    deps
+}
+
 fn compile_watch_pass(
     watch_paths: &[PathBuf],
     output_dir: &Option<PathBuf>,
     root: &std::path::Path,
     config: &proof_lib::GlintConfig,
-) -> Result<()> {
-    let mut count = 0usize;
+) -> Result<Vec<PathBuf>> {
+    let mut sources: Vec<PathBuf> = Vec::new();
     for watch_path in watch_paths {
         for entry in walkdir::WalkDir::new(watch_path)
             .into_iter()
@@ -1273,12 +1406,12 @@ fn compile_watch_pass(
             let p = entry.path().to_path_buf();
             if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
                 compile_one_watch(&p, output_dir, root, config);
-                count += 1;
+                sources.push(p);
             }
         }
     }
-    eprintln!("{} initial compile: {} files", "→".cyan(), count);
-    Ok(())
+    eprintln!("{} initial compile: {} files", "→".cyan(), sources.len());
+    Ok(sources)
 }
 
 fn compile_one_watch(

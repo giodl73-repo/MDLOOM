@@ -1,11 +1,13 @@
 <!-- proof:compiled from="proof:slides" count=1 -->
 ```slides
 SLIDE 1 ─────────────────────────────── 1/1
+Key Points                              
                                         
                                         
-               Test Title               
-             Test Subtitle              
-                                        
+────────────────────────────────────────
+● First point                           
+  ◦ Nested item                         
+● Second point                          
                                         
 ```
 <!-- /proof:compiled -->

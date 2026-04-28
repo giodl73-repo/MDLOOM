@@ -51,6 +51,7 @@ A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks e
 
 - New checks `source_link_broken`, `source_link_missing` validate links inside `.source.md` files against the **resolved output paths**, not the source paths. A link to `../guides/01-math.md` in a source file now correctly checks against `docs/guides/01-math.md` after compile resolution.
 - Source-side link checks integrate into the `proof check` pipeline; CI can now catch broken cross-document links before compile.
+- **Prose link target verification** — `MarkdownCheck` now resolves every `[text](path.md)` link against the runner root (or file parent) and emits `link_broken_target` for missing files. Skips `http(s)://`, `mailto:`, `md://`, and `#anchor` links; ignores links inside fenced code blocks and backtick code spans. Toggle via `[markdown] check_links = false`.
 
 #### `mdpath` Classifier extension
 

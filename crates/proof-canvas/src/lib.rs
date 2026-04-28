@@ -116,13 +116,62 @@ pub fn char_width(ch: char) -> usize {
     UnicodeWidthChar::width(ch).unwrap_or(1)
 }
 
-// Fix paste to use the correct method
 impl Canvas {
     /// Same as `paste` but takes owned `String` lines.
     pub fn paste_owned(&mut self, x: usize, y: usize, lines: &[String]) -> &mut Self {
         let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
         self.paste(x, y, &refs)
     }
+
+    /// Draw a box-drawing border around the rectangle (x, y, w, h).
+    ///
+    /// The border occupies the outermost row/column of the rectangle.
+    /// Interior content must be pasted at (x+1, y+1) with size (w-2, h-2).
+    /// Silently does nothing if w < 2 or h < 2.
+    ///
+    /// Uses single-line box-drawing: ┌ ─ ┐ │ └ ┘
+    pub fn draw_border(&mut self, x: usize, y: usize, w: usize, h: usize) -> &mut Self {
+        if w < 2 || h < 2 { return self; }
+        let right = x + w - 1;
+        let bottom = y + h - 1;
+
+        // top and bottom edges
+        let top_row: String = std::iter::once('┌')
+            .chain(std::iter::repeat('─').take(w - 2))
+            .chain(std::iter::once('┐'))
+            .collect();
+        let bot_row: String = std::iter::once('└')
+            .chain(std::iter::repeat('─').take(w - 2))
+            .chain(std::iter::once('┘'))
+            .collect();
+
+        self.paste(x, y, &[top_row.as_str()]);
+        self.paste(x, bottom, &[bot_row.as_str()]);
+
+        // side edges
+        for row in (y + 1)..bottom {
+            if row >= self.height { break; }
+            if x < self.width {
+                self.buf[row * self.width + x] = '│';
+            }
+            if right < self.width {
+                self.buf[row * self.width + right] = '│';
+            }
+        }
+
+        self
+    }
+}
+
+/// Clip `lines` to a scrollable window of `max_height` rows starting at `offset`.
+///
+/// Returns a `Vec<&str>` slice — always at most `max_height` elements.
+/// If `offset` exceeds the number of lines, returns an empty vec.
+pub fn scroll_clip<'a>(lines: &'a [&'a str], max_height: usize, offset: usize) -> Vec<&'a str> {
+    if offset >= lines.len() || max_height == 0 {
+        return Vec::new();
+    }
+    lines[offset..].iter().copied().take(max_height).collect()
 }
 
 #[cfg(test)]
@@ -221,5 +270,98 @@ mod tests {
         assert_eq!(char_width('─'), 1);
         assert_eq!(char_width('└'), 1);
         assert_eq!(char_width('⣿'), 1); // Braille
+    }
+
+    // ── draw_border ──────────────────────────────────────────
+
+    #[test]
+    fn draw_border_corners() {
+        let mut c = Canvas::new(5, 4);
+        c.draw_border(0, 0, 5, 4);
+        let rows: Vec<String> = c.render().lines().map(|l| l.to_string()).collect();
+        assert!(rows[0].starts_with('┌'), "top-left corner: {:?}", rows[0]);
+        assert!(rows[0].ends_with('┐'), "top-right corner: {:?}", rows[0]);
+        assert!(rows[3].starts_with('└'), "bot-left corner: {:?}", rows[3]);
+        assert!(rows[3].ends_with('┘'), "bot-right corner: {:?}", rows[3]);
+    }
+
+    #[test]
+    fn draw_border_top_edge_is_horizontal() {
+        let mut c = Canvas::new(6, 3);
+        c.draw_border(0, 0, 6, 3);
+        let rows: Vec<String> = c.render().lines().map(|l| l.to_string()).collect();
+        // interior of top row (positions 1..5) should be '─'
+        let top_interior: String = rows[0].chars().skip(1).take(4).collect();
+        assert!(top_interior.chars().all(|ch| ch == '─'), "top interior: {:?}", top_interior);
+    }
+
+    #[test]
+    fn draw_border_side_edges_are_vertical() {
+        let mut c = Canvas::new(5, 5);
+        c.draw_border(0, 0, 5, 5);
+        let rows: Vec<String> = c.render().lines().map(|l| l.to_string()).collect();
+        for row in &rows[1..4] {
+            assert_eq!(row.chars().next().unwrap(), '│', "left edge: {:?}", row);
+            assert_eq!(row.chars().last().unwrap(), '│', "right edge: {:?}", row);
+        }
+    }
+
+    #[test]
+    fn draw_border_too_small_is_noop() {
+        let mut c = Canvas::new(3, 3);
+        c.draw_border(0, 0, 1, 1); // w < 2 — no-op
+        assert!(c.render().chars().all(|ch| ch == ' ' || ch == '\n'));
+    }
+
+    #[test]
+    fn draw_border_offset_inside_canvas() {
+        let mut c = Canvas::new(10, 6);
+        c.draw_border(2, 1, 6, 4);
+        let rows: Vec<String> = c.render().lines().map(|l| l.to_string()).collect();
+        // row 0 entirely untouched
+        assert!(rows[0].chars().all(|ch| ch == ' '), "row 0 untouched: {:?}", rows[0]);
+        // row 1 col 2 = '┌'
+        let ch = rows[1].chars().nth(2).unwrap();
+        assert_eq!(ch, '┌', "top-left of inner border: {:?}", ch);
+    }
+
+    // ── scroll_clip ──────────────────────────────────────────
+
+    #[test]
+    fn scroll_clip_zero_offset_takes_first_n() {
+        let lines = vec!["a", "b", "c", "d", "e"];
+        let result = scroll_clip(&lines, 3, 0);
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn scroll_clip_offset_skips_lines() {
+        let lines = vec!["a", "b", "c", "d", "e"];
+        let result = scroll_clip(&lines, 3, 2);
+        assert_eq!(result, vec!["c", "d", "e"]);
+    }
+
+    #[test]
+    fn scroll_clip_offset_at_last_line() {
+        let lines = vec!["a", "b", "c"];
+        let result = scroll_clip(&lines, 5, 2);
+        assert_eq!(result, vec!["c"]);
+    }
+
+    #[test]
+    fn scroll_clip_offset_beyond_end_is_empty() {
+        let lines = vec!["a", "b"];
+        assert!(scroll_clip(&lines, 3, 5).is_empty());
+    }
+
+    #[test]
+    fn scroll_clip_max_height_zero_is_empty() {
+        let lines = vec!["a", "b", "c"];
+        assert!(scroll_clip(&lines, 0, 0).is_empty());
+    }
+
+    #[test]
+    fn scroll_clip_empty_input_is_empty() {
+        assert!(scroll_clip(&[], 5, 0).is_empty());
     }
 }

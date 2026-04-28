@@ -156,6 +156,7 @@ Document structure: headings, required content, file length. **Must set `enabled
 | `check_duplicate_headings` | bool | `false` | Warn on identical heading text at the same level |
 | `thematic_break_style` | string? | none | Enforce `"---"`, `"***"`, `"___"`, or `""` (any) |
 | `check_blockquote_spacing` | bool | `false` | Warn on `>text` (missing space after `>`) |
+| `check_links` | bool | `true` | Verify cross-document `[text](path.md)` links resolve to a real file. Skips `http(s)://`, `mailto:`, `md://`, and `#anchor` links. Emits `link_broken_target`. |
 
 ### `RequiredPattern`
 

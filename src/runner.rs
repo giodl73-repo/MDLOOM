@@ -157,7 +157,10 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
     // Build the effective markdown config for this specific file
     let effective_md = effective_markdown(config, file, root);
     if effective_md.enabled {
-        checks.push(Box::new(MarkdownCheck { config: effective_md }));
+        checks.push(Box::new(MarkdownCheck {
+            config: effective_md,
+            root: Some(root.to_path_buf()),
+        }));
     }
 
     if config.markdown_table.enabled {
