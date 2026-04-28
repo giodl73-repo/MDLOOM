@@ -126,6 +126,18 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    /// proof:xref — cross-reference to a heading in another document.
+    /// Renders as "See: [Heading Text](relative-path.md#slug)".
+    Xref {
+        /// Target URI: `md://path.md#heading-slug` or `md://path.md`
+        uri: String,
+        /// Optional override label; defaults to the resolved heading text
+        label: Option<String>,
+        /// Render format: "inline" | "note" | "callout"
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
 }
 
 /// Parsed attributes from a proof:tree directive.
@@ -259,6 +271,7 @@ impl Directive {
             Directive::Region { line_start, .. } => *line_start,
             Directive::Math { line_start, .. } => *line_start,
             Directive::Toc  { line_start, .. } => *line_start,
+            Directive::Xref { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -274,6 +287,7 @@ impl Directive {
             Directive::Region { line_end, .. } => *line_end,
             Directive::Math { line_end, .. } => *line_end,
             Directive::Toc  { line_end, .. } => *line_end,
+            Directive::Xref { line_end, .. } => *line_end,
         }
     }
 }
@@ -625,6 +639,24 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         source, max_depth, style, section, line_start, line_end,
                     });
                 }
+                "xref" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:xref")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let uri = extract_attr_value(&info_after, "uri")
+                        .or_else(|| extract_attr_value(&info_after, "source"))
+                        .or_else(|| body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                        }))
+                        .unwrap_or_default();
+                    let label = extract_attr_value(&info_after, "label");
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "inline".to_string());
+                    directives.push(Directive::Xref { uri, label, format, line_start, line_end });
+                }
                 _ => {}
             }
         }
@@ -677,6 +709,7 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("region")  { Some("region") }
     else if rest.starts_with("math")    { Some("math") }
     else if rest.starts_with("toc")     { Some("toc") }
+    else if rest.starts_with("xref")    { Some("xref") }
     else if rest.starts_with("numbered-list") { Some("ol") } // primary name
     else if rest.starts_with("ol")      { Some("ol") }       // short-form alias
     else { None }
@@ -1026,6 +1059,30 @@ pub fn compile_file(
                         )
                     }
                     None => source_fallback(&source_lines, line_start, line_end),
+                }
+            }
+
+            Directive::Xref { uri, label, format, .. } => {
+                match render_xref(uri, label.as_deref(), format, root) {
+                    Ok(rendered) => {
+                        resolved_count += 1;
+                        format!(
+                            "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
+                            rendered
+                        )
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: uri.clone(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("xref error: {}", e),
+                            source_line: line_start + 1,
+                        });
+                        source_fallback(&source_lines, line_start, line_end)
+                    }
                 }
             }
         };
@@ -1444,6 +1501,86 @@ fn render_inline_outline(content: &str) -> Result<String> {
         out.push('\n');
     }
     Ok(out.trim_end().to_string())
+}
+
+/// Render a `proof:xref` directive as a formatted cross-reference.
+///
+/// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
+/// reading the target file and finding the heading whose slug matches.
+/// Falls back to the URI path if no specific heading is found.
+fn render_xref(uri: &str, label: Option<&str>, format: &str, root: &Path) -> Result<String> {
+    let parsed = mdpath::parse(uri)
+        .map_err(|e| anyhow::anyhow!("invalid xref URI {:?}: {}", uri, e))?;
+
+    let target_path = root.join(&parsed.path);
+    if !target_path.exists() {
+        anyhow::bail!("xref target file not found: {:?}", parsed.path);
+    }
+
+    // Resolve heading text from the heading_path (if any)
+    let heading_text: String = if parsed.heading_path.is_empty() {
+        // No heading — use filename without extension
+        target_path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&parsed.path)
+            .replace('-', " ")
+            .replace('_', " ")
+    } else {
+        let content = std::fs::read_to_string(&target_path)?;
+        let slug_target = parsed.heading_path.last().map(|s| s.as_str()).unwrap_or("");
+        find_heading_by_slug(&content, slug_target)
+            .unwrap_or_else(|| slug_target.replace('-', " "))
+    };
+
+    let display_label = label.unwrap_or(&heading_text);
+
+    // Build a relative link to the target (path + anchor slug if heading present)
+    let anchor = if parsed.heading_path.is_empty() {
+        String::new()
+    } else {
+        let slug = heading_slug(&heading_text);
+        format!("#{}", slug)
+    };
+    let link = format!("{}{}", parsed.path, anchor);
+
+    let rendered = match format {
+        "note" => format!("> **See also:** [{}]({})", display_label, link),
+        "callout" => format!("→ [{}]({})", display_label, link),
+        _ => format!("*See: [{}]({})*", display_label, link),  // "inline" default
+    };
+
+    Ok(rendered)
+}
+
+/// Find a heading in `content` whose GitHub-style slug matches `target_slug`.
+fn find_heading_by_slug(content: &str, target_slug: &str) -> Option<String> {
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence { continue; }
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let text = trimmed[level..].trim();
+            if !text.is_empty() && heading_slug(text) == target_slug {
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Produce a GitHub-style heading anchor slug from heading text.
+/// Lowercase, spaces → hyphens, strip non-alphanumeric/non-hyphen.
+fn heading_slug(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
 }
 
 fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
@@ -3213,5 +3350,79 @@ Some prose.
             }
             _ => panic!("expected Directive::Toc"),
         }
+    }
+
+    // ── proof:xref ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn xref_parses_uri_and_format() {
+        let src = "```proof:xref uri=\"md://api.md#authentication\" format=note\n```\n";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Xref { uri, format, label, .. } => {
+                assert_eq!(uri, "md://api.md#authentication");
+                assert_eq!(format, "note");
+                assert!(label.is_none());
+            }
+            _ => panic!("expected Directive::Xref"),
+        }
+    }
+
+    #[test]
+    fn xref_parses_label_override() {
+        let src = "```proof:xref uri=\"md://guide.md\" label=\"the guide\"\n```\n";
+        let dirs = collect_directives(src);
+        match &dirs[0] {
+            Directive::Xref { label, .. } => {
+                assert_eq!(label.as_deref(), Some("the guide"));
+            }
+            _ => panic!("expected Directive::Xref"),
+        }
+    }
+
+    #[test]
+    fn heading_slug_basic() {
+        assert_eq!(heading_slug("Authentication"), "authentication");
+        assert_eq!(heading_slug("API Reference"), "api-reference");
+        assert_eq!(heading_slug("What's New?"), "whats-new");
+    }
+
+    #[test]
+    fn xref_inline_renders_see_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("api.md");
+        std::fs::write(&target, "# API Guide\n\n## Authentication\n\nContent.\n").unwrap();
+
+        let result = render_xref("md://api.md#authentication", None, "inline", dir.path())
+            .expect("render_xref should succeed");
+        assert!(result.contains("See:"), "inline format should start with See:");
+        assert!(result.contains("Authentication"), "should resolve heading text");
+        assert!(result.contains("api.md#authentication"), "should include link");
+    }
+
+    #[test]
+    fn xref_note_format_renders_blockquote() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("ref.md"), "# Ref\n\n## Background\n\nContent.\n").unwrap();
+        let result = render_xref("md://ref.md#background", None, "note", dir.path()).unwrap();
+        assert!(result.starts_with("> **See also:**"), "note format must use blockquote");
+        assert!(result.contains("Background"));
+    }
+
+    #[test]
+    fn xref_label_override_used_instead_of_heading() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("guide.md"), "# Guide\n\n## Setup\n\nContent.\n").unwrap();
+        let result = render_xref("md://guide.md#setup", Some("the setup section"), "inline", dir.path()).unwrap();
+        assert!(result.contains("the setup section"), "label override must appear in output");
+        assert!(!result.contains("Setup") || result.contains("the setup section"));
+    }
+
+    #[test]
+    fn xref_missing_file_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = render_xref("md://nonexistent.md", None, "inline", dir.path());
+        assert!(result.is_err(), "missing target file should return Err");
     }
 }
