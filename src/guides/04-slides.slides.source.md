@@ -15,7 +15,13 @@ date: "2026"
 
 ```proof:slide layout=section
 title: "Slide Layouts"
-subtitle: "Six built-in layouts"
+subtitle: "Seven built-in layouts"
+```
+
+---
+
+```proof:slide layout=agenda
+title: "Agenda"
 ```
 
 ---
@@ -53,6 +59,23 @@ proof:bullets
 - Right zone content
 - Same height as left
 - Ratio is configurable
+```
+
+---
+
+```proof:slide layout=title-content
+title: "agenda — auto-generated from sections"
+---
+The agenda layout scans the deck for every layout=section slide
+and renders their titles as a numbered list. No body content needed:
+the bullets come from the deck itself, so reordering or renaming
+sections updates the agenda automatically.
+
+proof:bullets
+- Drop ```proof:slide layout=agenda``` anywhere — typically right after the title
+- Title defaults to "Agenda" when the front-matter omits one
+- Section slides keep their normal centered rendering
+- Empty deck shows "(no section slides in this deck)"
 ```
 
 ---

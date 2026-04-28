@@ -89,6 +89,23 @@ impl Check for MarkdownCheck {
             }
         }
 
+        // Forbidden H2 sections — outside code blocks only. Complement to
+        // required_h2_all: keeps authoring scaffolds out of production guides.
+        if !self.config.forbidden_h2.is_empty() {
+            for (i, line) in lines.iter().enumerate() {
+                if in_code_block[i] { continue; }
+                if !line.starts_with("## ") { continue; }
+                let heading = line.trim_start_matches("## ").trim();
+                if self.config.forbidden_h2.iter().any(|f| f == heading) {
+                    diags.push(Diagnostic::warning(
+                        path.to_path_buf(), i + 1, 1,
+                        "md_forbidden_section",
+                        format!("forbidden section: \"{}\" must not appear", heading),
+                    ));
+                }
+            }
+        }
+
         // H2 allowlist (optional_h2 + required lists): when any of the three H2
         // lists are non-empty, warn for any H2 that doesn't appear in any of them.
         let has_allowlist = !self.config.optional_h2.is_empty()
@@ -100,11 +117,15 @@ impl Check for MarkdownCheck {
                 .chain(self.config.optional_h2.iter())
                 .map(|s| s.as_str())
                 .collect();
+            // Forbidden headings are flagged separately as md_forbidden_section —
+            // skip them here so a single offending H2 doesn't produce two warnings.
+            let forbidden: std::collections::HashSet<&str> = self.config.forbidden_h2
+                .iter().map(|s| s.as_str()).collect();
             for (i, line) in lines.iter().enumerate() {
                 if in_code_block[i] { continue; }
                 if line.starts_with("## ") {
                     let heading = line.trim_start_matches("## ").trim();
-                    if !allowed.contains(heading) {
+                    if !allowed.contains(heading) && !forbidden.contains(heading) {
                         diags.push(Diagnostic::warning(
                             path.to_path_buf(), i + 1, 1,
                             "md_unexpected_section",
@@ -771,5 +792,72 @@ mod tests {
             diags.iter().all(|d| d.code != "md_unexpected_section"),
             "required H2 must also be treated as allowed, got: {:?}", diags
         );
+    }
+
+    // ── forbidden_h2 ──────────────────────────────────────────────────────────
+
+    fn forbidden_check(forbidden: Vec<&str>) -> MarkdownCheck {
+        MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                forbidden_h2: forbidden.into_iter().map(|s| s.to_string()).collect(),
+                ..Default::default()
+            },
+            root: None,
+        }
+    }
+
+    #[test]
+    fn forbidden_h2_warns_with_line_and_name() {
+        let content = "# Title\n\n## Overview\n\nbody\n\n## Draft\n\nstub\n";
+        let diags = forbidden_check(vec!["Draft", "TODO", "WIP"]).check(Path::new("test.md"), content);
+        let hit = diags.iter().find(|d| d.code == "md_forbidden_section")
+            .expect("expected md_forbidden_section, got: {:?}");
+        assert!(hit.message.contains("Draft"), "message should name the heading: {:?}", hit.message);
+        assert_eq!(hit.span.line, 7, "should point at the offending H2 line");
+    }
+
+    #[test]
+    fn forbidden_h2_empty_no_warn() {
+        let content = "# Title\n\n## Draft\n\nbody\n";
+        let diags = forbidden_check(vec![]).check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_forbidden_section"),
+            "empty forbidden_h2 must not flag anything, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn forbidden_h2_inside_code_block_ignored() {
+        let content = "# Title\n\n```\n## Draft\n```\n\n## Overview\n\nbody\n";
+        let diags = forbidden_check(vec!["Draft"]).check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_forbidden_section"),
+            "## inside code block must not trigger md_forbidden_section, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn forbidden_h2_does_not_double_with_unexpected_section() {
+        // When an allowlist is active, a forbidden heading is also "not in the
+        // allowlist" — but it should produce md_forbidden_section ONLY, not
+        // md_unexpected_section as well.
+        let content = "# Title\n\n## Overview\n\nbody\n\n## Draft\n\nstub\n";
+        let check = MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                required_h2_all: vec!["Overview".to_string()],
+                forbidden_h2: vec!["Draft".to_string()],
+                ..Default::default()
+            },
+            root: None,
+        };
+        let diags = check.check(Path::new("test.md"), content);
+        let forbidden_hits = diags.iter().filter(|d| d.code == "md_forbidden_section").count();
+        let unexpected_hits = diags.iter()
+            .filter(|d| d.code == "md_unexpected_section" && d.message.contains("Draft"))
+            .count();
+        assert_eq!(forbidden_hits, 1, "expected exactly one md_forbidden_section: {:?}", diags);
+        assert_eq!(unexpected_hits, 0, "forbidden heading must not double as md_unexpected_section: {:?}", diags);
     }
 }

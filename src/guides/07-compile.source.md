@@ -68,17 +68,19 @@ root: proof directives
   - proof:math: LaTeX display math block
   - proof:symbol: Named symbol rendered as ASCII art block
   - proof:shape: Geometric shape (banner, badge, ribbon)
+- Prose document directives
+  - proof:blockquote: Indented block quote with optional attribution (markdown `>` or boxed)
+  - proof:numbered-list (alias: proof:ol): Ordered (numbered) list with decimal sub-numbering
+  - proof:toc: Auto-generate table of contents from headings
 - Slide body directives
   - proof:bullets: Nested bullet list
   - proof:callout: Bordered callout box with style
   - proof:divider: Horizontal rule
-  - proof:quote: Attributed block quote
+  - proof:quote: Attributed block quote (slide-only — centered with curly quotes)
   - proof:centered: Centered text
   - proof:stat: KPI stat cell
   - proof:notes: Speaker notes (excluded from slide output)
   - proof:right: Right-align a block of text (complement to proof:centered)
-  - proof:numbered-list (alias: proof:ol): Ordered (numbered) list with decimal sub-numbering
-  - proof:toc: Auto-generate table of contents from headings
 - Compositor directives
   - proof:slide: Full slide declaration in a .slides.source.md file
   - proof:region: Named region in a .dashboard.source.md file

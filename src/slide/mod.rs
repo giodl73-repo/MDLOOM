@@ -9,9 +9,11 @@ pub use bullets::{render_bullets, BulletConfig, BulletWarning,
                   parse_reveal_step, has_reveal_markers, render_bullets_pages};
 pub use inline::{render_quote, render_centered, render_right, render_ol,
                  render_stat, render_callout, render_divider, CalloutStyle, DividerStyle};
-pub use layout::{render_slide, render_slide_with_warnings, render_slide_pages,
+pub use layout::{render_slide, render_slide_with_warnings, render_slide_with_warnings_in_deck,
+                 render_slide_pages,
                  render_title, render_title_content,
-                 render_two_column, render_section, render_stats, render_blank, apply_theme,
+                 render_two_column, render_section, render_agenda, render_stats, render_blank,
+                 collect_section_titles, apply_theme,
                  center_in_width, render_body_lines, render_body_lines_with_warnings,
                  render_body_lines_pages};
 pub use parser::{parse_slide_doc, SlideError};
@@ -19,6 +21,22 @@ pub use parser::{parse_slide_doc, SlideError};
 // ─────────────────────────────────────────────────────────
 // Core structs
 // ─────────────────────────────────────────────────────────
+
+/// Footer mode for the deck.
+///
+/// - `Off` — no footer (default)
+/// - `Auto` — compose "author · date" from deck-level author/date fields on the title slide
+/// - `Custom(s)` — render `s` verbatim as the footer text
+#[derive(Debug, Clone, PartialEq)]
+pub enum FooterMode {
+    Off,
+    Auto,
+    Custom(String),
+}
+
+impl Default for FooterMode {
+    fn default() -> Self { FooterMode::Off }
+}
 
 #[derive(Debug, Clone)]
 pub struct SlideMeta {
@@ -29,6 +47,13 @@ pub struct SlideMeta {
     pub font_width: usize,
     pub max_bullets: usize,
     pub max_depth: usize,
+    pub footer: FooterMode,
+    /// Deck-level author propagated from the title slide (or front-matter).
+    pub author: Option<String>,
+    /// Deck-level date propagated from the title slide (or front-matter).
+    pub date: Option<String>,
+    /// Deck-level title propagated from front-matter.
+    pub title: Option<String>,
 }
 
 impl Default for SlideMeta {
@@ -41,6 +66,10 @@ impl Default for SlideMeta {
             font_width: 1,
             max_bullets: 4,   // 30-second rule — see bullets.rs SLIDE-001
             max_depth: 4,
+            footer: FooterMode::Off,
+            author: None,
+            date: None,
+            title: None,
         }
     }
 }
@@ -71,6 +100,9 @@ pub enum SlideLayout {
     TitleContent,
     TwoColumn { ratio: (u8, u8) },
     Section,
+    /// Auto-generated agenda built from every `Section` slide's title in deck order.
+    /// The slide's own body content is ignored; the bullet list comes from the deck.
+    Agenda,
     ContentCaption,
     Comparison,
     Stats,

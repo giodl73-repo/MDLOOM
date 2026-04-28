@@ -11,7 +11,7 @@
 /// strings at bare `---` lines. Each raw slide string is then parsed for `proof:slide`
 /// fence attributes and body content.
 
-use super::{Slide, SlideDoc, SlideLayout, SlideMeta, SlideTheme};
+use super::{FooterMode, Slide, SlideDoc, SlideLayout, SlideMeta, SlideTheme};
 
 // ─────────────────────────────────────────────────────────
 // Error type
@@ -163,6 +163,16 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String> {
                 meta.max_depth = value.parse::<usize>()
                     .map_err(|_| format!("max-depth must be a positive integer, got {:?}", value))?;
             }
+            "footer" => {
+                meta.footer = match value {
+                    "true" | "yes" | "1" | "auto" => FooterMode::Auto,
+                    "false" | "no" | "0" | "off"  => FooterMode::Off,
+                    custom => FooterMode::Custom(custom.to_string()),
+                };
+            }
+            "author" => { meta.author = Some(value.to_string()); }
+            "date"   => { meta.date   = Some(value.to_string()); }
+            "title"  => { meta.title  = Some(value.to_string()); }
             // Ignore unknown keys (forward compatibility)
             _ => {}
         }
@@ -347,10 +357,11 @@ pub(crate) fn parse_slide_attrs(
         "title"          => SlideLayout::Title,
         "title-content"  => SlideLayout::TitleContent,
         "two-column"     => {
-            let ratio = parse_ratio(ratio_raw.as_deref().unwrap_or("50:50"), index)?;
+            let ratio = parse_ratio(ratio_raw.as_deref().unwrap_or("60:40"), index)?;
             SlideLayout::TwoColumn { ratio }
         }
         "section"        => SlideLayout::Section,
+        "agenda"         => SlideLayout::Agenda,
         "content-caption"=> SlideLayout::ContentCaption,
         "comparison"     => SlideLayout::Comparison,
         "stats"          => SlideLayout::Stats,
@@ -472,6 +483,16 @@ mod tests {
         assert!(matches!(doc.slides[0].layout, SlideLayout::Title));
     }
 
+    // ── layout=agenda parsed ────────────────────────────────────────────────
+    #[test]
+    fn layout_agenda_parsed() {
+        let source = "```proof:slide layout=agenda title=\"Today\"\n```";
+        let doc = parse_slide_doc(source).expect("should parse");
+        assert!(matches!(doc.slides[0].layout, SlideLayout::Agenda),
+                "agenda layout should parse to SlideLayout::Agenda");
+        assert_eq!(doc.slides[0].title.as_deref(), Some("Today"));
+    }
+
     // ── Test 6: two-column ratio 60:40 parsed ───────────────────────────────
     #[test]
     fn layout_two_column_ratio_parsed() {
@@ -585,5 +606,19 @@ mod tests {
         assert!(parse_ratio("100:0", 1).is_ok());
         assert!(parse_ratio("60:50", 1).is_err()); // sum = 110
         assert!(parse_ratio("30:30", 1).is_err()); // sum = 60
+    }
+
+    // ── Test 16: two-column without ratio= defaults to 60:40 ─────────────────
+    #[test]
+    fn two_column_default_ratio_is_60_40() {
+        let source = "```proof:slide layout=two-column\n## col:left\nA\n## col:right\nB\n```";
+        let doc = parse_slide_doc(source).expect("should parse");
+        match doc.slides[0].layout {
+            SlideLayout::TwoColumn { ratio: (a, b) } => {
+                assert_eq!(a, 60, "default left ratio should be 60");
+                assert_eq!(b, 40, "default right ratio should be 40");
+            }
+            _ => panic!("expected TwoColumn layout"),
+        }
     }
 }

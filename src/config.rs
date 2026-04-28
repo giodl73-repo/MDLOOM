@@ -89,6 +89,11 @@ pub struct SectionSchema {
     /// When non-empty in the effective config, H2s not in any allowed list are flagged.
     #[serde(default)]
     pub optional_h2: Vec<String>,
+    /// Forbidden H2 headings — any of these appearing in a matching file emits
+    /// `md_forbidden_section`. Use to keep authoring scaffolds (`Draft`, `TODO`,
+    /// `WIP`) out of production guides. Complement to `required_h2_all`.
+    #[serde(default)]
+    pub forbidden_h2: Vec<String>,
     /// Additional required content patterns
     #[serde(default)]
     pub required_patterns: Vec<RequiredPattern>,
@@ -430,6 +435,11 @@ pub struct MarkdownConfig {
     /// a warning — acts as an H2 allowlist. Leave empty to allow any H2.
     #[serde(default)]
     pub optional_h2: Vec<String>,
+    /// Forbidden H2 headings — any of these appearing in a file emits
+    /// `md_forbidden_section`. Complement to `required_h2_all`: enforces that
+    /// authoring scaffolds (`Draft`, `TODO`, `WIP`) never reach production.
+    #[serde(default)]
+    pub forbidden_h2: Vec<String>,
     /// Content patterns that must appear
     #[serde(default)]
     pub required_patterns: Vec<RequiredPattern>,
@@ -476,6 +486,7 @@ impl Default for MarkdownConfig {
             required_h2: Vec::new(),
             required_h2_all: Vec::new(),
             optional_h2: Vec::new(),
+            forbidden_h2: Vec::new(),
             required_patterns: Vec::new(),
             max_lines: None,
             check_heading_format: true,
@@ -735,6 +746,12 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
         optional_h2: {
             let mut v = parent.optional_h2;
             v.extend(child.optional_h2);
+            v.dedup();
+            v
+        },
+        forbidden_h2: {
+            let mut v = parent.forbidden_h2;
+            v.extend(child.forbidden_h2);
             v.dedup();
             v
         },

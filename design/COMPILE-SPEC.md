@@ -67,6 +67,42 @@ md://languages/10-GO.md#type-system-snapshot:table.key-value:0
 | `proof:include` | Embed a single figure, table, or text element |
 | `proof:layout` | Compose N figures side-by-side (see LAYOUT-SPEC.md) |
 | `proof:table` | Embed a table with optional column selection and filtering |
+| `proof:blockquote` | Prose-document block quote with optional attribution (see below) |
+
+### `proof:blockquote` — prose-document block quote
+
+Prose documents need a first-class block-quote primitive distinct from slides'
+`proof:quote` (which centers content and uses curly quotes — wrong for prose).
+`proof:blockquote` is left-aligned, indented, and emits one of two shapes:
+
+```markdown
+` ` `proof:blockquote attribution="Ada Lovelace" style=indent
+The Analytical Engine has no pretensions whatever to originate anything.
+` ` `
+```
+
+Renders to standard markdown blockquote syntax:
+
+```
+> The Analytical Engine has no pretensions whatever to originate anything.
+>
+> — Ada Lovelace
+```
+
+`style="boxed"` instead emits an ASCII frame (`┌─...─┐ │ ... │ └─...─┘`),
+sized to the longest body line. Attribution renders right-aligned inside the
+frame. Unknown style values fall back silently to `indent` (permissive).
+
+| Attribute | Default | Notes |
+|-----------|---------|-------|
+| `attribution` (alias `by`) | none | Optional — emits `— Name` line if set |
+| `style` | `"indent"` | `"indent"` (markdown `>`) or `"boxed"` (ASCII frame) |
+
+Body content is the directive's fenced block body. Leading and trailing blank
+lines in the body are trimmed; inner blank lines render as bare `>` lines so
+the rendered markdown stays one contiguous quote (not two adjacent ones).
+This directive is prose-only — it has no per-slide centering or width-fitting
+logic. For slides, use `proof:quote`.
 
 ### Figure files
 

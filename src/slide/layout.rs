@@ -7,7 +7,7 @@
 /// Wave 3 replaces it with full directive dispatch.
 
 use crate::slide::canvas::SlideCanvas;
-use crate::slide::{Slide, SlideLayout, SlideMeta, SlideTheme};
+use crate::slide::{FooterMode, Slide, SlideLayout, SlideMeta, SlideTheme};
 
 // ─────────────────────────────────────────────────────────
 // Body stub (Wave 2 — completed in Wave 3)
@@ -296,6 +296,43 @@ pub fn fit_to_width(s: &str, width: usize) -> String {
     }
 }
 
+/// Compose the footer text for a deck from its meta.
+///
+/// Returns `None` when `meta.footer` is `FooterMode::Off`.
+/// For `Auto`, builds "author · date" from available deck-level fields, falling
+/// back gracefully when one or both are absent.
+/// For `Custom(s)`, returns `s` as-is.
+pub fn build_footer_line(meta: &SlideMeta) -> Option<String> {
+    match &meta.footer {
+        FooterMode::Off => None,
+        FooterMode::Custom(s) => Some(s.clone()),
+        FooterMode::Auto => {
+            let parts: Vec<&str> = [meta.author.as_deref(), meta.date.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+            if parts.is_empty() { None } else { Some(parts.join(" · ")) }
+        }
+    }
+}
+
+/// Stamp the footer onto the last row of a rendered slide canvas.
+///
+/// The footer is right-aligned.  If the footer text is wider than `meta.width`,
+/// it is clipped with `…`.  This overwrites the last row; callers must ensure
+/// the last row is a blank (padding) row and not content.
+pub fn apply_footer(lines: &mut Vec<String>, meta: &SlideMeta) {
+    let Some(text) = build_footer_line(meta) else { return; };
+    let w = meta.width;
+    let clipped = clip_to_width(&text, w);
+    let vw = crate::layout::visual_width(&clipped);
+    let pad = w.saturating_sub(vw);
+    let footer_row = format!("{}{}", " ".repeat(pad), clipped);
+    if let Some(last) = lines.last_mut() {
+        *last = footer_row;
+    }
+}
+
 /// Build a canvas from a list of content lines, padded to width×height.
 fn lines_to_canvas(lines: &[String], width: usize, height: usize) -> Vec<String> {
     let mut result: Vec<String> = lines.iter()
@@ -564,6 +601,20 @@ pub fn render_slide_with_warnings(
     slide: &Slide,
     meta: &SlideMeta,
 ) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    // Deck-less path: agenda slides receive an empty section list and render
+    // an empty bullet area. Callers that want a populated agenda should use
+    // [`render_slide_with_warnings_in_deck`].
+    render_slide_with_warnings_in_deck(slide, meta, &[])
+}
+
+/// Same as [`render_slide_with_warnings`] but with deck context. The
+/// `agenda` layout uses `all_slides` to enumerate every `Section` slide's
+/// title in deck order. Other layouts ignore the extra parameter.
+pub fn render_slide_with_warnings_in_deck(
+    slide: &Slide,
+    meta: &SlideMeta,
+    all_slides: &[crate::slide::Slide],
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
     use crate::slide::bullets::BulletConfig;
     let bullet_cfg = BulletConfig {
         max_bullets: meta.max_bullets,
@@ -578,6 +629,10 @@ pub fn render_slide_with_warnings(
             render_two_column_with_warnings(slide, meta, *ratio, &bullet_cfg)
         }
         SlideLayout::Section => (render_section(slide, meta), Vec::new()),
+        SlideLayout::Agenda => {
+            let titles = collect_section_titles(all_slides);
+            (render_agenda(slide, meta, &titles), Vec::new())
+        }
         SlideLayout::Stats => (render_stats(slide, meta), Vec::new()),
         SlideLayout::Blank => render_blank_with_warnings(slide, meta, &bullet_cfg),
         SlideLayout::ContentCaption | SlideLayout::Comparison => {
@@ -585,7 +640,62 @@ pub fn render_slide_with_warnings(
             render_title_content_with_warnings(slide, meta, &bullet_cfg)
         }
     };
-    (apply_theme(&raw, meta), warnings)
+    let mut themed = apply_theme(&raw, meta);
+    apply_footer(&mut themed, meta);
+    (themed, warnings)
+}
+
+/// Collect titles of every `Section` slide in deck order. Slides without an
+/// explicit title get a placeholder "Untitled section" entry so the agenda
+/// still reflects the deck's structure.
+pub fn collect_section_titles(all_slides: &[crate::slide::Slide]) -> Vec<String> {
+    all_slides.iter()
+        .filter(|s| matches!(s.layout, SlideLayout::Section))
+        .map(|s| s.title.clone().unwrap_or_else(|| "Untitled section".to_string()))
+        .collect()
+}
+
+/// `agenda` layout — auto-generated table of contents built from every
+/// `Section` slide's title in deck order. Mirrors PowerPoint's agenda
+/// builder: authors keep a single agenda slide that always reflects the
+/// current deck structure, no manual maintenance.
+///
+/// The slide's own body content is intentionally ignored — the bullet list
+/// always comes from the deck. Authors who need a manual list should use
+/// `layout=title-content` with an explicit `proof:bullets` block.
+///
+/// Title defaults to "Agenda" when the slide front-matter omits one.
+pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String]) -> Vec<String> {
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = 3usize;
+    let body_height = h.saturating_sub(title_height + 1);
+
+    let title_str = slide.title.as_deref().unwrap_or("Agenda");
+    let mut result: Vec<String> = Vec::with_capacity(h);
+    result.push(fit_to_width(title_str, w));
+    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    result.push(separator(w));
+
+    // Build the bullet body. `proof:bullets` would word-wrap to slide width
+    // and apply hanging indents, but agenda items are typically short — a
+    // direct numbered list keeps the output deterministic and easy to test.
+    let body_lines: Vec<String> = if section_titles.is_empty() {
+        vec![center_in_width("(no section slides in this deck)", w)]
+    } else {
+        section_titles.iter().enumerate()
+            .map(|(i, t)| {
+                let prefix = format!("{}. ", i + 1);
+                fit_to_width(&format!("{}{}", prefix, t), w)
+            })
+            .collect()
+    };
+
+    result.extend(lines_to_canvas(&body_lines, w, body_height));
+
+    result.truncate(h);
+    while result.len() < h { result.push(" ".repeat(w)); }
+    result
 }
 
 fn render_title_content_with_warnings(
@@ -697,9 +807,10 @@ pub fn render_slide_pages(slide: &Slide, meta: &SlideMeta) -> Vec<Vec<String>> {
     }
 
     // Only title-content and blank layouts support reveal pages today.
-    // Two-column and others fall back to single-page rendering.
+    // Two-column, agenda, and others fall back to single-page rendering.
     match &slide.layout {
-        SlideLayout::TitleContent | SlideLayout::ContentCaption | SlideLayout::Comparison => {
+        SlideLayout::TitleContent | SlideLayout::ContentCaption
+        | SlideLayout::Comparison => {
             render_reveal_pages_title_content(slide, meta, &bullet_cfg)
         }
         SlideLayout::Blank => {
@@ -742,7 +853,9 @@ fn render_reveal_pages_title_content(
         page.extend(lines_to_canvas(&body_lines, w, body_height));
         page.truncate(h);
         while page.len() < h { page.push(" ".repeat(w)); }
-        apply_theme(&page, meta)
+        let mut themed = apply_theme(&page, meta);
+        apply_footer(&mut themed, meta);
+        themed
     }).collect()
 }
 
@@ -755,7 +868,9 @@ fn render_reveal_pages_blank(
     let body_pages = render_body_lines_pages(&slide.body_content, meta.width, bullet_cfg);
     body_pages.into_iter().map(|body_lines| {
         let page = lines_to_canvas(&body_lines, meta.width, meta.height);
-        apply_theme(&page, meta)
+        let mut themed = apply_theme(&page, meta);
+        apply_footer(&mut themed, meta);
+        themed
     }).collect()
 }
 
@@ -1285,6 +1400,148 @@ mod tests {
         assert_eq!(pages.len(), 1);
     }
 
+    // ── Footer ────────────────────────────────────────────
+
+    fn meta_with_footer(footer: crate::slide::FooterMode, author: Option<&str>, date: Option<&str>) -> SlideMeta {
+        SlideMeta {
+            footer,
+            author: author.map(|s| s.to_string()),
+            date:   date.map(|s| s.to_string()),
+            ..meta_80x24()
+        }
+    }
+
+    #[test]
+    fn footer_off_no_footer_stamped() {
+        let meta = meta_with_footer(crate::slide::FooterMode::Off, Some("Gio"), Some("2026"));
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert!(!last.contains("Gio") && !last.contains("2026"),
+            "footer=off must not stamp last row: {:?}", last);
+    }
+
+    #[test]
+    fn footer_auto_right_aligned() {
+        let meta = meta_with_footer(crate::slide::FooterMode::Auto, Some("Gio"), Some("April 2026"));
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert!(last.contains("Gio · April 2026"),
+            "footer=auto should contain author · date: {:?}", last);
+        assert!(last.ends_with("Gio · April 2026"),
+            "footer should be right-aligned (ends with text): {:?}", last);
+    }
+
+    #[test]
+    fn footer_auto_author_only() {
+        let meta = meta_with_footer(crate::slide::FooterMode::Auto, Some("Alice"), None);
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert!(last.contains("Alice"), "auto footer with only author: {:?}", last);
+        assert!(!last.contains("·"), "no separator when only one field: {:?}", last);
+    }
+
+    #[test]
+    fn footer_auto_date_only() {
+        let meta = meta_with_footer(crate::slide::FooterMode::Auto, None, Some("Q2 2026"));
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert!(last.contains("Q2 2026"), "auto footer with only date: {:?}", last);
+    }
+
+    #[test]
+    fn footer_auto_no_fields_no_footer() {
+        let meta = meta_with_footer(crate::slide::FooterMode::Auto, None, None);
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert_eq!(last.trim(), "", "auto footer with no fields should be blank: {:?}", last);
+    }
+
+    #[test]
+    fn footer_custom_text() {
+        let meta = meta_with_footer(
+            crate::slide::FooterMode::Custom("CONFIDENTIAL".to_string()), None, None);
+        let s = blank_slide(SlideLayout::TitleContent);
+        let lines = render_slide(&s, &meta);
+        let last = lines.last().unwrap();
+        assert!(last.contains("CONFIDENTIAL"), "custom footer text: {:?}", last);
+    }
+
+    #[test]
+    fn footer_sl1_row_count_and_width() {
+        let meta = meta_with_footer(
+            crate::slide::FooterMode::Auto, Some("Gio"), Some("2026"));
+        let s = blank_slide(SlideLayout::TitleContent);
+        assert_sl1(&render_slide(&s, &meta), &meta);
+    }
+
+    #[test]
+    fn footer_on_every_layout() {
+        let meta = meta_with_footer(
+            crate::slide::FooterMode::Custom("FTR".to_string()), None, None);
+        for layout in [
+            SlideLayout::Title,
+            SlideLayout::TitleContent,
+            SlideLayout::Section,
+            SlideLayout::Stats,
+            SlideLayout::Blank,
+        ] {
+            let mut s = blank_slide(layout.clone());
+            s.title = Some("T".into());
+            let lines = render_slide(&s, &meta);
+            let last = lines.last().unwrap();
+            assert!(last.contains("FTR"),
+                "footer missing on layout {:?}: {:?}", layout, last);
+        }
+    }
+
+    #[test]
+    fn footer_parsed_from_front_matter_auto() {
+        use crate::slide::parser::parse_slide_doc;
+        let source = "---\nfooter: true\nauthor: Gio\ndate: 2026\n---\nContent";
+        let doc = parse_slide_doc(source).expect("should parse");
+        assert_eq!(doc.meta.footer, crate::slide::FooterMode::Auto);
+        assert_eq!(doc.meta.author.as_deref(), Some("Gio"));
+        assert_eq!(doc.meta.date.as_deref(), Some("2026"));
+    }
+
+    #[test]
+    fn footer_parsed_from_front_matter_custom() {
+        use crate::slide::parser::parse_slide_doc;
+        let source = "---\nfooter: \"My Org · Confidential\"\n---\nContent";
+        let doc = parse_slide_doc(source).expect("should parse");
+        assert_eq!(doc.meta.footer,
+            crate::slide::FooterMode::Custom("My Org · Confidential".to_string()));
+    }
+
+    #[test]
+    fn footer_parsed_off_by_default() {
+        use crate::slide::parser::parse_slide_doc;
+        let source = "---\nwidth: 80\n---\nContent";
+        let doc = parse_slide_doc(source).expect("should parse");
+        assert_eq!(doc.meta.footer, crate::slide::FooterMode::Off);
+    }
+
+    #[test]
+    fn reveal_pages_all_have_footer() {
+        let meta = meta_with_footer(
+            crate::slide::FooterMode::Custom("SLIDE".to_string()), None, None);
+        let mut s = blank_slide(SlideLayout::TitleContent);
+        s.title = Some("T".into());
+        s.body_content = "proof:bullets\n- Always\n[2] - Step 2\n".into();
+        let pages = render_slide_pages(&s, &meta);
+        assert_eq!(pages.len(), 2);
+        for (i, page) in pages.iter().enumerate() {
+            let last = page.last().unwrap();
+            assert!(last.contains("SLIDE"),
+                "footer missing on reveal page {}: {:?}", i + 1, last);
+        }
+    }
+
     #[test]
     fn render_body_lines_pages_fixed_segment_on_every_page() {
         use crate::slide::bullets::BulletConfig;
@@ -1297,5 +1554,129 @@ mod tests {
             let text = page.join("\n");
             assert!(text.contains("Intro"), "fixed prose must appear on every page");
         }
+    }
+
+    // ── proof:slide layout=agenda ───────────────────────────────────────────
+
+    fn section_slide(idx: usize, title: &str) -> Slide {
+        let mut s = blank_slide(SlideLayout::Section);
+        s.index = idx;
+        s.title = Some(title.to_string());
+        s
+    }
+
+    fn agenda_slide(idx: usize, title: Option<&str>) -> Slide {
+        let mut s = blank_slide(SlideLayout::Agenda);
+        s.index = idx;
+        s.title = title.map(|t| t.to_string());
+        s
+    }
+
+    #[test]
+    fn agenda_layout_sl1() {
+        let meta = meta_80x24();
+        let s = agenda_slide(1, Some("Agenda"));
+        let titles = vec!["Intro".to_string(), "Body".to_string(), "Wrap-up".to_string()];
+        assert_sl1(&render_agenda(&s, &meta, &titles), &meta);
+    }
+
+    #[test]
+    fn agenda_lists_section_titles_in_order() {
+        let meta = meta_80x24();
+        let agenda = agenda_slide(2, Some("Today"));
+        let titles = vec!["Problem".to_string(), "Approach".to_string(), "Results".to_string()];
+        let lines = render_agenda(&agenda, &meta, &titles);
+        let body = lines.join("\n");
+        let p_problem = body.find("Problem").expect("Problem missing");
+        let p_approach = body.find("Approach").expect("Approach missing");
+        let p_results = body.find("Results").expect("Results missing");
+        assert!(p_problem < p_approach && p_approach < p_results,
+                "section titles must appear in deck order");
+    }
+
+    #[test]
+    fn agenda_uses_default_title_when_omitted() {
+        let meta = meta_80x24();
+        let agenda = agenda_slide(1, None); // no title in front-matter
+        let titles = vec!["First".to_string()];
+        let lines = render_agenda(&agenda, &meta, &titles);
+        // First line is the title row — must contain the default "Agenda"
+        assert!(lines[0].contains("Agenda"),
+                "default title 'Agenda' should appear in first line, got: {:?}", lines[0]);
+    }
+
+    #[test]
+    fn agenda_with_no_section_slides_falls_back_to_placeholder() {
+        let meta = meta_80x24();
+        let agenda = agenda_slide(1, Some("Agenda"));
+        let lines = render_agenda(&agenda, &meta, &[]);
+        let body = lines.join("\n");
+        assert!(body.contains("(no section slides in this deck)"),
+                "empty deck should show a placeholder, got body:\n{}", body);
+    }
+
+    #[test]
+    fn agenda_items_are_numbered_for_easy_walkthrough() {
+        let meta = meta_80x24();
+        let agenda = agenda_slide(1, Some("Agenda"));
+        let titles = vec!["First".to_string(), "Second".to_string(), "Third".to_string()];
+        let lines = render_agenda(&agenda, &meta, &titles);
+        let body = lines.join("\n");
+        assert!(body.contains("1. First"), "expected '1. First' in:\n{}", body);
+        assert!(body.contains("2. Second"));
+        assert!(body.contains("3. Third"));
+    }
+
+    #[test]
+    fn collect_section_titles_filters_to_section_layout() {
+        let deck = vec![
+            blank_slide(SlideLayout::Title),                    // skipped
+            section_slide(1, "Setup"),
+            blank_slide(SlideLayout::TitleContent),             // skipped
+            section_slide(2, "Findings"),
+            section_slide(3, "Next steps"),
+            blank_slide(SlideLayout::Stats),                    // skipped
+        ];
+        let titles = collect_section_titles(&deck);
+        assert_eq!(titles, vec!["Setup".to_string(),
+                                "Findings".to_string(),
+                                "Next steps".to_string()],
+                   "only section slides should contribute to the agenda");
+    }
+
+    #[test]
+    fn collect_section_titles_handles_untitled_section() {
+        let mut s = blank_slide(SlideLayout::Section);
+        s.title = None;
+        let deck = vec![s];
+        let titles = collect_section_titles(&deck);
+        assert_eq!(titles, vec!["Untitled section".to_string()]);
+    }
+
+    #[test]
+    fn render_slide_with_warnings_in_deck_populates_agenda() {
+        let meta = meta_80x24();
+        let deck = vec![
+            agenda_slide(1, Some("Agenda")),
+            section_slide(2, "Discovery"),
+            section_slide(3, "Decisions"),
+        ];
+        let agenda = &deck[0];
+        let (rendered, warnings) = render_slide_with_warnings_in_deck(agenda, &meta, &deck);
+        assert!(warnings.is_empty(), "agenda has no body, no warnings");
+        let body = rendered.join("\n");
+        assert!(body.contains("Discovery"));
+        assert!(body.contains("Decisions"));
+    }
+
+    #[test]
+    fn render_slide_with_warnings_falls_back_to_empty_deck() {
+        // The deck-less alias must not crash and must surface the placeholder.
+        let meta = meta_80x24();
+        let agenda = agenda_slide(1, Some("Agenda"));
+        let (rendered, _) = render_slide_with_warnings(&agenda, &meta);
+        let body = rendered.join("\n");
+        assert!(body.contains("(no section slides in this deck)"),
+                "deck-less render must show the placeholder, got:\n{}", body);
     }
 }

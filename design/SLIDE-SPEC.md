@@ -66,7 +66,7 @@ Title bar at top, body fills the remainder. The most common layout.
 
 ### 3. `two-column` — Side-by-side comparison
 
-Body split into two columns. Configurable ratio (default 50:50).
+Body split into two columns. Configurable ratio (default 60:40).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -175,7 +175,7 @@ proof:bullets
 
 ---
 
-```proof:slide layout=two-column title="McDavid vs Kucherov" ratio=50:50
+```proof:slide layout=two-column title="McDavid vs Kucherov"
 ## col:left
 proof:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#mcdavid[row=0]
 proof:mini-bar field=pts_82 max=200 width=30

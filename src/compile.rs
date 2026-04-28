@@ -141,6 +141,35 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    /// proof:blockquote — prose-document block quote.
+    ///
+    /// Distinct from `proof:quote`, which is slide-only (centered, curly-quoted).
+    /// `proof:blockquote` is for prose documents: left-aligned, indented, with
+    /// optional attribution on its own trailing line.
+    Blockquote {
+        /// Body text — multi-line. Blank lines separate paragraphs within the quote.
+        text: String,
+        /// Optional attribution (rendered as `— Name` on a trailing line).
+        attribution: Option<String>,
+        /// Render style: "indent" (markdown `> ` lines, default) or "boxed" (ASCII frame).
+        style: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    /// proof:chart — full bar or line chart (distinct from sparkline elements).
+    Chart {
+        attrs: crate::chart::ChartAttrs,
+        /// md:// URI of a data table when source-driven; None for inline body data.
+        source: Option<String>,
+        /// Column name for category labels when source is set.
+        label_field: Option<String>,
+        /// Column name for numeric values when source is set.
+        value_field: Option<String>,
+        /// Inline body text (used when `source` is None). Lines are `label: value` pairs.
+        inline_body: String,
+        line_start: usize,
+        line_end: usize,
+    },
 }
 
 /// Parsed attributes from a proof:tree directive.
@@ -275,6 +304,8 @@ impl Directive {
             Directive::Math { line_start, .. } => *line_start,
             Directive::Toc  { line_start, .. } => *line_start,
             Directive::Xref { line_start, .. } => *line_start,
+            Directive::Blockquote { line_start, .. } => *line_start,
+            Directive::Chart { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -291,6 +322,8 @@ impl Directive {
             Directive::Math { line_end, .. } => *line_end,
             Directive::Toc  { line_end, .. } => *line_end,
             Directive::Xref { line_end, .. } => *line_end,
+            Directive::Blockquote { line_end, .. } => *line_end,
+            Directive::Chart { line_end, .. } => *line_end,
         }
     }
 }
@@ -666,6 +699,61 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         .unwrap_or_else(|| "inline".to_string());
                     directives.push(Directive::Xref { uri, label, format, line_start, line_end });
                 }
+                "blockquote" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:blockquote")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let attribution = extract_attr_value(&info_after, "attribution")
+                        .or_else(|| extract_attr_value(&info_after, "by"));
+                    let style = extract_attr_value(&info_after, "style")
+                        .unwrap_or_else(|| "indent".to_string());
+                    let text = body.join("\n");
+                    directives.push(Directive::Blockquote {
+                        text, attribution, style, line_start, line_end,
+                    });
+                }
+                "chart" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:chart")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let kind = extract_attr_value(&info_after, "kind")
+                        .as_deref()
+                        .and_then(crate::chart::ChartKind::parse)
+                        .unwrap_or(crate::chart::ChartKind::Bar);
+                    let width = extract_attr_value(&info_after, "width")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(60);
+                    let height = extract_attr_value(&info_after, "height")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(8);
+                    let title = extract_attr_value(&info_after, "title");
+                    let x_label = extract_attr_value(&info_after, "x-label")
+                        .or_else(|| extract_attr_value(&info_after, "xlabel"));
+                    let y_label = extract_attr_value(&info_after, "y-label")
+                        .or_else(|| extract_attr_value(&info_after, "ylabel"));
+                    let max = extract_attr_value(&info_after, "max")
+                        .and_then(|s| s.parse().ok());
+                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let attrs = crate::chart::ChartAttrs {
+                        kind, width, height, title, x_label, y_label, max, no_chrome,
+                    };
+                    let source = extract_attr_value(&info_after, "source");
+                    let label_field = extract_attr_value(&info_after, "label-field")
+                        .or_else(|| extract_attr_value(&info_after, "label_field"));
+                    let value_field = extract_attr_value(&info_after, "value-field")
+                        .or_else(|| extract_attr_value(&info_after, "value_field"));
+                    let inline_body = body.join("\n");
+                    directives.push(Directive::Chart {
+                        attrs, source, label_field, value_field, inline_body,
+                        line_start, line_end,
+                    });
+                }
                 _ => {}
             }
         }
@@ -719,6 +807,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("math")    { Some("math") }
     else if rest.starts_with("toc")     { Some("toc") }
     else if rest.starts_with("xref")    { Some("xref") }
+    else if rest.starts_with("blockquote") { Some("blockquote") }
+    else if rest.starts_with("chart")   { Some("chart") }
     else if rest.starts_with("numbered-list") { Some("ol") } // primary name
     else if rest.starts_with("ol")      { Some("ol") }       // short-form alias
     else { None }
@@ -1109,6 +1199,67 @@ pub fn compile_file(
                             source_line: line_start + 1,
                         });
                         source_fallback(&source_lines, line_start, line_end)
+                    }
+                }
+            }
+
+            Directive::Blockquote { text, attribution, style, .. } => {
+                resolved_count += 1;
+                let rendered = render_blockquote(text, attribution.as_deref(), style);
+                format!(
+                    "<!-- proof:compiled from=\"proof:blockquote\" -->\n{}\n<!-- /proof:compiled -->",
+                    rendered
+                )
+            }
+
+            Directive::Chart { attrs, source, label_field, value_field, inline_body, .. } => {
+                let data_result = resolve_chart_data(
+                    source.as_deref(),
+                    label_field.as_deref(),
+                    value_field.as_deref(),
+                    inline_body,
+                    root,
+                );
+                match data_result {
+                    Ok(data) => {
+                        match crate::chart::render_chart(&data, attrs) {
+                            Ok(lines) => {
+                                resolved_count += 1;
+                                let rendered = lines.join("\n");
+                                if attrs.no_chrome {
+                                    format!("```\n{}\n```", rendered)
+                                } else {
+                                    format!(
+                                        "<!-- proof:compiled from=\"proof:chart\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                                        rendered
+                                    )
+                                }
+                            }
+                            Err(e) => {
+                                violations.push(CompileViolation {
+                                    code: e.code,
+                                    severity: ViolationSeverity::Error,
+                                    uri: source.clone().unwrap_or_default(),
+                                    figure_id: None,
+                                    invariant: String::new(),
+                                    message: e.message,
+                                    source_line: line_start + 1,
+                                });
+                                source_lines[line_start..=line_end].join("\n")
+                            }
+                        }
+                    }
+                    Err(msg) => {
+                        violations.push(CompileViolation {
+                            code: "CHART-002",
+                            severity: ViolationSeverity::Error,
+                            uri: source.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: msg,
+                            source_line: line_start + 1,
+                        });
+                        source_lines[line_start..=line_end].join("\n")
                     }
                 }
             }
@@ -1637,6 +1788,156 @@ fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
 // proof:element compile arm
 // ─────────────────────────────────────────────────────────
 
+/// Render a `proof:blockquote` directive for prose documents.
+///
+/// Distinct from `proof:quote` (slide-only, centered, curly-quoted): this is
+/// left-aligned, indented, with optional attribution on a trailing line. Two
+/// styles are supported:
+///
+/// - `style="indent"` (default) — emits standard markdown blockquote syntax:
+///   each line of the body is prefixed with `> `, blank lines remain `>`-prefixed
+///   to keep the quote contiguous, and attribution appears as a trailing
+///   `> — Name` line.
+///
+/// - `style="boxed"` — emits an ASCII-framed quote using `┌─...─┐ │ ... │ └─...─┘`,
+///   left-aligned within the frame. Attribution renders inside the frame on its
+///   own right-aligned line. Frame width is `max(visual_width(line) for line in body) + 4`,
+///   capped at the longest body line so the box hugs the content.
+///
+/// Unknown `style=` values silently fall back to `"indent"`.
+fn render_blockquote(text: &str, attribution: Option<&str>, style: &str) -> String {
+    let body_lines: Vec<&str> = text.lines().collect();
+    // Trim leading and trailing blank lines so authors can leave whitespace
+    // around the body for readability without it becoming part of the output.
+    let trimmed_body = trim_blank_edges(&body_lines);
+
+    match style {
+        "boxed" => render_blockquote_boxed(&trimmed_body, attribution),
+        // "indent" and any unknown style fall back to markdown blockquote.
+        _ => render_blockquote_indent(&trimmed_body, attribution),
+    }
+}
+
+fn trim_blank_edges<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let start = lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
+    let end = lines.iter().rposition(|l| !l.trim().is_empty()).map(|i| i + 1).unwrap_or(0);
+    if start >= end { Vec::new() } else { lines[start..end].to_vec() }
+}
+
+fn render_blockquote_indent(body: &[&str], attribution: Option<&str>) -> String {
+    let mut out: Vec<String> = body.iter().map(|line| {
+        if line.trim().is_empty() {
+            ">".to_string()
+        } else {
+            format!("> {}", line)
+        }
+    }).collect();
+    if let Some(by) = attribution {
+        if !out.is_empty() { out.push(">".to_string()); }
+        out.push(format!("> — {}", by));
+    }
+    out.join("\n")
+}
+
+fn render_blockquote_boxed(body: &[&str], attribution: Option<&str>) -> String {
+    use crate::layout::visual_width;
+
+    if body.is_empty() && attribution.is_none() {
+        return String::new();
+    }
+
+    // Compute inner width: longest body line, or attribution length, whichever wider.
+    let body_max = body.iter().map(|l| visual_width(l)).max().unwrap_or(0);
+    let attr_w = attribution.map(|a| visual_width(a) + 2).unwrap_or(0); // "— "
+    let inner_w = body_max.max(attr_w);
+
+    let horizontal = "─".repeat(inner_w + 2); // 1 cell of padding each side
+    let top = format!("┌{}┐", horizontal);
+    let bot = format!("└{}┘", horizontal);
+
+    let mut out = vec![top];
+    for line in body {
+        let pad = inner_w.saturating_sub(visual_width(line));
+        out.push(format!("│ {}{} │", line, " ".repeat(pad)));
+    }
+    if let Some(by) = attribution {
+        // Insert a blank padded row before the attribution if there was body content.
+        if !body.is_empty() {
+            out.push(format!("│ {} │", " ".repeat(inner_w)));
+        }
+        let attr_text = format!("— {}", by);
+        let pad = inner_w.saturating_sub(visual_width(&attr_text));
+        // Right-align attribution inside the frame.
+        out.push(format!("│ {}{} │", " ".repeat(pad), attr_text));
+    }
+    out.push(bot);
+    out.join("\n")
+}
+
+/// Resolve a proof:chart directive's data — either from an md:// table or
+/// from the inline `label: value` body.
+fn resolve_chart_data(
+    source: Option<&str>,
+    label_field: Option<&str>,
+    value_field: Option<&str>,
+    inline_body: &str,
+    root: &Path,
+) -> std::result::Result<crate::chart::ChartData, String> {
+    if let Some(uri) = source {
+        let label_col = label_field.ok_or_else(||
+            "proof:chart with source= requires label-field=".to_string())?;
+        let value_col = value_field.ok_or_else(||
+            "proof:chart with source= requires value-field=".to_string())?;
+        let content = resolve_source_for_compile(uri, root)
+            .map_err(|e| format!("chart source error: {}", e))?;
+        chart_data_from_table(&content, label_col, value_col)
+            .map_err(|e| format!("chart table error: {}", e))
+    } else {
+        crate::chart::render::parse_inline_body(inline_body)
+            .map_err(|(line, msg)| format!("chart body line {}: {}", line + 1, msg))
+    }
+}
+
+/// Parse a markdown pipe table and extract `(label_col, value_col)` as a
+/// `ChartData`. Header row determines column order; values must parse as f64.
+fn chart_data_from_table(
+    content: &str,
+    label_col: &str,
+    value_col: &str,
+) -> std::result::Result<crate::chart::ChartData, String> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') { continue; }
+        let cells: Vec<String> = trimmed.trim_matches('|').split('|')
+            .map(|c| c.trim().to_string())
+            .collect();
+        rows.push(cells);
+    }
+    if rows.len() < 2 {
+        return Err("expected pipe table with header + separator + body rows".to_string());
+    }
+    let header = &rows[0];
+    let label_idx = header.iter().position(|h| h == label_col)
+        .ok_or_else(|| format!("label column {:?} not found in header", label_col))?;
+    let value_idx = header.iter().position(|h| h == value_col)
+        .ok_or_else(|| format!("value column {:?} not found in header", value_col))?;
+
+    // Skip header (row 0) and separator (row 1, all dashes).
+    let mut points = Vec::new();
+    for (i, row) in rows.iter().enumerate().skip(1) {
+        if row.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
+            continue;
+        }
+        if row.len() <= label_idx.max(value_idx) { continue; }
+        let label = row[label_idx].clone();
+        let value: f64 = row[value_idx].parse()
+            .map_err(|_| format!("row {}: invalid number {:?}", i, row[value_idx]))?;
+        points.push(crate::chart::ChartPoint { label, value });
+    }
+    Ok(crate::chart::ChartData(points))
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Safe fallback: return source lines for the directive block, guarded against OOB.
 fn source_fallback(source_lines: &[&str], source_line: usize, line_end: usize) -> String {
@@ -2130,7 +2431,7 @@ fn compile_slides_file(
     config: &GlintConfig,
 ) -> Result<CompileResult> {
     use crate::slide::parser::parse_slide_doc;
-    use crate::slide::layout::{render_slide_with_warnings, render_slide_pages};
+    use crate::slide::layout::{render_slide_with_warnings_in_deck, render_slide_pages};
     use crate::slide::bullets::has_reveal_markers;
 
     let source_text = std::fs::read_to_string(source_path)
@@ -2182,15 +2483,15 @@ fn compile_slides_file(
         let use_reveal = has_reveal_markers(&slide.body_content);
         let (pages, warnings) = if use_reveal {
             let pgs = render_slide_pages(slide, meta);
-            (pgs, Vec::new()) // reveal path: warnings collected via render_slide_with_warnings below
+            (pgs, Vec::new()) // reveal path: warnings collected via render_slide_with_warnings_in_deck below
         } else {
-            let (rendered, warns) = render_slide_with_warnings(slide, meta);
+            let (rendered, warns) = render_slide_with_warnings_in_deck(slide, meta, &doc.slides);
             (vec![rendered], warns)
         };
 
         // For reveal slides, also run the warning check on the first page render
         let warnings = if use_reveal {
-            render_slide_with_warnings(slide, meta).1
+            render_slide_with_warnings_in_deck(slide, meta, &doc.slides).1
         } else {
             warnings
         };
@@ -3508,5 +3809,96 @@ Some prose.
         let dir = tempfile::tempdir().unwrap();
         let result = render_xref("md://nonexistent.md", None, "inline", dir.path());
         assert!(result.is_err(), "missing target file should return Err");
+    }
+
+    // ── proof:blockquote ─────────────────────────────────────
+
+    #[test]
+    fn blockquote_directive_kind_detected() {
+        assert_eq!(proof_directive_kind("```proof:blockquote"), Some("blockquote"));
+        assert_eq!(
+            proof_directive_kind("```proof:blockquote attribution=\"Author\""),
+            Some("blockquote"),
+        );
+    }
+
+    #[test]
+    fn blockquote_indent_default_no_attribution() {
+        let out = render_blockquote("To be or not to be.", None, "indent");
+        assert_eq!(out, "> To be or not to be.");
+    }
+
+    #[test]
+    fn blockquote_indent_with_attribution() {
+        let out = render_blockquote("To be or not to be.", Some("Hamlet"), "indent");
+        // Body line, blank quote line, attribution line.
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines, vec!["> To be or not to be.", ">", "> — Hamlet"]);
+    }
+
+    #[test]
+    fn blockquote_indent_multi_paragraph_preserves_blank_lines() {
+        // Inner blank lines stay as `>` (so the rendered markdown is still one
+        // contiguous quote, not two adjacent ones).
+        let text = "First paragraph.\n\nSecond paragraph.";
+        let out = render_blockquote(text, None, "indent");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines, vec!["> First paragraph.", ">", "> Second paragraph."]);
+    }
+
+    #[test]
+    fn blockquote_indent_trims_leading_and_trailing_blank_lines() {
+        let text = "\n\nThe quote.\n\n";
+        let out = render_blockquote(text, None, "indent");
+        assert_eq!(out, "> The quote.");
+    }
+
+    #[test]
+    fn blockquote_unknown_style_falls_back_to_indent() {
+        let out_unknown = render_blockquote("hi", None, "marble");
+        let out_indent  = render_blockquote("hi", None, "indent");
+        assert_eq!(out_unknown, out_indent,
+            "unknown style must fall back to indent (permissive parsing)");
+    }
+
+    #[test]
+    fn blockquote_boxed_renders_frame() {
+        let out = render_blockquote("Hello world", None, "boxed");
+        let lines: Vec<&str> = out.lines().collect();
+        // Top, content, bottom — at minimum.
+        assert!(lines.len() >= 3);
+        assert!(lines.first().unwrap().starts_with('┌'));
+        assert!(lines.first().unwrap().ends_with('┐'));
+        assert!(lines.last().unwrap().starts_with('└'));
+        assert!(lines.last().unwrap().ends_with('┘'));
+        // Content row contains the text and is bracketed by │ ... │.
+        assert!(lines.iter().any(|l| l.starts_with('│') && l.contains("Hello world") && l.ends_with('│')));
+    }
+
+    #[test]
+    fn blockquote_boxed_with_attribution_right_aligned() {
+        let out = render_blockquote("To be.", Some("Hamlet"), "boxed");
+        let lines: Vec<&str> = out.lines().collect();
+        // Last content line (before bottom border) should hold the attribution.
+        let attr_line = lines[lines.len() - 2];
+        assert!(attr_line.contains("— Hamlet"),
+            "expected attribution in penultimate line, got {:?}", attr_line);
+        assert!(attr_line.starts_with('│') && attr_line.ends_with('│'));
+    }
+
+    #[test]
+    fn blockquote_collected_from_directive_block() {
+        // End-to-end: collect_directives should pick up a proof:blockquote fence.
+        let src = "Before.\n\n```proof:blockquote attribution=\"Ada\"\nThe Analytical Engine has no pretensions.\n```\n\nAfter.\n";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1, "expected exactly one Blockquote directive");
+        match &dirs[0] {
+            Directive::Blockquote { text, attribution, style, .. } => {
+                assert!(text.contains("Analytical Engine"));
+                assert_eq!(attribution.as_deref(), Some("Ada"));
+                assert_eq!(style, "indent", "default style is indent");
+            }
+            other => panic!("expected Blockquote, got {:?}", other),
+        }
     }
 }
