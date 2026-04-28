@@ -207,6 +207,12 @@ enum Command {
     Config,
     /// Write a proof.toml to the current directory
     Init,
+    /// Corpus health summary — source count, stale files, last compile time
+    Status {
+        /// Directory to inspect (default: current directory)
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+    },
     /// Summary statistics (error/warning counts by directory and code)
     Stats {
         paths: Vec<PathBuf>,
@@ -328,6 +334,9 @@ fn main() -> Result<()> {
         }
         Some(Command::Init) => {
             return cmd_init();
+        }
+        Some(Command::Status { dir }) => {
+            return cmd_status(dir.clone());
         }
         Some(Command::Config) => {
             println!("(use proof.toml in your project directory — see `proof init`)");
@@ -496,10 +505,31 @@ fn cmd_check(paths: Vec<PathBuf>, cli: &Cli, da_vinci: bool, show_by_code: bool,
         }
     }
 
+    // Write .proof/last-check.json so `proof status` can show cached results
+    write_last_check_cache(&paths, files_checked, error_count, warn_count);
+
     if !cli.no_fail && error_count > 0 {
         process::exit(1);
     }
     Ok(())
+}
+
+fn write_last_check_cache(paths: &[PathBuf], files_checked: usize, errors: usize, warnings: usize) {
+    let root = paths.first()
+        .map(|p| if p.is_dir() { p.clone() } else { p.parent().unwrap_or(p).to_path_buf() })
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let cache_dir = root.join(".proof");
+    if std::fs::create_dir_all(&cache_dir).is_ok() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let json = format!(
+            "{{\"files_checked\":{},\"errors\":{},\"warnings\":{},\"timestamp_secs\":{}}}",
+            files_checked, errors, warnings, ts
+        );
+        let _ = std::fs::write(cache_dir.join("last-check.json"), json);
+    }
 }
 
 fn format_output(diags: &[Diagnostic], format: &str) -> Result<String> {
@@ -1819,6 +1849,126 @@ fn load_config(path: &std::path::Path, override_path: &Option<PathBuf>) -> Glint
     }
     let dir = if path.is_dir() { path.to_path_buf() } else { path.parent().unwrap_or(path).to_path_buf() };
     GlintConfig::load_or_default(&dir)
+}
+
+fn cmd_status(dir: PathBuf) -> Result<()> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let root = if dir.is_absolute() {
+        dir.clone()
+    } else {
+        std::env::current_dir()?.join(dir)
+    };
+
+    println!("{} — {}", "proof status".bold(), root.display().to_string().cyan());
+    println!();
+
+    // Count source files and compiled output files
+    let mut source_count = 0usize;
+    let mut compiled_count = 0usize;
+    let mut stale_count = 0usize;
+    let mut last_compile: Option<SystemTime> = None;
+
+    for entry in walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        if name.ends_with(".source.md") {
+            source_count += 1;
+            // Check for corresponding compiled output
+            let output = path.with_file_name(
+                name.strip_suffix(".source.md").unwrap_or(name).to_string() + ".md"
+            );
+            if output.exists() {
+                compiled_count += 1;
+                // Track staleness: source newer than output?
+                if let (Ok(src_meta), Ok(out_meta)) = (path.metadata(), output.metadata()) {
+                    if let (Ok(src_mod), Ok(out_mod)) = (src_meta.modified(), out_meta.modified()) {
+                        if src_mod > out_mod {
+                            stale_count += 1;
+                        }
+                        // Track most recent compile time
+                        if last_compile.map_or(true, |lc| out_mod > lc) {
+                            last_compile = Some(out_mod);
+                        }
+                    }
+                }
+            } else {
+                stale_count += 1; // missing output = stale
+            }
+        }
+    }
+
+    let stale_label = if stale_count == 0 {
+        "0".green().to_string()
+    } else {
+        format!("{}", stale_count).yellow().to_string()
+    };
+
+    println!("  {:<16} {}", "Sources".dimmed(), source_count);
+    println!("  {:<16} {}", "Compiled".dimmed(), compiled_count);
+    println!("  {:<16} {}", "Stale".dimmed(), stale_label);
+
+    // Last compile time
+    if let Some(ts) = last_compile {
+        let secs = ts.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now_secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let age = now_secs.saturating_sub(secs);
+        let age_str = if age < 60 {
+            format!("{} sec ago", age)
+        } else if age < 3600 {
+            format!("{} min ago", age / 60)
+        } else if age < 86400 {
+            format!("{} hr ago", age / 3600)
+        } else {
+            format!("{} days ago", age / 86400)
+        };
+        println!("  {:<16} {}", "Last compile".dimmed(), age_str);
+    } else {
+        println!("  {:<16} {}", "Last compile".dimmed(), "never".dimmed());
+    }
+
+    // Read cached check results from .proof/last-check.json if present
+    let cache_file = root.join(".proof/last-check.json");
+    if cache_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&cache_file) {
+            // Simple JSON extraction without serde — just grep for the numbers
+            let errors: Option<u64> = extract_json_u64(&content, "errors");
+            let warnings: Option<u64> = extract_json_u64(&content, "warnings");
+            let files: Option<u64> = extract_json_u64(&content, "files_checked");
+            if let Some(e) = errors {
+                let err_label = if e == 0 { "0".green().to_string() } else { format!("{}", e).red().to_string() };
+                println!("  {:<16} {} errors, {} warnings (last check, {} files)",
+                    "Diagnostics".dimmed(),
+                    err_label,
+                    warnings.unwrap_or(0),
+                    files.unwrap_or(0));
+            }
+        }
+    }
+
+    // Config summary
+    let cfg = GlintConfig::load_or_default(&root);
+    let schema_count = cfg.section_schemas.len();
+    let target_count = cfg.compile.len();
+    let root_flag = if cfg.files.root { "root=true" } else { "root=false" };
+    println!("  {:<16} proof.toml ({}, {} schemas, {} compile targets)",
+        "Config".dimmed(), root_flag, schema_count, target_count);
+
+    println!();
+    Ok(())
+}
+
+fn extract_json_u64(json: &str, key: &str) -> Option<u64> {
+    let search = format!("\"{}\":", key);
+    let pos = json.find(&search)?;
+    let after = json[pos + search.len()..].trim_start();
+    let end = after.find(|c: char| !c.is_ascii_digit()).unwrap_or(after.len());
+    after[..end].parse().ok()
 }
 
 fn cmd_init() -> Result<()> {

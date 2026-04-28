@@ -44,6 +44,9 @@ pub struct SlideMeta {
     pub height: usize,
     pub theme: SlideTheme,
     pub show_numbers: bool,
+    /// When true, a `████░░░` progress bar is emitted after each slide separator
+    /// in the compiled output (outside the canvas — SL-1 still holds).
+    pub progress_bar: bool,
     pub font_width: usize,
     pub max_bullets: usize,
     pub max_depth: usize,
@@ -63,6 +66,7 @@ impl Default for SlideMeta {
             height: 34,
             theme: SlideTheme::Minimal,
             show_numbers: false,
+            progress_bar: false,
             font_width: 1,
             max_bullets: 4,   // 30-second rule — see bullets.rs SLIDE-001
             max_depth: 4,

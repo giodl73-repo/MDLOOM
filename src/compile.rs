@@ -2528,6 +2528,10 @@ fn compile_slides_file(
             } else {
                 parts.push(format!("{} {}/{}", separator, n, total));
             }
+            // Progress bar (outside the canvas, between separator and canvas content)
+            if meta.progress_bar && total > 0 {
+                parts.push(render_progress_bar(n, total, meta.width));
+            }
             parts.extend(rendered);
         }
     }
@@ -2551,6 +2555,16 @@ fn compile_slides_file(
         resolved_files: vec![],
         written: true,
     })
+}
+
+/// Render a `████░░░  N/M` progress bar for slide N of M.
+/// Width is `canvas_width`. Bar occupies the full width minus a ` N/M` label.
+fn render_progress_bar(n: usize, total: usize, width: usize) -> String {
+    let label = format!(" {}/{}", n, total);
+    let bar_width = width.saturating_sub(label.len());
+    let filled = (bar_width * n / total).min(bar_width);
+    let empty = bar_width - filled;
+    format!("{}{}{}", "█".repeat(filled), "░".repeat(empty), label)
 }
 
 fn compile_dashboard_file(

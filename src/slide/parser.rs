@@ -151,6 +151,10 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String> {
                 meta.show_numbers = parse_bool(value)
                     .map_err(|_| format!("show-numbers must be true/false, got {:?}", value))?;
             }
+            "progress-bar" | "progress_bar" => {
+                meta.progress_bar = parse_bool(value)
+                    .map_err(|_| format!("progress-bar must be true/false, got {:?}", value))?;
+            }
             "font-width" | "font_width" => {
                 meta.font_width = value.parse::<usize>()
                     .map_err(|_| format!("font-width must be 1 or 2, got {:?}", value))?;
