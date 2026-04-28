@@ -49,6 +49,9 @@ pub enum ViolationSeverity {
 enum Directive {
     Include {
         uri: String,
+        /// Optional DaVinci pin ID declared inline. Compile warns if no matching
+        /// [[davinci]] entry with this ID exists in proof.toml.
+        pin: Option<String>,
         line_start: usize,
         line_end: usize,
     },
@@ -416,11 +419,17 @@ fn collect_directives(source: &str) -> Vec<Directive> {
             let line_end = i;
             match kind {
                 "include" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:include")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let pin = extract_attr_value(&info_after, "pin");
                     if let Some(uri) = body.iter().find_map(|l| {
                         let t = l.trim();
-                        if !t.is_empty() { Some(t.to_string()) } else { None }
+                        if !t.is_empty() && !t.starts_with("pin=") { Some(t.to_string()) } else { None }
                     }) {
-                        directives.push(Directive::Include { uri, line_start, line_end });
+                        directives.push(Directive::Include { uri, pin, line_start, line_end });
                     }
                 }
                 "layout" => {
@@ -798,7 +807,25 @@ pub fn compile_file(
         let line_end = directive.line_end();
 
         let replacement = match directive {
-            Directive::Include { uri, .. } => {
+            Directive::Include { uri, pin, .. } => {
+                // If pin=id is declared inline, warn when no matching [[davinci]] entry exists.
+                if let Some(pin_id) = pin {
+                    let has_pin = config.davinci.iter().any(|d| &d.id == pin_id);
+                    if !has_pin {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-007",
+                            severity: ViolationSeverity::Warning,
+                            uri: uri.clone(),
+                            figure_id: Some(pin_id.clone()),
+                            invariant: String::new(),
+                            message: format!(
+                                "Figure '{}' declares pin={:?} but no [[davinci]] entry with that ID exists — run `proof pin {} --id {}`",
+                                uri, pin_id, uri, pin_id
+                            ),
+                            source_line: line_start + 1,
+                        });
+                    }
+                }
                 match resolve_uri(uri, root) {
                     Ok((content, fig_file)) => {
                         lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
@@ -2810,13 +2837,49 @@ mod tests {
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1);
         match &dirs[0] {
-            Directive::Include { uri, line_start, line_end } => {
+            Directive::Include { uri, pin, line_start, line_end } => {
                 assert_eq!(uri, "md://fig.md#:0");
                 assert_eq!(*line_start, 2);
                 assert_eq!(*line_end, 4);
+                assert!(pin.is_none(), "no pin= in plain include");
             }
             _ => panic!("expected Include"),
         }
+    }
+
+    #[test]
+    fn include_pin_attribute_parsed() {
+        let src = "```proof:include pin=arch-diagram\nmd://figures/arch.md#:0\n```\n";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Include { uri, pin, .. } => {
+                assert_eq!(uri, "md://figures/arch.md#:0");
+                assert_eq!(pin.as_deref(), Some("arch-diagram"));
+            }
+            _ => panic!("expected Include"),
+        }
+    }
+
+    #[test]
+    fn include_pin_missing_in_config_emits_compile_007() {
+        let dir = tempfile::tempdir().unwrap();
+        // Write the figure file the source will include
+        std::fs::write(dir.path().join("myfig.md"), "```\ncontent\n```\n").unwrap();
+
+        let src_path = dir.path().join("test.source.md");
+        let out_path = dir.path().join("test.md");
+        let src = "```proof:include pin=my-pin\nmd://myfig.md\n```\n";
+        std::fs::write(&src_path, src).unwrap();
+
+        let cfg = GlintConfig::default(); // no davinci entries
+        let result = compile_file(&src_path, &out_path, dir.path(), &cfg).expect("compile ok");
+
+        assert!(
+            result.violations.iter().any(|v| v.code == "COMPILE-007"),
+            "missing DaVinci pin should emit COMPILE-007, got: {:?}",
+            result.violations.iter().map(|v| v.code).collect::<Vec<_>>()
+        );
     }
 
     #[test]
