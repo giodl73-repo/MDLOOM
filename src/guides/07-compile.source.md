@@ -76,6 +76,9 @@ root: proof directives
   - proof:centered: Centered text
   - proof:stat: KPI stat cell
   - proof:notes: Speaker notes (excluded from slide output)
+  - proof:right: Right-align a block of text (complement to proof:centered)
+  - proof:ol: Ordered (numbered) list with decimal sub-numbering
+  - proof:toc: Auto-generate table of contents from headings
 - Compositor directives
   - proof:slide: Full slide declaration in a .slides.source.md file
   - proof:region: Named region in a .dashboard.source.md file

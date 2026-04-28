@@ -134,6 +134,7 @@ pub struct TreeAttrs {
     pub root: Option<String>,        // for dirtree: filesystem root
     pub max_depth: Option<usize>,
     pub exclude: Vec<String>,
+    pub stub: bool,   // stub=true: compile errors become warnings (for WIP docs)
 }
 
 impl TreeAttrs {
@@ -165,6 +166,7 @@ impl TreeAttrs {
                     "root"         => out.root = Some(val.to_string()),
                     "max-depth"    => out.max_depth = val.parse().ok(),
                     "exclude"      => out.exclude = val.split(',').map(|s| s.trim().to_string()).collect(),
+                    "stub"         => out.stub = val == "true" || val == "1",
                     _ => {}
                 }
                 rest = next.trim_start();
@@ -820,13 +822,16 @@ pub fn compile_file(
             Directive::Tree { kind, source, inline_body, attrs, .. } => {
                 generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, &mut violations)
                     .unwrap_or_else(|e| {
+                        // stub=true: WIP directive — downgrade error to warning, keep source block
+                        let severity = if attrs.stub { ViolationSeverity::Warning } else { ViolationSeverity::Error };
                         violations.push(CompileViolation {
                             code: "COMPILE-002",
-                            severity: ViolationSeverity::Error,
+                            severity,
                             uri: source.clone().unwrap_or_default(),
                             figure_id: None,
                             invariant: String::new(),
-                            message: format!("tree generation failed: {}", e),
+                            message: format!("tree generation failed: {}{}", e,
+                                if attrs.stub { " (stub — skipped)" } else { "" }),
                             source_line: line_start + 1,
                         });
                         source_fallback(&source_lines, line_start, line_end)

@@ -192,6 +192,71 @@ title: "Narrow slide"
 
 ---
 
+```proof:slide layout=section
+title: "New Directives"
+subtitle: "proof:right · proof:ol · proof:toc · word-wrap"
+```
+
+---
+
+```proof:slide layout=title-content
+title: "proof:right — Right-align text"
+---
+Right-aligned text works like centered text, but pushes to the right edge.
+Use it for dates, authors, page numbers, or visual balance.
+
+proof:right
+Author: Gio Della-Libera
+Date: 2026-04-28
+```
+
+---
+
+```proof:slide layout=title-content
+title: "proof:ol — Ordered (numbered) list"
+---
+Numbered lists use decimal sub-numbering automatically.
+
+proof:ol
+- Install proof
+  - Clone the repo
+  - Run cargo build
+- Configure proof.toml
+  - Set source_dir and output_dir
+- Run proof compile
+```
+
+---
+
+```proof:slide layout=title-content
+title: "proof:toc — Table of Contents"
+---
+Generates a TOC from headings in the current file or any md:// source.
+Styles: list (default), tree, numbered.
+
+proof:bullets
+- style=list: - heading bullet list
+- style=tree: └── tree connectors
+- style=numbered: 1. decimal numbering
+```
+
+---
+
+```proof:slide layout=title-content
+title: "Word wrap"
+---
+Prose lines in slide bodies now wrap automatically at the slide width
+rather than being clipped. Bullet text wraps with a hanging indent —
+continuation lines align past the bullet character so the visual
+structure stays clean even on long descriptions.
+
+proof:bullets
+- Short bullet
+- This is a longer bullet that will wrap onto the next line if it exceeds the slide width, keeping the hanging indent aligned
+```
+
+---
+
 ```proof:slide layout=title
 title: "End"
 subtitle: "See also: elements.md · math.md · dashboard.md"

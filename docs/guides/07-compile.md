@@ -77,6 +77,9 @@ proof directives
 ├── proof:centered: Centered text
 ├── proof:stat: KPI stat cell
 ├── proof:notes: Speaker notes (excluded from slide output)
+├── proof:right: Right-align a block of text (complement to proof:centered)
+├── proof:ol: Ordered (numbered) list with decimal sub-numbering
+├── proof:toc: Auto-generate table of contents from headings
 ├── Compositor directives
 ├── proof:slide: Full slide declaration in a .slides.source.md file
 ├── proof:region: Named region in a .dashboard.source.md file
@@ -115,9 +118,13 @@ matrix, or sum-with-limits rendering. Inline `$...$` is for single-line
 expressions in prose; `proof:math` is for equations that deserve their own block.
 
 ````markdown
-```proof:math
-\frac{n(n+1)}{2}
+<!-- proof:compiled from="proof:math" -->
 ```
+n(n+1)
+──────
+  2   
+```
+<!-- /proof:compiled -->
 ````
 
 Attributes: `width` (columns, 0=auto), `align` (left/center/right), `no-chrome` (omit the compiled wrapper).
@@ -131,10 +138,44 @@ table from a data source. The `source=md://...` attribute points to any markdown
 table. The `foreach=row` attribute sets the iteration variable.
 
 ````markdown
-```proof:row source=md://src/data/features.md foreach=row separator=" │ "
-proof:element kind=label field=name width=30
-proof:element kind=badge field=status width=10
+<!-- proof:compiled from="proof:row" uri="md://src/data/features.md" -->
 ```
+LaTeX math inline              │ stable    
+LaTeX math display             │ stable    
+Symbol expansion               │ stable    
+Symbol block                   │ stable    
+Shape renderer                 │ stable    
+Element value                  │ stable    
+Element delta                  │ stable    
+Element sparkline              │ stable    
+Element mini-bar               │ stable    
+Element label                  │ stable    
+Element badge                  │ stable    
+Row compositor                 │ stable    
+Slide title                    │ stable    
+Slide title-content            │ stable    
+Slide two-column               │ stable    
+Slide section                  │ stable    
+Slide stats                    │ stable    
+Slide blank                    │ stable    
+Slide bullets                  │ stable    
+Slide callout                  │ stable    
+Slide divider                  │ stable    
+Slide quote                    │ stable    
+Slide centered                 │ stable    
+Dashboard canvas               │ stable    
+Tree dirtree                   │ stable    
+Tree org                       │ stable    
+Tree taxonomy                  │ stable    
+Tree dependency                │ stable    
+Tree outline                   │ stable    
+Figure import                  │ beta      
+DaVinci pin                    │ beta      
+Lint check                     │ stable    
+Auto-fix                       │ stable    
+Compile pipeline               │ stable    
+```
+<!-- /proof:compiled -->
 ````
 
 ---
@@ -146,11 +187,13 @@ For inline content, use `root:` for the root node and `- child` with indentation
 For data-driven trees, specify `name=` and `parent=` column names.
 
 ````markdown
-```proof:tree kind=org
-root: My Project
-- Frontend: React
-- Backend: Rust
+<!-- proof:compiled from="proof:tree kind=org" uri="" -->
+```org
+My Project
+├── Frontend: React
+└── Backend: Rust
 ```
+<!-- /proof:compiled -->
 ````
 
 ---

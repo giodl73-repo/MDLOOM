@@ -85,7 +85,7 @@ see the pattern at a glance.
 
 <!-- proof:compiled from="proof:element" uri="inline" -->
 ```
-▁▁▁▁▁▁▁▁▁▁▁▁
+▄▄▄▄▄▄▄▄▄▄▄▄
 ```
 <!-- /proof:compiled -->
 

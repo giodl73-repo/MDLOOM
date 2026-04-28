@@ -90,6 +90,27 @@ src/
 │   ├── dirtree.rs
 │   ├── mod.rs
 │   └── schema.rs
+├── user-scenarios/
+│   ├── 07-canvas-tui/
+│   ├── 21-proof-math-demo/
+│   ├── data/
+│   │   └── models.md
+│   ├── 02-math-api.source.md
+│   ├── 03-metrics-dashboard.dashboard.source.md
+│   ├── 04-status-deck.slides.source.md
+│   ├── 08-model-comparison.source.md
+│   ├── 09-dependencies.source.md
+│   ├── 10-calculus-deck.slides.source.md
+│   ├── 12-blog-post.source.md
+│   ├── 14-ml-taxonomy.source.md
+│   ├── 15-rulebook.source.md
+│   ├── 17-pitch-deck.slides.source.md
+│   ├── 18-architecture.source.md
+│   ├── 19-problem-set.source.md
+│   ├── 22-status-board.dashboard.source.md
+│   ├── 23-adr-with-toc.source.md
+│   ├── 25-wip-guide.source.md
+│   └── proof.toml
 ├── baseline.rs
 ├── compile.rs
 ├── config.rs
@@ -174,6 +195,27 @@ src/
 │   ├── dirtree.rs
 │   ├── mod.rs
 │   └── schema.rs
+├── user-scenarios/
+│   ├── 07-canvas-tui/
+│   ├── 21-proof-math-demo/
+│   ├── data/
+│   │   └── models.md
+│   ├── 02-math-api.source.md
+│   ├── 03-metrics-dashboard.dashboard.source.md
+│   ├── 04-status-deck.slides.source.md
+│   ├── 08-model-comparison.source.md
+│   ├── 09-dependencies.source.md
+│   ├── 10-calculus-deck.slides.source.md
+│   ├── 12-blog-post.source.md
+│   ├── 14-ml-taxonomy.source.md
+│   ├── 15-rulebook.source.md
+│   ├── 17-pitch-deck.slides.source.md
+│   ├── 18-architecture.source.md
+│   ├── 19-problem-set.source.md
+│   ├── 22-status-board.dashboard.source.md
+│   ├── 23-adr-with-toc.source.md
+│   ├── 25-wip-guide.source.md
+│   └── proof.toml
 ├── baseline.rs
 ├── compile.rs
 ├── config.rs
