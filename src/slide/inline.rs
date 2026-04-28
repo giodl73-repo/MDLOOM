@@ -146,7 +146,7 @@ pub fn render_right(text: &str, width: usize) -> Vec<String> {
 /// sub-items and get decimal numbering (1.1, 1.2, ...).
 /// Returns rendered lines word-wrapped to `width`.
 pub fn render_ol(text: &str, width: usize) -> Vec<String> {
-    use crate::slide::layout::word_wrap;
+    
 
     let mut lines = Vec::new();
     let mut counters: Vec<usize> = Vec::new(); // stack of counters per depth

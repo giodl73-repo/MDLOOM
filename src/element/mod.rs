@@ -242,7 +242,7 @@ fn char_visual_width(c: char) -> usize {
 // Data kind helpers
 // ─────────────────────────────────────────────────────────
 
-fn require_scalar(data: &ElementData, kind: &'static str) -> Result<f64, ElementError> {
+fn require_scalar(data: &ElementData, _kind: &'static str) -> Result<f64, ElementError> {
     match data {
         ElementData::Scalar(v) => Ok(*v),
         ElementData::Text(s) => s.parse::<f64>().map_err(|_| ElementError::WrongDataKind {

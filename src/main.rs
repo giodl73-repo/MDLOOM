@@ -6,7 +6,7 @@ use proof_lib::davinci::check_daVinci;
 use proof_lib::draft::build_draft_plan;
 use proof_lib::fix::{serialize_json, serialize_rich, FixOptions};
 use proof_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
-use proof_lib::tree::dirtree::{DirtreeOptions, SortOrder, generate as dirtree_generate, verify_paths as dirtree_verify};
+use proof_lib::tree::dirtree::{DirtreeOptions, SortOrder, generate as dirtree_generate};
 use proof_lib::tree::schema::{FieldMap, generate_org, generate_taxonomy, generate_dependency, generate_outline};
 use proof_lib::spec_gen;
 use proof_lib::layout::{self, Align, Direction, LayoutConfig, extract_content_lines};
@@ -663,7 +663,7 @@ fn cmd_fix(
     min_confidence_str: String,
     no_verify: bool,
     no_signal_check: bool,
-    config_override: &Option<PathBuf>,
+    _config_override: &Option<PathBuf>,
 ) -> Result<()> {
     let min_confidence = match min_confidence_str.as_str() {
         "high" => Confidence::High,
@@ -1227,7 +1227,7 @@ fn cmd_compile(
     // When using [[compile]] targets from proof.toml (and no explicit paths/output-dir),
     // route each source file to the correct target's output_dir.
     let using_defaults = paths.iter().any(|p| p == &std::env::current_dir().unwrap());
-    let has_multi_targets = config.compile.len() > 1;
+    let _has_multi_targets = config.compile.len() > 1;
 
     let source_dir_pairs: Vec<(PathBuf, Option<PathBuf>)> = if !config.compile.is_empty()
         && using_defaults

@@ -7,7 +7,7 @@ use crate::checks::markdown::MarkdownCheck;
 use crate::checks::markdown_table::MarkdownTableCheck;
 use crate::checks::source_links::SourceLinkCheck;
 use crate::checks::Check;
-use crate::config::{AsciiBarchartConfig, AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, AsciiTreeConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
+use crate::config::{GlintConfig, MarkdownConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;

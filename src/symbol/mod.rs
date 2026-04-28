@@ -210,7 +210,7 @@ pub struct SymbolWarning {
 /// inside inline code (odd backtick count) or inside a URL.
 /// Fenced code blocks must be stripped by the caller before passing text here.
 pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWarning>) {
-    use crate::layout::visual_width;
+    
     let mut result = String::with_capacity(text.len());
     let mut warnings = Vec::new();
     let mut rest = text;

@@ -10,7 +10,7 @@
 /// Output: a draft-plan.json the AI can read and annotate inline, then
 /// `proof fix --plan draft-plan.json` applies it.
 
-use crate::diagnostic::{Diagnostic, Severity};
+use crate::diagnostic::Diagnostic;
 use crate::fix::is_pattern_b;
 use unicode_width::UnicodeWidthChar;
 use crate::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
@@ -531,7 +531,7 @@ fn fix_missing_table_link(table_row: &str) -> Option<String> {
     });
 
     let mut any_fixed = false;
-    let mut fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
+    let fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
         let raw = cell.trim();
         if raw.is_empty() { return cell; }
         if has_markdown_link_in_cell(raw) { return cell; } // already linked

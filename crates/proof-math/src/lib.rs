@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! proof-math — LaTeX math rendering to Unicode and ASCII art for terminal output.
 //!
 //! No LaTeX installation required. Pure Rust implementation covering:

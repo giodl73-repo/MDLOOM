@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 /// Validate all DaVinci entries in a config against their invariants.
 /// Returns diagnostics — one per violated invariant.
+#[allow(non_snake_case)]
 pub fn check_daVinci(config: &GlintConfig, root: &Path) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
 

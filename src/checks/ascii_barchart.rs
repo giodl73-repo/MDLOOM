@@ -84,6 +84,7 @@ fn is_bar_char(c: char, allowed: &[String]) -> bool {
     allowed.iter().any(|s| s.chars().next() == Some(c))
 }
 
+#[allow(dead_code)]
 fn default_bar_chars() -> &'static [&'static str] {
     &["█", "▓", "▒", "░", "#", "="]
 }
@@ -95,7 +96,7 @@ fn is_default_bar_char(c: char) -> bool {
 /// Try to parse a line as a bar chart row. Returns None if no bar found.
 fn parse_bar_row(line: &str, abs_line: usize, config: &AsciiBarchartConfig) -> Option<BarRow> {
     let chars: Vec<char> = line.chars().collect();
-    let n = chars.len();
+    let _n = chars.len();
 
     // Find the start of the first bar run
     let bar_start = chars.iter().position(|&c| {

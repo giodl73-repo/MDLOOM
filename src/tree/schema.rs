@@ -55,9 +55,9 @@ const DEP_NAME_CANDIDATES:   &[&str] = &["package", "name", "module", "crate", "
 const DEP_PARENT_CANDIDATES: &[&str] = &["depends_on", "requires", "dependency", "uses", "parent"];
 const DEP_VER_CANDIDATES:    &[&str] = &["version", "ver", "semver"];
 
-const DEC_NODE_CANDIDATES:   &[&str] = &["node", "condition", "question", "id", "step"];
-const DEC_YES_CANDIDATES:    &[&str] = &["yes", "true", "yes_branch", "then", "if_yes"];
-const DEC_NO_CANDIDATES:     &[&str] = &["no", "false", "no_branch", "else", "if_no"];
+#[allow(dead_code)] const DEC_NODE_CANDIDATES: &[&str] = &["node", "condition", "question", "id", "step"];
+#[allow(dead_code)] const DEC_YES_CANDIDATES:  &[&str] = &["yes", "true", "yes_branch", "then", "if_yes"];
+#[allow(dead_code)] const DEC_NO_CANDIDATES:   &[&str] = &["no", "false", "no_branch", "else", "if_no"];
 
 fn find_column<'a>(headers: &'a [String], candidates: &[&str]) -> Option<&'a str> {
     for candidate in candidates {
@@ -104,6 +104,7 @@ fn auto_detect_dependency(headers: &[String], map: &mut FieldMap) {
     }
 }
 
+#[allow(dead_code)]
 fn auto_detect_decision(headers: &[String], map: &mut FieldMap) {
     if map.name.is_none() {
         map.name = find_column(headers, DEC_NODE_CANDIDATES).map(|s| s.to_string());
@@ -121,7 +122,8 @@ fn auto_detect_decision(headers: &[String], map: &mut FieldMap) {
 // ─────────────────────────────────────────────────────────
 
 #[derive(Debug)]
-struct SourceRow {
+#[allow(dead_code)]
+pub(crate) struct SourceRow {
     name: String,
     parent: String,     // empty if root
     label: String,      // may equal name if no label column

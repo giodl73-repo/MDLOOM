@@ -1,12 +1,3 @@
-/// Slide layout renderers — Wave 2.
-///
-/// Each layout takes a Slide and produces a Vec<String> of exactly
-/// meta.height lines, each meta.width chars wide (SL-1).
-///
-/// render_body_lines() is a stub in Wave 2 — returns raw lines unchanged.
-/// Wave 3 replaces it with full directive dispatch.
-
-use crate::slide::canvas::SlideCanvas;
 use crate::slide::{FooterMode, Slide, SlideLayout, SlideMeta, SlideTheme};
 
 // ─────────────────────────────────────────────────────────
@@ -425,7 +416,7 @@ pub fn render_two_column(
     // Column width: floor() with remainder to first column (per spec rounding rule)
     let ratio_sum = (ratio.0 as usize) + (ratio.1 as usize);
     let col_a_w = (w * ratio.0 as usize) / ratio_sum;
-    let col_b_w = w.saturating_sub(col_a_w); // remainder goes to second col? No — first gets remainder
+    let _col_b_w = w.saturating_sub(col_a_w); // remainder goes to second col? No — first gets remainder
     // Actually: spec says "remainder to first column"
     let col_a_raw = (w * ratio.0 as usize) / ratio_sum;
     let col_b_raw = (w * ratio.1 as usize) / ratio_sum;
@@ -793,7 +784,7 @@ fn render_blank_with_warnings(
 /// separator (e.g. `---` for the `.slides.md` format or a form-feed for paging
 /// terminal output).
 pub fn render_slide_pages(slide: &Slide, meta: &SlideMeta) -> Vec<Vec<String>> {
-    use crate::slide::bullets::{BulletConfig, has_reveal_markers, render_bullets_pages};
+    use crate::slide::bullets::{BulletConfig, has_reveal_markers};
 
     let bullet_cfg = BulletConfig {
         max_bullets: meta.max_bullets,
@@ -826,7 +817,7 @@ fn render_reveal_pages_title_content(
     meta: &SlideMeta,
     bullet_cfg: &crate::slide::bullets::BulletConfig,
 ) -> Vec<Vec<String>> {
-    use crate::slide::bullets::render_bullets_pages;
+    
 
     let w = meta.width;
     let h = meta.height;

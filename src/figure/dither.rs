@@ -1,7 +1,7 @@
+#[allow(dead_code)]
 #[cfg(feature = "figure")]
 use image::GrayImage;
 
-use crate::figure::{DitherMode, ImportOptions};
 
 // ─────────────────────────────────────────────────────────
 // DitherContext (only available with feature flag)
@@ -61,6 +61,7 @@ fn luma(ctx: &DitherContext, x: u32, y: u32) -> u8 {
 // Density dither — " .:-=+*#%@"
 // ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 const DENSITY_CHARS: &[char] = &[' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
 
 #[cfg(feature = "figure")]
@@ -78,6 +79,7 @@ pub fn dither_density(ctx: &DitherContext) -> Vec<String> {
 // Block dither — " ░▒▓█"
 // ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 const BLOCK_CHARS: &[char] = &[' ', '░', '▒', '▓', '█'];
 
 #[cfg(feature = "figure")]

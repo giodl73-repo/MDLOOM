@@ -126,6 +126,7 @@ fn detect_code_blocks(lines: &[&str], line_offset: usize) -> Vec<CodeBlock> {
 
 /// Returns (start, end) line index ranges of code block contents (exclusive of fences).
 /// Unclosed blocks are included (content extends to end of input).
+#[allow(dead_code)]
 fn code_block_regions(lines: &[&str]) -> Vec<(usize, usize)> {
     detect_code_blocks(lines, 0)
         .into_iter()
@@ -339,7 +340,7 @@ fn check_boxes(
         let group_id = format!("box-l{}", abs_top);
 
         // Helper: build rich context for a line in this box
-        let box_context = |abs_line: usize, actual: Vec<usize>| -> RichContext {
+        let box_context = |_abs_line: usize, actual: Vec<usize>| -> RichContext {
             let mut ctx_lines = BTreeMap::new();
             // Capture the full box + 1 line of surrounding context
             let region_start = b.top_line.saturating_sub(1);

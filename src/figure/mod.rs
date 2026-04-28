@@ -4,12 +4,10 @@ pub mod shape;
 #[cfg(feature = "figure")]
 use image::{DynamicImage, GrayImage, imageops};
 
-use crate::figure::shape::{ShapeMask, build_mask, enforce_minimum_size};
 
 #[cfg(feature = "figure")]
 use crate::figure::dither::{DitherContext, dither};
 
-use std::path::Path;
 
 // ─────────────────────────────────────────────────────────
 // Public enums — available even without --features figure

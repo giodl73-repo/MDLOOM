@@ -180,7 +180,7 @@ fn layout_horizontal(figures: Vec<Vec<String>>, config: &LayoutConfig) -> String
     format!("```\n{}\n```", body)
 }
 
-fn layout_vertical(figures: Vec<Vec<String>>, config: &LayoutConfig) -> String {
+fn layout_vertical(figures: Vec<Vec<String>>, _config: &LayoutConfig) -> String {
     let mut body_lines: Vec<String> = Vec::new();
     for (i, lines) in figures.iter().enumerate() {
         if i > 0 {

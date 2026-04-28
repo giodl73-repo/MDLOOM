@@ -7,6 +7,7 @@
 /// No nested fences. The proof:region fence IS the container.
 
 use crate::dashboard::canvas::Canvas;
+#[allow(unused_imports)]
 use unicode_width::UnicodeWidthChar;
 
 // ─────────────────────────────────────────────────────────
@@ -211,7 +212,7 @@ pub fn render_region_into_canvas(
 
 fn clip_to_width(s: &str, width: usize) -> String {
     // Clip by visual_width, not char count, to handle wide chars correctly.
-    use crate::layout::visual_width;
+    
     let mut result = String::new();
     let mut w = 0usize;
     for ch in s.chars() {

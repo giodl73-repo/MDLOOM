@@ -163,7 +163,7 @@ pub(crate) fn detect_indent_width(lines: &[&str]) -> usize {
 /// After all prefix groups comes the connector (`├──` or `└──`) or the root label.
 pub(crate) fn classify_line(line: &str, indent_width: usize) -> (usize, Connector, String) {
     let iw = indent_width.max(1);
-    let chars: Vec<char> = line.chars().collect();
+    let _chars: Vec<char> = line.chars().collect();
     let mut pos = 0; // byte position in `line`
     let mut level = 0usize;
 
@@ -349,8 +349,8 @@ fn validate_t2(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
 }
 
 /// T-3: Indentation per level is consistent.
-fn validate_t3(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
+fn validate_t3(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
+    let diags = Vec::new();
     // We already detect indent_width at parse time. Here we check for any node
     // whose leading spaces don't divide evenly by indent_width.
     for node in nodes {
@@ -367,8 +367,8 @@ fn validate_t3(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
 
 /// T-4 + T-12: Every non-leaf non-root has at least one child.
 /// A root with zero children is valid (T-12).
-fn validate_t4_t12(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
+fn validate_t4_t12(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
+    let diags = Vec::new();
     let n = nodes.len();
 
     for i in 0..n {

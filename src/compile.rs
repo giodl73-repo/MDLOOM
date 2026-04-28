@@ -85,6 +85,7 @@ enum Directive {
     },
     Row {
         source_uri: String,
+        #[allow(dead_code)]
         var_name: String,
         separator: String,
         declared_width: Option<usize>,
@@ -96,6 +97,7 @@ enum Directive {
     Symbol {
         name: String,
         size: usize,
+        #[allow(dead_code)]
         align: String,
         line_start: usize,
         line_end: usize,
@@ -390,6 +392,7 @@ impl LayoutAttrs {
         out
     }
 
+    #[allow(dead_code)]
     fn to_layout_config(self) -> LayoutConfig {
         LayoutConfig {
             gap: self.gap,
@@ -416,7 +419,7 @@ pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
         let trimmed = lines[i].trim_start();
         if let Some(kind) = proof_directive_kind(trimmed) {
             let start = i;
-            let info = trimmed[3..].to_string(); // after ```
+            let _info = trimmed[3..].to_string(); // after ```
             let mut body = Vec::new();
             i += 1;
             while i < lines.len() {
@@ -887,7 +890,7 @@ pub fn compile_file(
 
     let mut violations: Vec<CompileViolation> = Vec::new();
     let mut resolved_count = 0usize;
-    let mut resolved_files: Vec<PathBuf> = Vec::new();
+    let resolved_files: Vec<PathBuf> = Vec::new();
 
     // (line_start, line_end, replacement_text)
     let mut replacements: Vec<(usize, usize, String)> = Vec::new();
@@ -1511,7 +1514,7 @@ fn generate_tree_block(
     inline_body: &[String],
     attrs: &TreeAttrs,
     root: &Path,
-    source_line: usize,
+    _source_line: usize,
     _violations: &mut Vec<CompileViolation>,
 ) -> Result<String> {
     let body = match kind {
@@ -1684,7 +1687,7 @@ fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
     if nodes.is_empty() { anyhow::bail!("inline tree body is empty"); }
 
     let mut out = String::new();
-    let n = nodes.len();
+    let _n = nodes.len();
     for (i, (depth, label)) in nodes.iter().enumerate() {
         if *depth == 0 { out.push_str(label); out.push('\n'); continue; }
         let prefix = " ".repeat((*depth - 1) * iw);
@@ -2456,7 +2459,7 @@ fn compile_row(
 fn compile_slides_file(
     source_path: &Path,
     output_path: &Path,
-    config: &GlintConfig,
+    _config: &GlintConfig,
 ) -> Result<CompileResult> {
     use crate::slide::parser::parse_slide_doc;
     use crate::slide::layout::{render_slide_with_warnings_in_deck, render_slide_pages};
