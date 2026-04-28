@@ -1,6 +1,9 @@
 # Three-Tier Build Cache — Parse, Resolve, Compile
 
-> **Status**: ⚡ Tier 3 (compile output cache) implemented — `src/cache.rs`. Content-addressed storage, path index, `compute_key()`, `load_compile_cache()`, `store_compile_cache()`. Tiers 1 (parse) and 2 (resolve) remain as stubs — path index scaffolded but no on-disk parse/resolve cache yet.
+> **Status**: ✅ All three tiers implemented — `src/cache.rs`.
+> - **Tier 1** (parse key): `PathIndex` + `get_or_compute_parse_key()` — content hash cached to disk, avoids re-hashing unchanged files.
+> - **Tier 2** (resolve): `ResolveCacheEntry`, `try_resolve_cache_hit()`, `store_resolve_cache()` — resolved figure content cached by `(figure_content_hash, uri)`. The main compile loop (`proof:include`, `proof:layout`, `proof:table`) uses `resolve_uri_cached()`. 5 Tier-2 tests.
+> - **Tier 3** (compile): `CompileCacheEntry`, `try_compile_cache_hit()`, `store_compile_cache()` — full compiled output keyed by source + all referenced figure content hashes.
 
 ## When you need this
 

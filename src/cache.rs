@@ -228,6 +228,89 @@ pub fn store_compile_cache(
 }
 
 // ─────────────────────────────────────────────────────────
+// Tier 2: Resolve cache
+// ─────────────────────────────────────────────────────────
+//
+// Caches the resolved content for a `md://` URI.
+// Key: (parse_key_of_target_file, uri_string, proof_version)
+// Value: the resolved figure content string.
+//
+// When the same figure is referenced by multiple source files in one
+// `proof compile` run, each call after the first is a disk-cache hit — the
+// figure file is read and parsed only once across the entire build.
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ResolveCacheEntry {
+    pub resolve_key: String,
+    pub uri: String,
+    pub target_parse_key: String,
+    pub content: String,          // resolved figure content
+    pub proof_version: String,
+    pub created_at: u64,
+}
+
+/// Compute the Tier 2 resolve key.
+pub fn resolve_key(target_parse_key: &str, uri: &str) -> String {
+    compute_key(&[target_parse_key, uri, proof_version()])
+}
+
+/// Load a Tier 2 resolve cache entry. Returns `None` on miss.
+pub fn load_resolve_cache(root: &Path, key: &str) -> Option<ResolveCacheEntry> {
+    let path = resolve_dir(root).join(format!("{}.json", key));
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+/// Store a Tier 2 resolve cache entry.
+pub fn save_resolve_cache(root: &Path, entry: &ResolveCacheEntry) {
+    let _ = std::fs::create_dir_all(resolve_dir(root));
+    let path = resolve_dir(root).join(format!("{}.json", entry.resolve_key));
+    if let Ok(json) = serde_json::to_string(entry) {
+        let tmp = path.with_extension("json.tmp");
+        if std::fs::write(&tmp, &json).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+        }
+    }
+}
+
+/// Try to serve a resolve from Tier 2 cache.
+/// Returns the resolved content string if hit.
+pub fn try_resolve_cache_hit(
+    root: &Path,
+    target_path: &Path,
+    target_content: &str,
+    uri: &str,
+    index: &mut PathIndex,
+) -> Option<String> {
+    let target_parse_key = get_or_compute_parse_key(target_path, target_content, index);
+    let key = resolve_key(&target_parse_key, uri);
+    let entry = load_resolve_cache(root, &key)?;
+    Some(entry.content)
+}
+
+/// Store a resolve result to Tier 2 cache.
+pub fn store_resolve_cache(
+    root: &Path,
+    target_path: &Path,
+    target_content: &str,
+    uri: &str,
+    content: &str,
+    index: &mut PathIndex,
+) {
+    let target_parse_key = get_or_compute_parse_key(target_path, target_content, index);
+    let key = resolve_key(&target_parse_key, uri);
+    let entry = ResolveCacheEntry {
+        resolve_key: key,
+        uri: uri.to_string(),
+        target_parse_key,
+        content: content.to_string(),
+        proof_version: proof_version().to_string(),
+        created_at: epoch_ms(),
+    };
+    save_resolve_cache(root, &entry);
+}
+
+// ─────────────────────────────────────────────────────────
 // Cache pruning
 // ─────────────────────────────────────────────────────────
 
@@ -333,5 +416,73 @@ mod tests {
         let k1 = compile_key("p", &["a".to_string(), "b".to_string()], "{}");
         let k2 = compile_key("p", &["b".to_string(), "a".to_string()], "{}");
         assert_ne!(k1, k2, "resolve_key order matters");
+    }
+
+    // ── Tier 2: resolve cache ─────────────────────────────────────────────────
+
+    #[test]
+    fn resolve_cache_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let entry = ResolveCacheEntry {
+            resolve_key: "rkey1".to_string(),
+            uri: "md://fig.md#:0".to_string(),
+            target_parse_key: "pkey1".to_string(),
+            content: "```\nfigure\n```".to_string(),
+            proof_version: proof_version().to_string(),
+            created_at: epoch_ms(),
+        };
+        save_resolve_cache(root, &entry);
+        let loaded = load_resolve_cache(root, "rkey1").unwrap();
+        assert_eq!(loaded.content, "```\nfigure\n```");
+        assert_eq!(loaded.uri, "md://fig.md#:0");
+    }
+
+    #[test]
+    fn resolve_cache_miss_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = load_resolve_cache(dir.path(), "nonexistent");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn try_resolve_cache_hit_on_miss_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("fig.md");
+        std::fs::write(&target, "```\ncontent\n```").unwrap();
+        let mut index = PathIndex::new();
+        let result = try_resolve_cache_hit(dir.path(), &target, "```\ncontent\n```", "md://fig.md#:0", &mut index);
+        assert!(result.is_none(), "fresh cache should be a miss");
+    }
+
+    #[test]
+    fn try_resolve_cache_hit_after_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("fig.md");
+        let figure_content = "```\ncontent\n```";
+        std::fs::write(&target, figure_content).unwrap();
+        let mut index = PathIndex::new();
+
+        // Store
+        store_resolve_cache(dir.path(), &target, figure_content, "md://fig.md#:0", "resolved content", &mut index);
+
+        // Hit
+        let hit = try_resolve_cache_hit(dir.path(), &target, figure_content, "md://fig.md#:0", &mut index);
+        assert_eq!(hit.as_deref(), Some("resolved content"), "should hit after store");
+    }
+
+    #[test]
+    fn resolve_cache_miss_when_content_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("fig.md");
+        let mut index = PathIndex::new();
+
+        // Store with v1
+        std::fs::write(&target, "v1").unwrap();
+        store_resolve_cache(dir.path(), &target, "v1", "md://fig.md#:0", "result v1", &mut index);
+
+        // Try with v2 — different content → miss
+        let hit = try_resolve_cache_hit(dir.path(), &target, "v2", "md://fig.md#:0", &mut index);
+        assert!(hit.is_none(), "different content should be a cache miss");
     }
 }

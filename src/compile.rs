@@ -916,7 +916,7 @@ pub fn compile_file(
                         });
                     }
                 }
-                match resolve_uri(uri, root) {
+                match resolve_uri_cached(uri, root, &mut path_index) {
                     Ok((content, fig_file)) => {
                         lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                         validate_davinci(uri, &content, config, line_start, &mut violations);
@@ -942,7 +942,7 @@ pub fn compile_file(
                 let mut figures: Vec<Vec<String>> = Vec::new();
                 let mut any_err = false;
                 for uri in uris {
-                    match resolve_uri(uri, root) {
+                    match resolve_uri_cached(uri, root, &mut path_index) {
                         Ok((content, fig_file)) => {
                             lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                             validate_davinci(uri, &content, config, line_start, &mut violations);
@@ -990,7 +990,7 @@ pub fn compile_file(
             }
 
             Directive::Table { uri, .. } => {
-                match resolve_uri(uri, root) {
+                match resolve_uri_cached(uri, root, &mut path_index) {
                     Ok((content, fig_file)) => {
                         lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
                         validate_davinci(uri, &content, config, line_start, &mut violations);
@@ -1337,6 +1337,34 @@ fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
         .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+    Ok((element.content, element.file))
+}
+
+/// Tier 2 cached version of `resolve_uri`.
+/// Checks `.proof/cache/resolve/` before calling mdpath. On hit the figure file
+/// is not re-read or re-parsed; on miss the result is stored for future runs.
+fn resolve_uri_cached(
+    uri: &str,
+    root: &Path,
+    path_index: &mut crate::cache::PathIndex,
+) -> Result<(String, PathBuf)> {
+    let parsed = mdpath::parse(uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+
+    let target_file = root.join(&parsed.path);
+    if !target_file.exists() {
+        return resolve_uri(uri, root);
+    }
+    let target_content = match std::fs::read_to_string(&target_file) {
+        Ok(c) => c,
+        Err(_) => return resolve_uri(uri, root),
+    };
+    if let Some(cached) = crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, uri, path_index) {
+        return Ok((cached, target_file));
+    }
+    let element = mdpath::resolve(&parsed, root)
+        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+    crate::cache::store_resolve_cache(root, &target_file, &target_content, uri, &element.content, path_index);
     Ok((element.content, element.file))
 }
 
