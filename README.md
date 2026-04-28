@@ -320,6 +320,7 @@ proof compile --watch                  # watch mode
 | [Dashboard](docs/guides/06-dashboard.md) | Canvas regions |
 | [Compile](docs/guides/07-compile.md) | Full directive reference |
 | [Lint](docs/guides/08-lint.md) | Check rules and proof.toml |
+| [Crates](docs/guides/09-crates.md) | proof-canvas and proof-math standalone library APIs |
 
 ---
 
