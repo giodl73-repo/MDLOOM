@@ -108,7 +108,10 @@ pub fn render_bullets(
         if bullet_count > config.max_bullets {
             warnings.push(BulletWarning {
                 code: "SLIDE-001",
-                message: format!("bullet {} exceeds max_bullets {}", bullet_count, config.max_bullets),
+                message: format!(
+                    "Slide has {} bullets — reduce to {} or fewer (30-second rule)",
+                    bullet_count, config.max_bullets
+                ),
             });
         }
 

@@ -910,13 +910,16 @@ pub fn compile_file(
                         )
                     }
                     None => {
+                        let hint = crate::symbol::suggest_symbol(name, &lib)
+                            .map(|s| format!(" — did you mean '{}'?", s))
+                            .unwrap_or_default();
                         violations.push(CompileViolation {
                             code: "SYMBOL-001",
                             severity: ViolationSeverity::Warning,
                             uri: String::new(),
                             figure_id: None,
                             invariant: String::new(),
-                            message: format!("symbol {:?} not found in library", name),
+                            message: format!("Unknown symbol '{}'{}", name, hint),
                             source_line: line_start + 1,
                         });
                         source_lines[line_start..=line_end].join("\n")
@@ -2308,13 +2311,16 @@ fn render_one_directive_no_chrome(
                     crate::symbol::render_symbol_block(&sym, *size)
                 }
                 None => {
+                    let hint = crate::symbol::suggest_symbol(name, &lib)
+                        .map(|s| format!(" — did you mean '{}'?", s))
+                        .unwrap_or_default();
                     violations.push(CompileViolation {
                         code: "SYMBOL-001",
                         severity: ViolationSeverity::Warning,
                         uri: String::new(),
                         figure_id: None,
                         invariant: String::new(),
-                        message: format!("symbol {:?} not found in library", name),
+                        message: format!("Unknown symbol '{}'{}", name, hint),
                         source_line: abs_line + 1,
                     });
                     String::new()

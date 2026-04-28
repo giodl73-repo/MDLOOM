@@ -95,6 +95,78 @@ pub fn resolve<'a>(name: &str, lib: &'a SymbolLibrary) -> Option<ResolvedSymbol<
 }
 
 // ─────────────────────────────────────────────────────────
+// Did-you-mean suggestion
+// ─────────────────────────────────────────────────────────
+
+/// Return the closest symbol name (or alias) to `query`, if within edit distance 3.
+/// Used to produce "did you mean 'X'?" suggestions in diagnostics.
+pub fn suggest_symbol<'a>(query: &str, lib: &'a SymbolLibrary) -> Option<&'a str> {
+    let q = query.to_lowercase();
+    let mut best: Option<(&str, usize)> = None;
+
+    let check = |name: &'a str, best: &mut Option<(&'a str, usize)>| {
+        let d = edit_distance(&q, name);
+        if d <= 3 {
+            if best.map_or(true, |(_, bd)| d < bd) {
+                *best = Some((name, d));
+            }
+        }
+    };
+
+    // Custom symbols
+    for sym in &lib.custom {
+        let lower = sym.name.to_lowercase();
+        // Need to store as &str with long enough lifetime — use BUILT_IN_SYMBOLS for statics,
+        // but custom names are heap-allocated. We return a reference into the library only
+        // for built-ins. For custom, we leak a short copy (rare — only on error path).
+        let d = edit_distance(&q, &lower);
+        if d <= 3 {
+            if best.map_or(true, |(_, bd)| d < bd) {
+                // SAFETY: we're on the error path; this small leak is acceptable.
+                let leaked: &'static str = Box::leak(sym.name.clone().into_boxed_str());
+                best = Some((leaked, d));
+            }
+        }
+    }
+
+    // Built-in names
+    for entry in BUILT_IN_SYMBOLS {
+        check(entry.name, &mut best);
+        for alias in entry.aliases {
+            check(alias, &mut best);
+        }
+    }
+
+    best.map(|(name, _)| name)
+}
+
+/// Simple edit distance (Levenshtein) for short strings.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let m = a.len();
+    let n = b.len();
+    if m == 0 { return n; }
+    if n == 0 { return m; }
+
+    let mut row: Vec<usize> = (0..=n).collect();
+    for i in 1..=m {
+        let mut prev = row[0];
+        row[0] = i;
+        for j in 1..=n {
+            let old = row[j];
+            row[j] = if a[i-1] == b[j-1] {
+                prev
+            } else {
+                1 + prev.min(row[j]).min(row[j-1])
+            };
+            prev = old;
+        }
+    }
+    row[n]
+}
+
+// ─────────────────────────────────────────────────────────
 // Rendering
 // ─────────────────────────────────────────────────────────
 

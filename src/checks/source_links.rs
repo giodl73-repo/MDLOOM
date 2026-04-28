@@ -156,19 +156,67 @@ fn validate_uri(
     // Check that the file exists
     let file_path = effective_root.join(&parsed.path);
     if !file_path.exists() {
-        diags.push(Diagnostic::error(
-            path.to_path_buf(),
-            line_no,
-            1,
-            "md_broken_uri",
-            format!("md:// URI references missing file: {:?}", parsed.path),
-        ));
+        let hint = suggest_similar_file(&parsed.path, &effective_root);
+        let msg = match hint {
+            Some(ref candidate) => format!(
+                "Reference to '{}' not found — did you mean '{}'?",
+                parsed.path, candidate
+            ),
+            None => format!("Reference to '{}' not found", parsed.path),
+        };
+        diags.push(Diagnostic::error(path.to_path_buf(), line_no, 1, "md_broken_uri", msg));
         return;
     }
 
     // If the URI has a heading path, check it resolves
     // (skip full element resolution — file existence is the main check for `proof check`)
     // Full element resolution happens at compile time.
+}
+
+/// Find the closest `.md` file name under `root` to the missing `path`.
+/// Returns the relative path string if one is within edit distance 3, else None.
+fn suggest_similar_file(missing: &str, root: &Path) -> Option<String> {
+    let missing_lower = missing.to_lowercase();
+    let mut best: Option<(String, usize)> = None;
+
+    for entry in walkdir::WalkDir::new(root)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let rel = match entry.path().strip_prefix(root) {
+            Ok(r) => r.to_string_lossy().replace('\\', "/"),
+            Err(_) => continue,
+        };
+        if !rel.ends_with(".md") { continue; }
+        let d = edit_distance_str(&missing_lower, &rel.to_lowercase());
+        if d <= 3 {
+            if best.as_ref().map_or(true, |(_, bd)| d < *bd) {
+                best = Some((rel, d));
+            }
+        }
+    }
+
+    best.map(|(name, _)| name)
+}
+
+fn edit_distance_str(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let (m, n) = (a.len(), b.len());
+    if m == 0 { return n; }
+    if n == 0 { return m; }
+    let mut row: Vec<usize> = (0..=n).collect();
+    for i in 1..=m {
+        let mut prev = row[0]; row[0] = i;
+        for j in 1..=n {
+            let old = row[j];
+            row[j] = if a[i-1] == b[j-1] { prev } else { 1 + prev.min(row[j]).min(row[j-1]) };
+            prev = old;
+        }
+    }
+    row[n]
 }
 
 #[cfg(test)]
