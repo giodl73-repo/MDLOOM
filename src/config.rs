@@ -85,6 +85,10 @@ pub struct SectionSchema {
     /// Additional required H2 headings (at least one must be present)
     #[serde(default)]
     pub required_h2: Vec<String>,
+    /// Optional (allowed-but-not-required) H2 headings — extends the H2 allowlist.
+    /// When non-empty in the effective config, H2s not in any allowed list are flagged.
+    #[serde(default)]
+    pub optional_h2: Vec<String>,
     /// Additional required content patterns
     #[serde(default)]
     pub required_patterns: Vec<RequiredPattern>,
@@ -421,6 +425,11 @@ pub struct MarkdownConfig {
     /// Required H2 headings — ALL must be present
     #[serde(default)]
     pub required_h2_all: Vec<String>,
+    /// Optional (allowed-but-not-required) H2 headings. When non-empty, any H2
+    /// heading not in `required_h2`, `required_h2_all`, or `optional_h2` triggers
+    /// a warning — acts as an H2 allowlist. Leave empty to allow any H2.
+    #[serde(default)]
+    pub optional_h2: Vec<String>,
     /// Content patterns that must appear
     #[serde(default)]
     pub required_patterns: Vec<RequiredPattern>,
@@ -466,6 +475,7 @@ impl Default for MarkdownConfig {
             max_h1: None,
             required_h2: Vec::new(),
             required_h2_all: Vec::new(),
+            optional_h2: Vec::new(),
             required_patterns: Vec::new(),
             max_lines: None,
             check_heading_format: true,
@@ -719,6 +729,12 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
         required_h2_all: {
             let mut v = parent.required_h2_all;
             v.extend(child.required_h2_all);
+            v.dedup();
+            v
+        },
+        optional_h2: {
+            let mut v = parent.optional_h2;
+            v.extend(child.optional_h2);
             v.dedup();
             v
         },

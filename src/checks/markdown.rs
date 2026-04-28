@@ -89,6 +89,32 @@ impl Check for MarkdownCheck {
             }
         }
 
+        // H2 allowlist (optional_h2 + required lists): when any of the three H2
+        // lists are non-empty, warn for any H2 that doesn't appear in any of them.
+        let has_allowlist = !self.config.optional_h2.is_empty()
+            || !self.config.required_h2.is_empty()
+            || !self.config.required_h2_all.is_empty();
+        if has_allowlist {
+            let allowed: std::collections::HashSet<&str> = self.config.required_h2.iter()
+                .chain(self.config.required_h2_all.iter())
+                .chain(self.config.optional_h2.iter())
+                .map(|s| s.as_str())
+                .collect();
+            for (i, line) in lines.iter().enumerate() {
+                if in_code_block[i] { continue; }
+                if line.starts_with("## ") {
+                    let heading = line.trim_start_matches("## ").trim();
+                    if !allowed.contains(heading) {
+                        diags.push(Diagnostic::warning(
+                            path.to_path_buf(), i + 1, 1,
+                            "md_unexpected_section",
+                            format!("Unexpected H2 section \"{}\" — not in schema's allowed H2 list", heading),
+                        ));
+                    }
+                }
+            }
+        }
+
         // Required content patterns — search full content (patterns may
         // legitimately appear inside or outside code blocks)
         for req in &self.config.required_patterns {
@@ -682,6 +708,68 @@ mod tests {
         assert!(
             diags.iter().all(|d| d.code != "link_broken_target"),
             "leading-slash path must resolve against the runner root: {:?}", diags
+        );
+    }
+
+    // ── optional_h2 allowlist ─────────────────────────────────────────────────
+
+    fn allowlist_check(required_all: Vec<&str>, optional: Vec<&str>) -> MarkdownCheck {
+        MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                required_h2_all: required_all.into_iter().map(|s| s.to_string()).collect(),
+                optional_h2: optional.into_iter().map(|s| s.to_string()).collect(),
+                ..Default::default()
+            },
+            root: None,
+        }
+    }
+
+    #[test]
+    fn optional_h2_unexpected_section_warns() {
+        let content = "# Title\n\n## Overview\n\ntext\n\n## Changelog\n\ntext\n";
+        let check = allowlist_check(vec!["Overview"], vec![]);
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().any(|d| d.code == "md_unexpected_section" && d.message.contains("Changelog")),
+            "H2 not in allowlist should produce md_unexpected_section, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn optional_h2_allowed_section_no_warn() {
+        let content = "# Title\n\n## Overview\n\ntext\n\n## Notes\n\ntext\n";
+        let check = allowlist_check(vec!["Overview"], vec!["Notes"]);
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_unexpected_section"),
+            "H2 in optional_h2 must not trigger md_unexpected_section, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn optional_h2_empty_allows_any_heading() {
+        let content = "# Title\n\n## Anything Goes\n\ntext\n\n## Even This\n\ntext\n";
+        let check = MarkdownCheck {
+            config: MarkdownConfig { enabled: true, ..Default::default() },
+            root: None,
+        };
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_unexpected_section"),
+            "empty allowlist must not flag any H2, got: {:?}", diags
+        );
+    }
+
+    #[test]
+    fn optional_h2_required_heading_also_allowed() {
+        // A heading in required_h2_all is also "allowed" — must not produce unexpected warning
+        let content = "# Title\n\n## Overview\n\ntext\n";
+        let check = allowlist_check(vec!["Overview"], vec![]);
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_unexpected_section"),
+            "required H2 must also be treated as allowed, got: {:?}", diags
         );
     }
 }

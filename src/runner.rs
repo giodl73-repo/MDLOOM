@@ -206,6 +206,8 @@ fn apply_section_schema(md: &mut MarkdownConfig, schema: &SectionSchema) {
     md.required_h2_all.extend(schema.required_h2_all.clone());
     md.required_h2_all.dedup();
     md.required_h2.extend(schema.required_h2.clone());
+    md.optional_h2.extend(schema.optional_h2.clone());
+    md.optional_h2.dedup();
     md.required_patterns.extend(schema.required_patterns.clone());
     if let Some(max) = schema.max_lines {
         md.max_lines = Some(max);
