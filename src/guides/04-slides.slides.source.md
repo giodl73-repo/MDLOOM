@@ -202,8 +202,12 @@ subtitle: "proof:right · proof:ol · proof:toc · word-wrap"
 ```proof:slide layout=title-content
 title: "proof:right — Right-align text"
 ---
-Right-aligned text works like centered text, but pushes to the right edge.
-Use it for dates, authors, page numbers, or visual balance.
+Mirror of proof:centered: each line is padded with leading spaces so it
+ends at the slide width. Reach for it when content visually belongs at
+the right margin — author bylines, dates, page numbers, citations
+under a quote, or a stat that anchors the eye to the trailing edge.
+Stack with proof:centered or left-flush prose to build a balanced
+header or footer band without dropping into a two-column layout.
 
 proof:right
 Author: Gio Della-Libera
@@ -215,7 +219,12 @@ Date: 2026-04-28
 ```proof:slide layout=title-content
 title: "proof:ol — Ordered (numbered) list"
 ---
-Numbered lists use decimal sub-numbering automatically.
+Use proof:ol when sequence matters — install steps, runbook procedures,
+ranked priorities, anything the reader is meant to follow in order.
+Indented children get decimal sub-numbering (1.1, 1.2, 2.1) so cross-
+references stay stable as the list grows. Reach for proof:bullets
+instead when the items are peers with no implied order; switching to
+proof:ol is the cheapest way to signal "do these in this sequence."
 
 proof:ol
 - Install proof
@@ -231,8 +240,13 @@ proof:ol
 ```proof:slide layout=title-content
 title: "proof:toc — Table of Contents"
 ---
-Generates a TOC from headings in the current file or any md:// source.
-Styles: list (default), tree, numbered.
+Lift a navigation slide straight from the heading structure of any
+markdown source — the current deck or any md:// reference. Use it as
+an opening agenda, a section divider in long decks, or a recap before
+Q&A. Headings stay the single source of truth: rename a section in
+prose and the TOC follows, no manual sync. Pick `tree` when nesting
+matters, `numbered` when you want to call out "we are here on item 3,"
+and `list` (default) for a flat agenda.
 
 proof:bullets
 - style=list: - heading bullet list
@@ -245,10 +259,12 @@ proof:bullets
 ```proof:slide layout=title-content
 title: "Word wrap"
 ---
-Prose lines in slide bodies now wrap automatically at the slide width
-rather than being clipped. Bullet text wraps with a hanging indent —
-continuation lines align past the bullet character so the visual
-structure stays clean even on long descriptions.
+Long sentences used to fall off the right edge — the renderer now
+breaks at word boundaries instead. Bullets keep a hanging indent so
+wrapped text stays aligned past the marker, and prose paragraphs wrap
+to the available width inside any layout zone (full body, two-column
+half, callout). Write naturally; reach for explicit line breaks only
+when you want them.
 
 proof:bullets
 - Short bullet
