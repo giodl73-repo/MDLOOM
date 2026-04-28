@@ -214,6 +214,9 @@ enum Command {
         /// Delete output file when compile produces errors (default: leave stale output in place)
         #[arg(long)]
         delete_on_error: bool,
+        /// Show running count instead of one line per file (useful for 50+ source files)
+        #[arg(long)]
+        progress: bool,
         /// Root directory for md:// URI resolution (default: proof.toml location or cwd)
         #[arg(long)]
         root: Option<PathBuf>,
@@ -315,12 +318,12 @@ fn main() -> Result<()> {
         Some(Command::SpecGenerate { uri, id, protection, root, output }) => {
             return cmd_spec_generate(uri, id, protection, root, output);
         }
-        Some(Command::Compile { paths, output, output_dir, check, watch, delete_on_error, root }) => {
+        Some(Command::Compile { paths, output, output_dir, check, watch, delete_on_error, progress, root }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
             if watch {
                 return cmd_compile_watch(paths, output_dir, root, &cli.config);
             }
-            return cmd_compile(paths, output, output_dir, check, delete_on_error, root, &cli.config);
+            return cmd_compile(paths, output, output_dir, check, delete_on_error, progress, root, &cli.config);
         }
         Some(Command::Layout {
             sources, gap, align, labels, cols, width, direction, border, output, root,
@@ -966,6 +969,7 @@ fn cmd_compile(
     output_dir: Option<PathBuf>,
     check_only: bool,
     delete_on_error: bool,
+    progress: bool,
     root_override: Option<PathBuf>,
     config_override: &Option<PathBuf>,
 ) -> Result<()> {
@@ -1109,24 +1113,28 @@ fn cmd_compile(
 
         if result.written {
             compiled += 1;
-            eprintln!("{} {} → {}  ({} directive{})",
-                "✓".green(),
-                source_path.display().to_string().cyan(),
-                output_path.display(),
-                result.directives_resolved,
-                if result.directives_resolved == 1 { "" } else { "s" },
-            );
+            if !progress {
+                eprintln!("{} {} → {}  ({} directive{})",
+                    "✓".green(),
+                    source_path.display().to_string().cyan(),
+                    output_path.display(),
+                    result.directives_resolved,
+                    if result.directives_resolved == 1 { "" } else { "s" },
+                );
+            } else {
+                eprint!("\r  compiling {}/{}…  ", compiled, source_files.len());
+            }
         } else if !result.violations.iter().any(|v| v.severity == ViolationSeverity::Error) {
-            eprintln!("{} {} (no directives — pass-through)",
-                "→".dimmed(), source_path.display());
             if !check_only {
                 // Copy source to output unchanged
                 std::fs::copy(source_path, &output_path)?;
                 compiled += 1;
+                if progress { eprint!("\r  compiling {}/{}…  ", compiled, source_files.len()); }
             }
         }
     }
 
+    if progress { eprintln!(); } // clear progress line
     eprintln!();
     if total_errors > 0 {
         eprintln!("{} — {} compiled, {} error{}, {} warning{}",

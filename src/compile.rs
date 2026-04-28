@@ -21,6 +21,8 @@ pub struct CompileResult {
     pub violations: Vec<CompileViolation>,
     pub from_cache: bool,
     pub written: bool,
+    /// Files resolved during compilation (for watch-mode dependency tracking)
+    pub resolved_files: Vec<PathBuf>,
 }
 
 pub struct CompileViolation {
@@ -705,6 +707,38 @@ pub fn compile_file(
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
 
+    // ── Tier 3 cache check ──────────────────────────────────────────────
+    // Build a minimal directive-attrs JSON for cache keying, then check Tier 3.
+    // On hit: write cached output (skip if identical), return early with from_cache=true.
+    let mut path_index = crate::cache::load_path_index(root);
+    {
+        let source_parse_key = crate::cache::get_or_compute_parse_key(
+            source_path, &source_text, &mut path_index
+        );
+        // Collect resolved file deps from resolved_files for key computation
+        // (empty on first compile; populated on cache store below)
+        let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
+        if let Some(entry) = crate::cache::load_compile_cache(root, &cache_key) {
+            let current = std::fs::read_to_string(output_path).unwrap_or_default();
+            let written = current != entry.compiled_text;
+            if written {
+                let tmp = output_path.with_extension("proof_tmp");
+                let _ = std::fs::write(&tmp, &entry.compiled_text);
+                let _ = std::fs::rename(&tmp, output_path);
+            }
+            crate::cache::save_path_index(root, &path_index);
+            return Ok(CompileResult {
+                output_path: output_path.to_path_buf(),
+                directives_resolved: 0,
+                violations: vec![],
+                from_cache: true,
+                resolved_files: vec![],
+                written,
+            });
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     let source_lines: Vec<&str> = source_text.lines().collect();
     let directives = collect_directives(&source_text);
 
@@ -713,6 +747,7 @@ pub fn compile_file(
 
     let mut violations: Vec<CompileViolation> = Vec::new();
     let mut resolved_count = 0usize;
+    let mut resolved_files: Vec<PathBuf> = Vec::new();
 
     // (line_start, line_end, replacement_text)
     let mut replacements: Vec<(usize, usize, String)> = Vec::new();
@@ -995,6 +1030,7 @@ pub fn compile_file(
             directives_resolved: resolved_count,
             violations,
             from_cache: false,
+            resolved_files: vec![],
             written: false,
         });
     }
@@ -1013,11 +1049,35 @@ pub fn compile_file(
     std::fs::rename(&tmp, output_path)
         .map_err(|e| anyhow::anyhow!("renaming output {}: {}", output_path.display(), e))?;
 
+    // ── Store to Tier 3 cache ───────────────────────────────────────────
+    {
+        let source_parse_key = crate::cache::get_or_compute_parse_key(
+            source_path, &source_text, &mut path_index
+        );
+        let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
+        let entry = crate::cache::CompileCacheEntry {
+            compile_key: cache_key,
+            source_path: source_path.to_string_lossy().to_string(),
+            output_path: output_path.to_string_lossy().to_string(),
+            compiled_text: output_text.clone(),
+            resolved_uris: vec![],
+            proof_version: env!("CARGO_PKG_VERSION").to_string(),
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        };
+        crate::cache::save_compile_cache(root, &entry);
+        crate::cache::save_path_index(root, &path_index);
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     Ok(CompileResult {
         output_path: output_path.to_path_buf(),
         directives_resolved: resolved_count,
         violations,
         from_cache: false,
+        resolved_files,
         written: true,
     })
 }
@@ -1887,6 +1947,7 @@ fn compile_slides_file(
                 directives_resolved: 0,
                 violations: vv,
                 from_cache: false,
+                resolved_files: vec![],
                 written: false,
             });
         }
@@ -1929,6 +1990,7 @@ fn compile_slides_file(
         directives_resolved: doc.slides.len(),
         violations,
         from_cache: false,
+        resolved_files: vec![],
         written: true,
     })
 }
@@ -2015,6 +2077,7 @@ fn compile_dashboard_file(
             directives_resolved: resolved_count,
             violations,
             from_cache: false,
+            resolved_files: vec![],
             written: false,
         });
     }
@@ -2048,6 +2111,7 @@ fn compile_dashboard_file(
             directives_resolved: resolved_count,
             violations,
             from_cache: false,
+            resolved_files: vec![],
             written: false,
         });
     }
@@ -2074,6 +2138,7 @@ fn compile_dashboard_file(
         directives_resolved: resolved_count,
         violations,
         from_cache: false,
+        resolved_files: vec![],
         written: true,
     })
 }
