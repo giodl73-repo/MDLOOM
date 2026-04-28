@@ -2089,6 +2089,23 @@ fn compile_dashboard_file(
     // ── 2. Parse front-matter ─────────────────────────────
     let (meta, regions) = parse_dashboard_frontmatter(&frontmatter);
 
+    // DASHBOARD-006: canvas wider than the standard terminal threshold
+    const CANVAS_WARN_WIDTH: usize = 220;
+    if meta.width > CANVAS_WARN_WIDTH {
+        violations.push(CompileViolation {
+            code: "DASHBOARD-006",
+            severity: ViolationSeverity::Warning,
+            uri: String::new(),
+            figure_id: None,
+            invariant: String::new(),
+            message: format!(
+                "Canvas width {} exceeds terminal threshold {} — reduce or set a --width flag",
+                meta.width, CANVAS_WARN_WIDTH
+            ),
+            source_line: 1,
+        });
+    }
+
     // ── 3. Collect proof:region directives from the body ──
     let directives = collect_directives(body);
 
@@ -3067,6 +3084,29 @@ mod tests {
         let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
         assert!(codes.contains(&"DASHBOARD-003"),
             "expected DASHBOARD-003 (overlap), got: {:?}", codes);
+    }
+
+    #[test]
+    fn test_dashboard_wide_canvas_emits_dashboard_006() {
+        use std::io::Write;
+        let pid = std::process::id();
+        let tmp = std::env::temp_dir().join(format!("proof-dash-wide-{}.dashboard.source.md", pid));
+        let out = std::env::temp_dir().join(format!("proof-dash-wide-{}.dashboard.md", pid));
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let src = "---\ndashboard:\n  width: 300\n  height: 10\n---\n\n```proof:region name=r1\nhello\n```\n";
+        std::fs::File::create(&tmp).unwrap().write_all(src.as_bytes()).unwrap();
+
+        let cfg = GlintConfig::default();
+        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg).expect("compile ok");
+
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&out);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(codes.contains(&"DASHBOARD-006"),
+            "expected DASHBOARD-006 for canvas width 300 > 220, got: {:?}", codes);
     }
 
     // ── generate_toc: section= scoping ────────────────────────────────────────
