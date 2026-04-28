@@ -1,12 +1,12 @@
 # proof
 
-**Markdown quality assurance and compilation for terminal-first documentation.**
+**Markdown compiler and quality assurance for terminal-first documentation.**
 
-proof does two things well. It **checks** markdown — catching ASCII art geometry
-errors, broken links, missing required sections, and misaligned table columns
-with file:line:col precision. And it **compiles** source documents — resolving
-`proof:` directives into rendered LaTeX math, ASCII presentations, data
-dashboards, tree diagrams, and more.
+proof does two things. It **checks** markdown — catching ASCII art geometry errors,
+broken links, missing required sections, misaligned table columns, and broken
+`md://` heading references with file:line:col precision. And it **compiles** source
+documents — resolving `proof:` directives into rendered math, ASCII presentations,
+dashboards, tree diagrams, data elements, symbols, and cross-references.
 
 The mental model: `.source.md` is source code. `.md` is the compiled artifact.
 proof is the compiler.
@@ -33,37 +33,46 @@ Binary: `target/release/proof` (or `../../target/release/proof` from workspace r
 ```bash
 proof check .                      # lint all markdown
 proof check docs/ --errors-only    # errors only
-proof check . --fail-on-error      # CI mode: non-zero exit on errors
+proof check . --by-code            # group counts by diagnostic code
+proof check . --deduplicate        # collapse repeated warnings into summary lines
 ```
 
 proof validates:
 
-- **ASCII art** — box widths, column separator alignment, connector continuity
-- **Markdown structure** — required headings, heading order, file length, H2 allowlists
-- **Tables** — column count, required columns, required row keys, allowed values
-- **Links** — targets exist on disk
-- **Source documents** — broken `md://` references and **missing heading paths** caught before compile time
+- **ASCII art** — box widths, column separator alignment, connector continuity, flowchart geometry
+- **Markdown structure** — H1 count, required headings, heading order, file length, H2 allowlists
+- **Tables** — column count, required columns, required row keys, allowed values, separator dashes
+- **Links** — prose `[text](path.md)` links exist on disk
+- **Source documents** — broken `md://` references and missing heading paths caught before compile
+- **DaVinci figures** — structural invariants verified on every `proof check --daVinci`
 
-Every diagnostic includes file, line, column, code, and message. Did-you-mean suggestions appear for typos:
+Every diagnostic includes file, line, column, code, and message. Did-you-mean
+suggestions appear for common typos:
 
 ```
-languages/08-TYPESCRIPT.md:34:1  error    ascii_box_width     bottom border 64, top 63
-src/guides/math.source.md:45:1   error    md_broken_uri       Reference to 'fig.md' not found — did you mean 'figs.md'?
-src/guides/math.source.md:18:1   error    md_broken_heading   Heading 'authenticaton' not found in 'api.md'
-src/guides/math.source.md:22:1   warning  SYMBOL-001          Unknown symbol 'checkmar' — did you mean 'checkmark'?
+languages/08-TYPESCRIPT.md:34:1   error    ascii_box_width     bottom border 64, top 63
+src/guides/math.source.md:45:1    error    md_broken_uri       Reference to 'fig.md' not found — did you mean 'figs.md'?
+src/guides/api.source.md:18:1     error    md_broken_heading   Heading 'authenticaton' not found in 'api.md'
+src/guides/math.source.md:22:1    warning  SYMBOL-001          Unknown symbol 'checkmar' — did you mean 'checkmark'?
+src/slides/deck.source.md:9:1     warning  SLIDE-001           Slide has 5 bullets — reduce to 4 or fewer (30-second rule)
 ```
 
-At corpus scale, group identical warnings with `--deduplicate`:
+At corpus scale, `--deduplicate` collapses repeated warnings:
 
-```bash
-proof check . --deduplicate
-# 42x warning [SLIDE-001]: Slide has 5 bullets — reduce to 4 or fewer  in docs/slides/*.md
+```
+42x warning [SLIDE-001]: Slide has 5 bullets — reduce to 4 or fewer  in docs/slides/*.md
 ```
 
-Reverse dependency lookup — find everything that would break if a heading is renamed:
+---
+
+## Reverse dependency lookup
+
+Find every source file that references a given `md://` URI — so you know what
+breaks before renaming a heading or moving a figure:
 
 ```bash
 proof depends md://api.md#authentication
+proof depends md://figures/arch.md
 ```
 
 ---
@@ -76,6 +85,7 @@ directive and writes the output `.md` file.
 ```bash
 proof compile src/guides/          # compile directory → docs/guides/ (from proof.toml)
 proof compile --watch              # watch all [[compile]] targets for changes
+proof compile --progress           # show per-file progress at corpus scale
 proof compile file.source.md -o out.md   # single file, explicit output
 ```
 
@@ -103,9 +113,10 @@ Inline math expands anywhere in prose, bullets, and slide titles:
 $\alpha + \beta = \gamma$  →  α + β = γ
 $x^2 + y^2 = z^2$          →  x² + y² = z²
 $\forall \epsilon > 0$      →  ∀ ε > 0
+$\frac{n(n+1)}{2}$          →  n(n+1)/2
 ```
 
-Display blocks render stacked fractions, integrals, matrices:
+Display blocks render stacked fractions, integrals, matrices, cases:
 
 ````markdown
 ```proof:math
@@ -113,9 +124,8 @@ Display blocks render stacked fractions, integrals, matrices:
 ```
 ````
 
-No LaTeX installation required. Pure Rust renderer covering 60+ symbols,
-superscripts, subscripts, √, primes, stacked fractions, integrals with limits,
-matrices, and cases environments.
+No LaTeX installation required. Pure Rust renderer — 60+ symbols, superscripts,
+subscripts, √, primes, stacked fractions, integrals with limits, matrices, cases.
 
 ---
 
@@ -132,16 +142,20 @@ title: "What proof checks"
 ---
 proof:bullets
 - ASCII art geometry errors
-- Broken md:// references
-- Missing required sections
-- Table schema violations
+[2] - Broken md:// references
+[3] - Missing required sections
 ```
 ````
 
 Six layouts: `title` · `title-content` · `two-column` · `section` · `stats` · `blank`
 
-Body directives: `proof:bullets` · `proof:ol` · `proof:callout` · `proof:divider`
-· `proof:quote` · `proof:centered` · `proof:right` · `proof:stat` · `proof:notes`
+Body directives: `proof:bullets` · `proof:ol` (numbered list) · `proof:columns`
+· `proof:callout` · `proof:divider` · `proof:quote` · `proof:centered` · `proof:right`
+· `proof:stat` · `proof:notes`
+
+**Progressive reveal**: bullets prefixed with `[N]` (N ≥ 2) assign that bullet to
+reveal step N. Compile produces one canvas block per step — each page shows all
+bullets with step ≤ current step (cumulative).
 
 ---
 
@@ -200,13 +214,14 @@ dashboard:
   width: 80
   height: 20
   regions:
-    header: { x: 0, y: 0, width: 80, height: 3 }
-    metrics: { x: 0, y: 3, width: 80, height: 14 }
-    footer:  { x: 0, y: 17, width: 80, height: 3 }
+    header:  { x: 0, y: 0,  width: 80, height: 3  }
+    metrics: { x: 0, y: 3,  width: 80, height: 14 }
+    footer:  { x: 0, y: 17, width: 80, height: 3  }
 ---
 ```
 
 Each region is a mini-document supporting any `proof:` directive.
+DASHBOARD-006 warns if canvas width > 220 (standard terminal threshold).
 
 ---
 
@@ -220,8 +235,7 @@ Each region is a mini-document supporting any `proof:` directive.
 ````
 
 Auto-generates from headings in the current file or any `source=md://` file.
-`section=` scopes the TOC to a subsection — only headings nested under that heading are listed.
-Styles: `list` (default) · `numbered` · `tree`
+`section=` scopes the TOC to a subsection. Styles: `list` · `numbered` · `tree`
 
 ---
 
@@ -230,47 +244,56 @@ Styles: `list` (default) · `numbered` · `tree`
 Named Unicode glyphs that expand in prose, bullets, and slide titles:
 
 ```
-[sym:checkmark] done  →  ✓ done
-[sym:star][sym:star][sym:star][sym:star-empty][sym:star-empty]  →  ★★★☆☆
-[sym:warning] check this  →  ⚠ check this
+[sym:checkmark] done    →  ✓ done
+[sym:star][sym:star][sym:star-empty]  →  ★★☆
+[sym:warning] note      →  ⚠ note
+[sym:arrow-right] next  →  → next
 ```
+
+Built-in symbols: checkmark, x, warning, info, dot, diamond, star, arrow-*, triangle-*,
+rule-thin, rule-double, and 30+ extended symbols. Custom symbols via `proof.toml`.
 
 ---
 
 ### Cross-references — `proof:xref`
 
-Resolves a heading from another document at compile time and renders a formatted link:
+Resolves a heading's text from another document at compile time:
 
 ````markdown
 ```proof:xref uri="md://api.md#authentication" format=note
 ```
 ````
 
-Formats: `inline` (default) → `*See: [Authentication](api.md#authentication)*`
-· `note` → `> **See also:** [Authentication](api.md#authentication)`
-· `callout` → `→ [Authentication](api.md#authentication)`
+Three formats:
+- `inline` (default): `*See: [Authentication](api.md#authentication)*`
+- `note`: `> **See also:** [Authentication](api.md#authentication)`
+- `callout`: `→ [Authentication](api.md#authentication)`
 
-When the heading is renamed, recompile updates every `proof:xref` that pointed to it.
+Optional `label=` override. When the target heading is renamed, recompile
+updates every `proof:xref` that pointed to it.
 
 ---
 
-### Progressive reveal — `proof:bullets` with `[N]` markers
-
-Slide bullet lists support progressive reveal for live presenting. Each
-`[N]` prefix assigns that bullet to step N. Compile produces one canvas per step:
+### Include and layout — `proof:include` and `proof:layout`
 
 ````markdown
-```proof:slide layout=title-content
-title: Key Points
----
-proof:bullets
-- Always visible
-[2] - Appears on click 2
-[3] - Appears on click 3
+```proof:include
+md://figures/arch.md#:0
+```
+
+```proof:include pin=arch-diagram
+md://figures/arch.md#:0
+```
+
+```proof:layout gap=4 labels="Before,After"
+md://before.md#:0
+md://after.md#:0
 ```
 ````
 
-The compiled output contains multiple canvas blocks (one per step) for use with any terminal slide viewer.
+`pin=id` declares that this figure must be protected by a DaVinci invariant
+pin with that ID. COMPILE-007 warns if no matching `[[davinci]]` entry exists,
+prompting `proof pin <uri> --id <id>`.
 
 ---
 
@@ -289,6 +312,10 @@ md://docs/math.md:math:pythagorean
 URIs survive edits because they address content by name, not line number. The
 resolver is the `mdpath` crate — see [mdpath](../mdpath/README.md).
 
+`proof check` validates that `md://` URIs in source files point to files that
+exist AND that the heading path (e.g., `#api-reference/authentication`) resolves
+to real headings in the target document.
+
 ---
 
 ## DaVinci figure pinning
@@ -299,7 +326,7 @@ Lock a figure's structural invariants. Compile aborts if a future edit violates 
 proof spec-generate "md://figures/arch.md:figure:goroutine-scheduler"
 # → paste suggested [[davinci]] block into proof.toml
 
-proof pin "md://figures/arch.md:figure:goroutine-scheduler"
+proof pin "md://figures/arch.md:figure:goroutine-scheduler" --id goroutine-scheduler
 proof check --daVinci .
 ```
 
@@ -330,12 +357,24 @@ enabled = true
 tolerance = 1
 
 [markdown]
+enabled = true
+max_h1 = 1
 required_h2_all = ["Summary", "Examples"]
 
 [[section_schemas]]
 paths = ["docs/guides/*.md"]
-required_h2_all = ["Usage", "Examples"]
 paths_exclude = ["00-OVERVIEW.md"]
+required_h2_all = ["Usage", "Examples"]
+optional_h2 = ["Background", "See Also"]   # H2 allowlist — unexpected H2s warned
+
+[[davinci]]
+id = "goroutine-scheduler"
+uri = "md://figures/arch.md:figure:goroutine-scheduler"
+protection = "error"
+
+  [[davinci.invariants]]
+  check = "width"
+  expected = 80
 ```
 
 ---
@@ -347,7 +386,7 @@ The proof repo contains three crates:
 | Crate | Purpose |
 |-------|---------|
 | `proof` | CLI, linting, compile pipeline |
-| `proof-canvas` | Fixed-width ASCII char grid (usable in any TUI) |
+| `proof-canvas` | Fixed-width ASCII char grid (usable standalone in any TUI) |
 | `proof-math` | LaTeX→terminal renderer (standalone library) |
 
 `mdpath` lives in a sibling repo and handles `md://` URI parsing and resolution.
@@ -359,9 +398,7 @@ The proof repo contains three crates:
 Compiled guides live in `docs/guides/`. Rebuild with:
 
 ```bash
-bash scripts/build-guides.sh           # compile all
-bash scripts/build-guides.sh --check   # validate without writing
-proof compile --watch                  # watch mode
+proof compile --watch
 ```
 
 | Guide | Content |
@@ -370,12 +407,12 @@ proof compile --watch                  # watch mode
 | [Math](docs/guides/01-math.md) | LaTeX rendering — all tiers |
 | [Symbols](docs/guides/02-symbols.md) | Symbol library and shapes |
 | [Elements](docs/guides/03-elements.md) | Data cells and row compositor |
-| [Slides](docs/guides/04-slides.slides.md) | Presentation layouts |
+| [Slides](docs/guides/04-slides.slides.md) | Presentation layouts and reveal |
 | [Trees](docs/guides/05-trees.md) | Tree diagrams |
 | [Dashboard](docs/guides/06-dashboard.md) | Canvas regions |
 | [Compile](docs/guides/07-compile.md) | Full directive reference |
 | [Lint](docs/guides/08-lint.md) | Check rules and proof.toml |
-| [Crates](docs/guides/09-crates.md) | proof-canvas and proof-math standalone library APIs |
+| [Crates](docs/guides/09-crates.md) | proof-canvas and proof-math APIs |
 
 ---
 
