@@ -1,15 +1,38 @@
 # proof
 
-**Markdown compiler and quality assurance for terminal-first documentation.**
+**Write in markdown. Compile to anything.**
 
-proof does two things. It **checks** markdown — catching ASCII art geometry errors,
-broken links, missing required sections, misaligned table columns, and broken
-`md://` heading references with file:line:col precision. And it **compiles** source
-documents — resolving `proof:` directives into rendered math, ASCII presentations,
-dashboards, tree diagrams, data elements, symbols, and cross-references.
+proof is a full markdown compilation toolchain — LaTeX math, ASCII slide decks,
+live dashboards, tree diagrams, sparkline charts, cross-referenced guides — all
+authored in plain text, compiled to terminal-perfect output.
 
-The mental model: `.source.md` is source code. `.md` is the compiled artifact.
-proof is the compiler.
+It powers a 2,700-file reference library (217 directories, 13 sections), a suite of
+technical presentation decks, and a cross-linked documentation corpus. Every guide,
+every chart, every diagram: authored in `.source.md`, compiled to `.md` by proof.
+
+```
+.source.md  →  proof compile  →  .md
+```
+
+Think of it as a static site generator for terminal-first content — except instead of
+HTML, you get perfectly-formatted ASCII output that renders everywhere: terminals,
+GitHub, VS Code, any markdown viewer.
+
+**What proof can render from a single `.source.md` file:**
+
+```
+$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$   →  ASCII math with fractions, integrals, Greek
+proof:slide layout=title-content          →  80-column ASCII presentation canvas
+proof:tree kind=org                       →  box-drawing tree diagrams  
+proof:element kind=sparkline              →  ▂▃▅▇█ inline sparklines
+proof:xref uri="md://api.md#auth"         →  *See: [Authentication](api.md#authentication)*
+proof:toc section="API Reference"         →  scoped, auto-updating table of contents
+[sym:checkmark] passed                    →  ✓ passed
+```
+
+proof also **checks** your markdown corpus — catching geometry errors in ASCII art,
+broken `md://` heading references, missing required sections, and misaligned tables —
+with file:line:col precision and did-you-mean suggestions.
 
 ---
 
