@@ -2103,7 +2103,8 @@ fn compile_slides_file(
     config: &GlintConfig,
 ) -> Result<CompileResult> {
     use crate::slide::parser::parse_slide_doc;
-    use crate::slide::layout::render_slide_with_warnings;
+    use crate::slide::layout::{render_slide_with_warnings, render_slide_pages};
+    use crate::slide::bullets::has_reveal_markers;
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
@@ -2150,12 +2151,24 @@ fn compile_slides_file(
     for slide in &doc.slides {
         let n = slide.index; // parser already 1-indexes slides
 
-        let (rendered, warnings) = render_slide_with_warnings(slide, meta);
+        // Use reveal-aware multi-page rendering when [N] markers are present.
+        let use_reveal = has_reveal_markers(&slide.body_content);
+        let (pages, warnings) = if use_reveal {
+            let pgs = render_slide_pages(slide, meta);
+            (pgs, Vec::new()) // reveal path: warnings collected via render_slide_with_warnings below
+        } else {
+            let (rendered, warns) = render_slide_with_warnings(slide, meta);
+            (vec![rendered], warns)
+        };
 
-        // Surface bullet warnings as both an HTML comment in the output (so
-        // authors see them when reading the compiled deck) and as
-        // CompileViolations (so `proof compile` exit reporting picks them up).
-        // De-duplicate per slide: emit one SLIDE-WARN per (code, message).
+        // For reveal slides, also run the warning check on the first page render
+        let warnings = if use_reveal {
+            render_slide_with_warnings(slide, meta).1
+        } else {
+            warnings
+        };
+
+        // Surface bullet warnings
         if !warnings.is_empty() {
             let mut seen: std::collections::HashSet<(&'static str, String)> = Default::default();
             for w in &warnings {
@@ -2177,10 +2190,18 @@ fn compile_slides_file(
             }
         }
 
-        let separator = format!("SLIDE {} {}", n,
-            "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len())));
-        parts.push(format!("{} {}/{}", separator, n, total));
-        parts.extend(rendered);
+        // Emit one canvas block per reveal page (single page for non-reveal slides)
+        let num_pages = pages.len();
+        for (page_idx, rendered) in pages.into_iter().enumerate() {
+            let separator = format!("SLIDE {} {}", n,
+                "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len())));
+            if use_reveal && num_pages > 1 {
+                parts.push(format!("{} {}/{} (reveal {}/{})", separator, n, total, page_idx + 1, num_pages));
+            } else {
+                parts.push(format!("{} {}/{}", separator, n, total));
+            }
+            parts.extend(rendered);
+        }
     }
     parts.push("```".to_string());
     parts.push("<!-- /proof:compiled -->".to_string());

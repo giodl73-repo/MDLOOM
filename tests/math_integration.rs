@@ -282,3 +282,31 @@ fn math_block_empty_no_panic() {
         "empty math block should not error"
     );
 }
+
+// ─────────────────────────────────────────────────────────
+// proof:reveal — progressive bullet reveal in slides
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn reveal_no_markers_no_reveal_annotation() {
+    // A slide with no [N] markers must not produce any "reveal" annotation in output headers.
+    let src = slide_with_body("proof:bullets\n- A\n- B\n");
+    let (out, _) = compile_slides(&src);
+    let reveal_headers: Vec<_> = out.lines()
+        .filter(|l| l.contains("reveal"))
+        .collect();
+    assert!(reveal_headers.is_empty(),
+        "slides with no [N] markers must not produce reveal headers, got: {:?}", reveal_headers);
+}
+
+#[test]
+fn reveal_markers_produce_reveal_annotations() {
+    // A slide body with [2] marker should produce reveal-annotated canvas headers.
+    let src = slide_with_body("proof:bullets\n- Always\n[2] - Step 2\n");
+    let (out, _) = compile_slides(&src);
+    let reveal_headers: Vec<_> = out.lines()
+        .filter(|l| l.contains("reveal"))
+        .collect();
+    assert!(!reveal_headers.is_empty(),
+        "slide with [2] marker must produce reveal-annotated headers, got output:\n{}", out);
+}
