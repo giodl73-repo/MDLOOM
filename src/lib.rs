@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod cache;
 pub mod chart;
 pub mod checks;

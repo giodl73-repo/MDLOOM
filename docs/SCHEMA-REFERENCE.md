@@ -445,6 +445,49 @@ protection  = "error"             # fails `proof check --davinci`
 
 ---
 
+## `[ai]`
+
+Configures the external CLI used by `proof spec-generate --ai` and future AI-assisted commands. proof shells out to any CLI that accepts a prompt and writes its response to stdout — no API client code, no SDK. Configure once, use everywhere.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `command` | string | `"claude"` | CLI binary name (must be on PATH or absolute path) |
+| `args` | `Vec<string>` | `["-p", "{prompt}"]` | Argument list. `{prompt}` is replaced with the prompt text at call time. If no arg contains `{prompt}`, the prompt is written to stdin. |
+
+**Common configurations:**
+
+```toml
+# Claude Code (default — works if `claude` is installed)
+[ai]
+command = "claude"
+args    = ["-p", "{prompt}"]
+
+# Simon Willison's llm tool
+[ai]
+command = "llm"
+args    = ["-m", "gpt-4o", "{prompt}"]
+
+# Ollama (local model)
+[ai]
+command = "ollama"
+args    = ["run", "llama3", "{prompt}"]
+
+# aichat
+[ai]
+command = "aichat"
+args    = ["{prompt}"]
+```
+
+Usage:
+
+```bash
+proof spec-generate "md://figures/arch.md:figure:goroutine-scheduler" --ai
+```
+
+Without `--ai`, `proof spec-generate` uses static heuristic analysis (no CLI required).
+
+---
+
 ## See also
 
 - `proof config <file>` — print effective merged config for any file (single source of truth when debugging cascade)

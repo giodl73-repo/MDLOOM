@@ -38,6 +38,9 @@ pub struct GlintConfig {
     /// Use [[compile]] in proof.toml to declare multiple targets.
     #[serde(default)]
     pub compile: Vec<CompileTarget>,
+    /// AI CLI configuration for `proof spec-generate` and future AI-assisted commands.
+    #[serde(default)]
+    pub ai: AiConfig,
 }
 
 /// A single compile target: one source directory mapped to one output directory.
@@ -59,6 +62,45 @@ pub struct CompileTarget {
     /// Output directory for compiled files.
     /// Relative to the proof root.
     pub output_dir: Option<String>,
+}
+
+/// AI CLI configuration.
+///
+/// proof shells out to any CLI that can generate text. Configure the command
+/// and its argument template once; all AI-assisted commands use it.
+///
+/// ```toml
+/// [ai]
+/// command = "claude"
+/// args    = ["-p", "{prompt}"]
+///
+/// # llm (Simon Willison's llm tool)
+/// # command = "llm"
+/// # args    = ["-m", "gpt-4o", "{prompt}"]
+///
+/// # ollama (local model)
+/// # command = "ollama"
+/// # args    = ["run", "llama3", "{prompt}"]
+/// ```
+///
+/// `{prompt}` in any arg is replaced with the prompt text at call time.
+/// If `{prompt}` does not appear in any arg, the prompt is written to stdin.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AiConfig {
+    /// The CLI binary to invoke (must be on PATH or an absolute path).
+    pub command: String,
+    /// Argument list. `{prompt}` is replaced with the prompt text.
+    /// Defaults to `["-p", "{prompt}"]` (Claude Code's non-interactive flag).
+    pub args: Vec<String>,
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            command: "claude".to_string(),
+            args: vec!["-p".to_string(), "{prompt}".to_string()],
+        }
+    }
 }
 
 /// A schema applied to files matching a glob pattern.
@@ -699,6 +741,8 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
         },
         // Compile targets: child wins if it declares any; otherwise inherit parent's
         compile: if !child.compile.is_empty() { child.compile } else { parent.compile },
+        // AI config: child wins if command is non-default, else parent
+        ai: if child.ai.command != AiConfig::default().command { child.ai } else { parent.ai },
     }
 }
 

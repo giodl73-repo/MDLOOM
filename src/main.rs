@@ -270,6 +270,13 @@ enum Command {
         /// Write output to file instead of stdout
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Use the configured AI CLI (proof.toml [ai]) to generate richer invariants.
+        /// Falls back to static analysis when not set. Configure in proof.toml:
+        ///   [ai]
+        ///   command = "claude"
+        ///   args    = ["-p", "{prompt}"]
+        #[arg(long)]
+        ai: bool,
     },
     /// Compose N figures side-by-side into a single ASCII art collage
     Layout {
@@ -349,8 +356,9 @@ fn main() -> Result<()> {
         Some(Command::Tree { action }) => {
             return cmd_tree(action);
         }
-        Some(Command::SpecGenerate { uri, id, protection, root, output }) => {
-            return cmd_spec_generate(uri, id, protection, root, output);
+        Some(Command::SpecGenerate { uri, id, protection, root, output, ai }) => {
+            let cfg = load_config(&std::env::current_dir().unwrap_or_default(), &cli.config);
+            return cmd_spec_generate(uri.clone(), id.clone(), protection.clone(), root.clone(), output.clone(), &ai, &cfg);
         }
         Some(Command::Compile { paths, output, output_dir, check, watch, delete_on_error, progress, root }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
@@ -1094,6 +1102,8 @@ fn cmd_spec_generate(
     protection: String,
     root_override: Option<PathBuf>,
     output: Option<PathBuf>,
+    use_ai: &bool,
+    config: &GlintConfig,
 ) -> Result<()> {
     let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1120,6 +1130,29 @@ fn cmd_spec_generate(
         uri.dimmed(),
         element.content.lines().count(),
     );
+
+    // AI path: call configured CLI and stream response directly
+    if *use_ai {
+        let ai_cfg = &config.ai;
+        eprintln!("{} Calling {:?} for AI-assisted invariant suggestions...",
+            "→".cyan(), ai_cfg.command);
+        let prompt = proof_lib::ai::spec_generate_prompt(&uri, &element.content);
+        let response = proof_lib::ai::call_ai(&prompt, ai_cfg)
+            .with_context(|| format!(
+                "AI CLI {:?} failed. Check [ai] in proof.toml or run without --ai for static analysis.",
+                ai_cfg.command
+            ))?;
+        eprintln!("{} AI response received — paste the block below into proof.toml", "✓".green());
+        eprintln!();
+        match output {
+            Some(path) => {
+                std::fs::write(&path, &response)?;
+                eprintln!("{} written to {}", "✓".green(), path.display());
+            }
+            None => print!("{}", response),
+        }
+        return Ok(());
+    }
 
     let spec = spec_gen::generate(
         &element.content,
