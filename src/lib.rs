@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod chart;
 pub mod checks;
 pub mod dashboard;
 pub mod compile;
@@ -17,6 +18,7 @@ pub mod runner;
 pub mod spec_gen;
 pub mod slide;
 pub mod tree;
+pub mod unused;
 
 pub use config::GlintConfig;
 pub use diagnostic::{Diagnostic, RichContext, Severity};
