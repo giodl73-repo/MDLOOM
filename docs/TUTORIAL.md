@@ -79,9 +79,27 @@ Useful flags:
 
 ```bash
 proof check . --errors-only           # hide warnings (CI mode)
+proof check . --deduplicate           # corpus scale: "42x SLIDE-001 in docs/slides/*.md"
+proof check . --unused                # find figures no source file references
+proof check . --by-code               # count per diagnostic code
 proof check . -f json -o out.json     # machine-readable
 proof check . -f github               # GitHub Actions annotations
-proof stats . --by-code               # how many of each code
+```
+
+Get a one-screen corpus health summary:
+
+```bash
+proof status .
+```
+
+```
+proof status — C:\src\maxim
+
+  Sources         2,703 files
+  Compiled        2,703 files
+  Stale               0 files
+  Last compile    3 hours ago
+  Config          proof.toml (root=true, 4 schemas, 2 compile targets)
 ```
 
 ---
@@ -195,10 +213,22 @@ Other directives you can drop in:
 |-----------|--------------|
 | `proof:math` | Render an equation to ASCII (fractions, integrals, matrices, sub/super) |
 | `proof:include` | Embed a figure addressed by `md://` URI |
+| `proof:include pin=id` | Embed + declare expected DaVinci invariant pin |
 | `proof:layout` | Compose multiple figures side-by-side |
-| `proof:tree` | Render a directory or hierarchy tree |
-| `proof:chart` | Render a bar chart, sparkline, or histogram from data |
+| `proof:tree` | Render a directory or hierarchy tree (dirtree, org, taxonomy, dependency, outline) |
+| `proof:chart` | Bar or line chart from a markdown table source |
+| `proof:element` | Fixed-width data cell (value, delta, sparkline, mini-bar, label, badge) |
+| `proof:row` | Row of elements from a data table, one row per source record |
+| `proof:toc` | Auto-generated table of contents with optional `section=` scoping |
+| `proof:xref` | Cross-reference that resolves the target heading at compile time |
+| `proof:blockquote` | Document-context block quote with left margin bar |
+| `[sym:name]` | Inline Unicode symbol expansion (`[sym:checkmark]` → ✓) |
+| `proof:symbol` | Symbol block at a given size |
 | `proof:slide` | One slide in a `.slides.source.md` deck |
+
+When a heading in a referenced file is renamed, `proof:xref` and `proof:toc` auto-update on recompile. `proof:include` with `pin=` warns you if the figure isn't locked.
+
+Use `proof depends md://path#heading` to see every source file that references a URI before you rename it.
 
 ---
 
@@ -235,6 +265,55 @@ proof compile --check                  # verify outputs are up-to-date; exit non
 
 ---
 
+## 8. Author a slide deck
+
+Presentation files use the `.slides.source.md` extension. The front-matter sets canvas dimensions; `---` separators divide slides.
+
+```markdown
+---
+slides:
+  width: 80
+  height: 20
+  footer: true
+  progress-bar: true
+---
+
+```proof:slide layout=title
+title: "My Deck"
+author: "Your Name"
+date: "2026"
+```
+---
+```proof:slide layout=section
+title: "Part One"
+```
+---
+```proof:slide layout=title-content
+title: "Key Points"
+---
+proof:bullets
+- First point always visible
+[2] - Appears on step 2
+[3] - Appears on step 3
+```
+---
+```proof:slide layout=agenda
+title: "Agenda"
+```
+```
+
+Six layouts: `title` · `title-content` · `two-column` · `section` · `stats` · `blank` · `agenda`
+
+Compile:
+
+```bash
+proof compile deck.slides.source.md
+```
+
+The output contains one canvas block per slide (plus one per reveal step for `[N]`-marked bullets). The `agenda` layout auto-generates a bullet list of all `layout=section` slide titles in the deck.
+
+---
+
 ## What's next
 
 | Want to | Read |
@@ -243,6 +322,10 @@ proof compile --check                  # verify outputs are up-to-date; exit non
 | Author math, trees, charts, slides | `docs/guides/*.md` |
 | Pin canonical figures with invariants | `design/COMPILE-SPEC.md` (DaVinci section) |
 | Understand the compile pipeline | `design/COMPILE-SPEC.md` |
-| See real-world config | the `proof.toml` files in this repo, or the MAXIM library schema |
+| Every proof.toml field documented | `docs/SCHEMA-REFERENCE.md` |
+| Symbol library and shapes | `docs/guides/02-symbols.md` |
+| Slide layouts and reveal | `docs/guides/04-slides.slides.md` |
+| Dashboard canvas regions | `docs/guides/06-dashboard.md` |
+| See real-world config | the `proof.toml` files in this repo, or the MAXIM library |
 
 When in doubt: `proof config <file>` shows what rules apply. Trust the resolved config, not your memory of three layers of `proof.toml`.

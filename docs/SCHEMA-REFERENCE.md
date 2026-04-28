@@ -148,6 +148,8 @@ Document structure: headings, required content, file length. **Must set `enabled
 | `max_h1` | usize? | none | Maximum H1s per file (typically `1`) |
 | `required_h2` | `Vec<string>` | `[]` | At least **one** of these H2s must appear |
 | `required_h2_all` | `Vec<string>` | `[]` | **All** of these H2s must appear |
+| `optional_h2` | `Vec<string>` | `[]` | Allowed-but-not-required H2s. Non-empty activates H2 allowlist. |
+| `forbidden_h2` | `Vec<string>` | `[]` | H2s that must NOT appear — emits `md_forbidden_section` |
 | `required_patterns` | `Vec<RequiredPattern>` | `[]` | Substring/regex patterns that must appear |
 | `max_lines` | usize? | none | File length cap |
 | `check_heading_format` | bool | `true` | Warn on `##heading` (missing space) |
@@ -218,8 +220,12 @@ Per-glob rule overrides, layered additively on top of the root `[markdown]` bloc
 | `paths_exclude` | `Vec<string>` | `[]` | Globs that exclude files even if matched by `paths` |
 | `required_h2_all` | `Vec<string>` | `[]` | Additional H2s — all must be present |
 | `required_h2` | `Vec<string>` | `[]` | Additional H2s — at least one must be present |
+| `optional_h2` | `Vec<string>` | `[]` | H2s that are allowed but not required. When any H2 list is non-empty, H2s not in any list emit `md_unexpected_section` |
+| `forbidden_h2` | `Vec<string>` | `[]` | H2s that must NOT appear — emits `md_forbidden_section`. Use to keep authoring scaffolds (`Draft`, `TODO`) out of production |
 | `required_patterns` | `Vec<RequiredPattern>` | `[]` | Additional patterns |
 | `max_lines` | usize? | none | Override `[markdown]` `max_lines` for matched files |
+
+**H2 allowlist behaviour:** when `optional_h2`, `required_h2`, or `required_h2_all` is non-empty in the effective config, any H2 heading not in any of those lists triggers `md_unexpected_section`. Leave all three empty to allow any H2.
 
 Use `paths_exclude` to carve exceptions out of a broad `paths = ["*.md"]` instead of fighting the additive union of multiple schemas.
 
