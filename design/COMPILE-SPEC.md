@@ -512,3 +512,178 @@ render in different column widths.
 **CACHE** — cache correctness specialist. Understands cache key computation,
 cascading invalidation, snapshot integrity, and crash safety. Pulls against
 SOURCE and COMPOSE (more correctness, less throughput).
+
+---
+
+## Spec Clarifications (from scenario findings)
+
+The following clarifications resolve ambiguities surfaced during scenario walkthroughs
+of `proof compile`, `proof check`, watch mode, and the math/canvas helpers. Each item
+is keyed to its finding ID for traceability.
+
+### Compile errors and stale output
+
+**F93 — Stale output on error.** When `has_errors=true`, `compile_file` returns
+`written=false` and does NOT modify the output file. Any existing stale output file
+is left in place unchanged. Authors can verify staleness by checking file timestamps
+(the source `.source.md` mtime will be newer than the output `.md` mtime when the
+last compile failed). A future `--delete-on-error` flag may change this.
+
+**F119 — Stale output policy rationale.** Leaving stale output on disk is the
+current behavior. The reasoning: better a stale correct file than a fresh broken
+file. Mid-edit failures should not blow away the last-known-good artifact. Authors
+who want clean failure semantics in CI should use `proof compile --check`, which
+validates without writing and returns a non-zero exit code on error.
+
+**F120 — Error summary on stderr.** When compile has errors, stderr prints the
+count of files not written. Format:
+
+```
+FAIL — N compiled, M errors
+```
+
+Where `M > 0` means some files were not updated. `N` is the count of source files
+that compiled and wrote output successfully; `M` is the count that failed and left
+stale output in place.
+
+### TOC scanning
+
+**F102 — TOC scan start.** The `proof:toc` heading scan starts from the beginning
+of the current file. The `proof:toc` fence itself is inside a fenced code block and
+is therefore skipped by the heading scanner — headings inside fences are not real
+headings. This means a TOC directive placed anywhere in the document produces the
+same output, and the directive's own location does not appear as a heading entry.
+
+### Watch mode
+
+**F107 — Watch set includes md:// deps.** In `proof compile --watch`, the initial
+watch set covers all `source_dir` paths from active `[[compile]]` targets. Future
+improvement: after the initial compile pass, also watch all `md://` files resolved
+during compilation so that figure file edits trigger recompile of the source
+documents that include them. The watch inverse index (see Watch mode section above)
+already enables this — the missing piece is registering the figure paths with the
+file watcher.
+
+**F108 — Watch with initial errors.** If the initial compile pass has errors,
+`--watch` continues into the watch loop. Authors can fix files and save — the
+watcher recompiles without needing to restart. This is the correct behavior: watch
+is a development tool, not a CI gate. Errors during watch never terminate the
+process; they only suppress writes for the failing files (per F93).
+
+**F112 — Watch + output-dir.** When `proof compile --watch --output-dir path` is
+used, the `--output-dir` override applies for the entire watch session including
+all subsequent recompiles triggered by file changes. The override is captured at
+session start and is not re-read from CLI on each recompile.
+
+### Compile target configuration
+
+**F109 — Overlapping targets.** If two `[[compile]]` targets have overlapping
+`source_dir` paths, files in the overlap are compiled once per matching target,
+to each target's `output_dir`. This may produce two output files with the same
+derived name in different output directories — that is intentional. However, two
+targets producing the same output path (same directory + same filename) is a
+configuration error and should emit COMPILE-002.
+
+**F110 — `source_dir` base.** `source_dir` in `[[compile]]` is relative to the
+directory containing `proof.toml` (the proof root). This is the same base as all
+other relative paths in `proof.toml`. Source paths are not relative to the
+`[[compile]]` block's position in the file or to any parent table.
+
+**F111 — Filename collision across targets.** If two source files in different
+target `source_dir`s have the same filename, they produce files with the same
+name in their respective output directories. There is no collision when output
+directories differ. Collision within a single output directory (which can occur
+when `--output-dir` flattens multiple targets to one directory) is a configuration
+error — last write wins with a warning. Authors should avoid this by keeping
+output directories distinct.
+
+### Check command
+
+**F113 — `proof check` exit code.** `proof check` exits non-zero if any
+`error`-severity diagnostics are found and `--fail-on-error` is set. Warnings
+alone do not trigger non-zero exit. `md_broken_uri` is severity `error` — it
+triggers non-zero exit under `--fail-on-error`. The default mode (without the
+flag) always exits zero so that `proof check` can be used informationally without
+breaking pipelines that haven't opted in to strict mode.
+
+### Diagnostic codes
+
+**F115 — COMPILE-002 disambiguation.** COMPILE-002 currently covers both "source
+file not found" and "directive has no source attribute". The message text
+distinguishes them at runtime, but the code is shared. Future: may split into
+COMPILE-002 (file not found) and COMPILE-005 (directive missing required
+attribute) to allow distinct CI suppression rules.
+
+**F122 — `source=` required for `proof:row`.** `source=md://...` is a required
+attribute for `proof:row`. If absent, the directive is collected with an empty
+source URI and fails at compile time with COMPILE-002 ("directive has no source").
+Future: `proof check` should catch this at lint time via a `source_links` check
+extension, so authors get the error before invoking compile.
+
+### Math rendering
+
+**F124 — MATH-004 severity.** MATH-004 (display math overflow) is currently a
+warning — `written=true`. Consider promoting to error for display math blocks
+where clipping produces meaningless output (e.g., a multi-line aligned equation
+where the right-hand side is cut). For now, authors must set appropriate `width`
+to avoid clipping. The current warning-level treatment matches the general
+philosophy that overflow is a presentation issue, not a correctness issue.
+
+**F129 — Mixed subscript fallback.** If a subscript argument contains a mix of
+characters (some with Unicode subscript equivalents, some without), the entire
+argument uses bracket notation `_{...}`. There is no partial Unicode expansion
+within a single subscript argument. Example: `x_{2a}` renders as `x_{2a}` (literal
+braces in output) rather than as `x₂a` — because `a` has no subscript form, the
+whole group falls back. Same rule for superscripts.
+
+**F130 — `expand_inline_math` API success semantics.** `expand_inline_math` always
+returns `Ok((string, Vec<MathDiag>))`. Partial expansion (unknown commands,
+MATH-005 downgrades) is represented as warnings in the diagnostic list, not as
+`Err`. The function only returns `Err` for internal panics, which should not occur
+in normal use. Callers should not pattern-match on `Err` for user-facing errors —
+they should iterate the diagnostic vector and check severity.
+
+**F131 — `render_display_math` return type.** Signature:
+
+```rust
+render_display_math(expr: &str, width: usize, align: Align) -> (Vec<String>, Vec<MathDiag>)
+```
+
+Returns one `String` per output line. Single-line expressions return a `Vec` with
+one element. Empty expressions return an empty `Vec`. The function does not return
+`Result` — internal failures are panics, and partial-render warnings are in the
+diagnostic vector.
+
+**F132 — `render_display_math` overflow check.** `render_display_math` applies
+MATH-004 when any output line exceeds the declared `width`. With `width=0` (auto),
+no overflow is possible — auto-width expands to fit the widest line. Authors who
+want strict width enforcement must pass an explicit non-zero `width`.
+
+### Canvas and clipping
+
+**F123 — Unicode-safe clip.** `clip_to_width` must not split wide Unicode
+characters. If a 2-column CJK character (or other East Asian Wide character)
+straddles the clip boundary, the clip occurs before it — the character is excluded
+entirely, not truncated. The resulting line may be one column shorter than `width`
+because of this. Splitting a wide character produces broken output that downstream
+terminal tools cannot render correctly.
+
+**F125 — `Canvas::paste` writes only line width.** `Canvas::paste` writes only the
+characters present in each pasted line. Cells to the right of the line content
+retain their existing value (typically space from canvas initialization). Paste
+does NOT zero-fill or space-fill the remainder of the row. This allows layered
+pastes to compose without erasing prior content in the unpainted region.
+
+**F126 — `render()` trailing spaces.** `render()` produces rows of exactly `width`
+characters including trailing spaces. Trailing spaces are NOT trimmed. This
+preserves the fixed-width guarantee (D-6) and ensures downstream tools see
+consistent row lengths. Authors who need trimmed output should post-process
+`render()`'s result; the canvas itself does not trim.
+
+**F128 — Wide char at last column.** If a wide character (2 columns) is positioned
+at the last available column, only the first cell is written. The second cell
+(which would be column `width`) is out-of-bounds and is silently skipped. The
+character appears truncated — one column of a two-column glyph. To avoid this,
+authors should size their canvas with the wide-char alignment in mind, or use
+`clip_to_width` (per F123) which handles the boundary correctly by excluding the
+character entirely.

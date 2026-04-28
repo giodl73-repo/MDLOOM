@@ -34,6 +34,31 @@ pub struct GlintConfig {
     /// Pinned figures with invariant protection (DaVinci tier).
     #[serde(default)]
     pub davinci: Vec<DaVinciEntry>,
+    /// Compile targets — one or more source/output directory pairs.
+    /// Use [[compile]] in proof.toml to declare multiple targets.
+    #[serde(default)]
+    pub compile: Vec<CompileTarget>,
+}
+
+/// A single compile target: one source directory mapped to one output directory.
+///
+/// ```toml
+/// [[compile]]
+/// source_dir = "src/guides"
+/// output_dir = "docs/guides"
+///
+/// [[compile]]
+/// source_dir = "src/presentations"
+/// output_dir = "docs/presentations"
+/// ```
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct CompileTarget {
+    /// Source directory containing `.source.md` files.
+    /// Relative to the proof root.
+    pub source_dir: Option<String>,
+    /// Output directory for compiled files.
+    /// Relative to the proof root.
+    pub output_dir: Option<String>,
 }
 
 /// A schema applied to files matching a glob pattern.
@@ -643,6 +668,8 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
             v.extend(child.davinci);
             v
         },
+        // Compile targets: child wins if it declares any; otherwise inherit parent's
+        compile: if !child.compile.is_empty() { child.compile } else { parent.compile },
     }
 }
 

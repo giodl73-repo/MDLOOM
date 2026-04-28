@@ -138,9 +138,10 @@ struct SourceRow {
 /// Parse a GFM markdown table string into (headers, rows) where each row
 /// is a HashMap<header, cell_value>.
 pub fn parse_md_table(content: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
+    // Skip preamble (headings, prose) — find the first pipe-table line
     let lines: Vec<&str> = content.lines()
         .map(|l| l.trim())
-        .filter(|l| !l.is_empty())
+        .filter(|l| !l.is_empty() && l.starts_with('|'))
         .collect();
 
     if lines.len() < 2 {
@@ -247,25 +248,52 @@ pub fn build_dfs_tree(
         }
     }
 
-    if roots.is_empty() {
+    // If no explicit root rows exist but there are parent references (e.g. a flat table where
+    // the parent column holds category names that aren't themselves rows), synthesize parent
+    // nodes from the unique parent values. This supports the common pattern:
+    //   | name | category | ...  where category = "math", "elements", etc.
+    let synthetic_roots: Vec<String> = if roots.is_empty() {
+        let named: std::collections::HashSet<_> = rows.iter().map(|r| &r.name).collect();
+        let mut seen = std::collections::HashSet::new();
+        let mut synth = Vec::new();
+        for row in rows {
+            if !row.parent.is_empty() && !map.is_root_marker(&row.parent) && !named.contains(&row.parent) {
+                if seen.insert(row.parent.clone()) {
+                    synth.push(row.parent.clone());
+                }
+            }
+        }
+        synth
+    } else {
+        vec![]
+    };
+
+    if roots.is_empty() && synthetic_roots.is_empty() {
         bail!("no root node found — ensure one row has an empty or '—' parent field");
     }
 
     let mut nodes: Vec<TreeNode> = Vec::new();
     let mut line_no = 1usize;
 
+    // Emit explicit root rows
     for root_idx in &roots {
         let row = &rows[*root_idx];
         let label = if row.label.is_empty() { row.name.clone() } else { row.label.clone() };
         nodes.push(TreeNode {
-            line_no,
-            indent_level: 0,
-            connector: Connector::None,
-            label,
-            raw: String::new(),
+            line_no, indent_level: 0, connector: Connector::None, label, raw: String::new(),
         });
         line_no += 1;
         dfs_children(&row.name, &children, rows, 1, &mut nodes, &mut line_no, &mut HashSet::new());
+    }
+
+    // Emit synthesized root nodes (category labels not present as named rows)
+    for parent_name in &synthetic_roots {
+        nodes.push(TreeNode {
+            line_no, indent_level: 0, connector: Connector::None,
+            label: parent_name.clone(), raw: String::new(),
+        });
+        line_no += 1;
+        dfs_children(parent_name, &children, rows, 1, &mut nodes, &mut line_no, &mut HashSet::new());
     }
 
     Ok(nodes)

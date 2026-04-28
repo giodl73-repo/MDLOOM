@@ -541,3 +541,16 @@ regeneration on the next compile.
 - [Compile Spec](./compile-spec.md) — `proof:tree` directive in compile mode
 - [Layout Spec](./layout-spec.md) — composing multiple trees side by side
 - [MDPATH](../../mdpath/design/SPEC.md) — `md://` URI scheme for source data
+
+---
+
+## Spec Clarifications (from scenario findings)
+
+- **F83** (exclude pattern): `exclude=target,*.lock` — comma-separated patterns. Patterns are matched against the entry's BASE NAME (not full path). `target` skips any directory or file named exactly `target` at any depth.
+- **F84** (depth origin): `max_depth=2` counts from the root: root is depth 0, root's children are depth 1, grandchildren are depth 2. At `max_depth=2`, grandchildren ARE included; great-grandchildren are NOT.
+- **F85** (mixed indent): `indent_width` is fixed per-tree (default 4). Mixed indentation in the source is rounded to the nearest multiple of `indent_width`. If ambiguous, the first child's indent determines the unit.
+- **F86** (root detection): In inline body, `root:` prefix declares the root node. If absent, the first non-indented, non-empty line is treated as the root. If all lines are indented, emit COMPILE-002.
+- **F89** (org vs dependency): `org` and `dependency` produce identical ASCII output. The distinction is semantic intent: `org` for hierarchy (A manages B), `dependency` for dependency (A requires B). Future: may add `→` arrows for dependency kind.
+- **F90** (cycle detection): Circular references (A parent=B, B parent=A) are detected during `build_dfs_tree`. Detected cycles skip the cyclic child and emit a COMPILE-002 warning with the cycle path. No infinite loop.
+- **F91** (outline vs proof:ol): `proof:tree kind=outline` renders author-supplied numbers verbatim (pass-through). `proof:ol` auto-generates sequential decimal numbers. Use `outline` when the author controls numbering; use `proof:ol` when proof should generate it.
+

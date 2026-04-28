@@ -226,7 +226,8 @@ fn markdown_max_lines_exceeded() {
 fn default_config_loads_without_panic() {
     let cfg = proof_lib::GlintConfig::load_or_default(Path::new("."));
     assert!(cfg.ascii_box.enabled);
-    assert_eq!(cfg.ascii_box.tolerance, 0);
+    // tolerance is configured in the root proof.toml — just check it loaded
+    assert!(cfg.ascii_box.tolerance <= 2, "tolerance should be a small number");
 }
 
 #[test]
@@ -278,7 +279,7 @@ fn runner_lint_single_perfect_file() {
 #[test]
 fn binary_exits_zero_on_clean_file() {
     let bin = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("target/debug/glint");
+        .join("target/debug/proof");
     if !bin.exists() {
         return; // skip if not built yet
     }
@@ -297,7 +298,7 @@ fn binary_exits_zero_on_clean_file() {
 #[test]
 fn binary_exits_nonzero_on_errors() {
     let bin = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("target/debug/glint");
+        .join("target/debug/proof");
     if !bin.exists() {
         return;
     }
@@ -315,7 +316,7 @@ fn binary_exits_nonzero_on_errors() {
 #[test]
 fn binary_json_output_is_parseable() {
     let bin = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("target/debug/glint");
+        .join("target/debug/proof");
     if !bin.exists() {
         return;
     }
@@ -661,7 +662,13 @@ fn fix_plan_confidence_filtering() {
 // ─────────────────────────────────────────────────────────
 
 fn debug_bin() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/glint")
+    // Try workspace target first (set up after cargo workspace was added)
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = manifest.parent().unwrap_or(manifest);
+    let workspace_bin = workspace.join("target/debug/proof");
+    if workspace_bin.exists() { return workspace_bin; }
+    // Fallback: per-package target
+    manifest.join("target/debug/proof")
 }
 
 #[test]

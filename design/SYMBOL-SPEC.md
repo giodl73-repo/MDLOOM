@@ -435,3 +435,13 @@ if needed.
 - [Slide Spec](./slide-spec.md) — `proof:callout`, `proof:bullets` use symbols
 - [Dashboard Spec](./dashboard-spec.md) — status indicators use symbols
 - [Mapping Spec](./mapping-spec.md) — field values can resolve to symbol names
+
+---
+
+## Spec Clarifications (from scenario findings)
+
+- **F95** (sym in YAML): `[sym:name]` inside YAML string values must be quoted: `title: "[sym:star] proof"`. Unquoted values starting with `[` may be parsed as YAML arrays by some parsers.
+- **F96** (case rule): Symbol names are case-insensitive. `[sym:CheckMark]` resolves the same as `[sym:checkmark]`. Lookup normalizes to lowercase before matching.
+- **F97** (size units): The `size` attribute in `proof:symbol` is in glyph-count units, not display columns. A size-3 symbol renders as a 3×N character block where N is the glyph height.
+- **F101** (sym inside math): `[sym:name]` tags inside `$...$` math spans are NOT expanded. The math tokenizer treats `[` as a literal character. Symbol expansion runs before math expansion, but only in prose contexts — not inside already-tokenized math spans.
+

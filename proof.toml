@@ -1,0 +1,14 @@
+[files]
+root = true
+exclude = ["CHANGELOG.md", "docs/guides/*.md"]
+
+[[compile]]
+source_dir = "src/guides"
+output_dir = "docs/guides"
+
+[ascii_box]
+enabled = true
+tolerance = 1
+
+[markdown]
+enabled = true

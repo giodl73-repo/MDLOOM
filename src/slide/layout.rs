@@ -18,8 +18,8 @@ use crate::slide::{Slide, SlideLayout, SlideMeta, SlideTheme};
 /// proof:notes blocks are excluded from output (SL-5).
 pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
     use crate::slide::bullets::{render_bullets, BulletConfig};
-    use crate::slide::inline::{render_quote, render_centered, render_callout,
-                                render_divider, CalloutStyle, DividerStyle};
+    use crate::slide::inline::{render_quote, render_centered, render_right, render_ol,
+                                render_callout, render_divider, CalloutStyle, DividerStyle};
 
     let mut output: Vec<String> = Vec::new();
     let lines: Vec<&str> = body.lines().collect();
@@ -99,6 +99,34 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
             continue;
         }
 
+        // proof:right — right-align a block of text
+        if line == "proof:right" {
+            i += 1;
+            let mut text = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                text.push_str(lines[i]);
+                text.push('\n');
+                i += 1;
+            }
+            output.extend(render_right(text.trim(), width));
+            continue;
+        }
+
+        // proof:ol — ordered (numbered) list
+        if line == "proof:ol" {
+            i += 1;
+            let mut text = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                text.push_str(lines[i]);
+                text.push('\n');
+                i += 1;
+            }
+            output.extend(render_ol(text.trim(), width));
+            continue;
+        }
+
         // proof:quote attribution="..."
         if line.starts_with("proof:quote") {
             let attr = line.split("attribution=").nth(1)
@@ -115,12 +143,22 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        // Literal line
-        output.push(lines[i].to_string());
+        // Literal prose line — expand inline math/symbols then word-wrap to slide width
+        let expanded = expand_inline(lines[i]);
+        let wrapped = word_wrap(&expanded, width);
+        output.extend(wrapped);
         i += 1;
     }
 
     output
+}
+
+/// Expand inline `$...$` math and `[sym:name]` in a single prose line.
+fn expand_inline(line: &str) -> String {
+    let lib = crate::symbol::SymbolLibrary::new();
+    let (sym_line, _sym_diags) = crate::symbol::expand_symbols(line, &lib);
+    let (math_line, _math_diags) = crate::math::expand_inline_math(&sym_line);
+    math_line
 }
 
 // ─────────────────────────────────────────────────────────
@@ -162,11 +200,70 @@ pub fn center_in_width(s: &str, width: usize) -> String {
     format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
 }
 
-/// Clip string to width, appending … if truncated.
+/// Word-wrap a string to `width` columns.
+///
+/// Breaks at word boundaries (spaces). Preserves the leading indentation of the
+/// first line on all continuation lines so wrapped paragraphs stay indented.
+/// Returns one string per output line.
+pub fn word_wrap(s: &str, width: usize) -> Vec<String> {
+    if width == 0 { return vec![s.to_string()]; }
+
+    // Detect leading indent (spaces only) to carry onto continuation lines
+    let indent_len = s.chars().take_while(|c| *c == ' ').count();
+    let indent = " ".repeat(indent_len);
+    let effective_width = width.saturating_sub(indent_len).max(1);
+
+    // If the whole string fits, return as-is
+    let visual_len = crate::layout::visual_width(s);
+    if visual_len <= width {
+        return vec![s.to_string()];
+    }
+
+    let content = &s[indent_len..]; // strip indent for wrapping
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut current_w = 0usize;
+
+    for word in content.split(' ') {
+        let word_w = crate::layout::visual_width(word);
+        if current.is_empty() {
+            current.push_str(word);
+            current_w = word_w;
+        } else if current_w + 1 + word_w <= effective_width {
+            current.push(' ');
+            current.push_str(word);
+            current_w += 1 + word_w;
+        } else {
+            // Flush current line with indent
+            lines.push(format!("{}{}", if lines.is_empty() { &indent } else { &indent }, current));
+            current = word.to_string();
+            current_w = word_w;
+        }
+    }
+    if !current.is_empty() {
+        lines.push(format!("{}{}", indent, current));
+    }
+    if lines.is_empty() {
+        lines.push(s.to_string());
+    }
+    lines
+}
+
+/// Clip string to width visual columns, appending … if truncated.
+/// Never splits wide Unicode characters (CJK, emoji) at the boundary (F123).
 pub fn clip_to_width(s: &str, width: usize) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= width { return s.to_string(); }
-    let mut out: String = chars[..width.saturating_sub(1)].iter().collect();
+    use crate::layout::visual_width;
+    if visual_width(s) <= width { return s.to_string(); }
+    let ellipsis_w = 1usize; // … is 1 column
+    let target = width.saturating_sub(ellipsis_w);
+    let mut out = String::new();
+    let mut w = 0usize;
+    for ch in s.chars() {
+        let ch_w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
+        if w + ch_w > target { break; }
+        out.push(ch);
+        w += ch_w;
+    }
     out.push('…');
     out
 }
@@ -606,5 +703,48 @@ mod tests {
         assert!(a.contains("Left 1"));
         assert!(b.contains("Right 1"));
         assert!(!a.contains("Right"));
+    }
+
+    // ── word_wrap ──────────────────────────────────────────
+
+    #[test]
+    fn word_wrap_short_line_unchanged() {
+        let result = word_wrap("Hello world", 40);
+        assert_eq!(result, vec!["Hello world"]);
+    }
+
+    #[test]
+    fn word_wrap_long_line_breaks_at_word() {
+        let result = word_wrap("The quick brown fox jumped over the lazy dog", 20);
+        assert!(result.len() > 1, "long line should wrap");
+        for line in &result {
+            assert!(line.chars().count() <= 20, "line {:?} exceeds width 20", line);
+        }
+        // All words should still be present
+        let full = result.join(" ");
+        assert!(full.contains("quick") && full.contains("dog"));
+    }
+
+    #[test]
+    fn word_wrap_preserves_indent() {
+        let result = word_wrap("  This is an indented line that goes way beyond the width limit", 30);
+        assert!(result.len() > 1);
+        // The continuation lines should preserve the 2-space indent
+        for line in result.iter().skip(1) {
+            assert!(line.starts_with("  "), "continuation should preserve indent: {:?}", line);
+        }
+    }
+
+    #[test]
+    fn word_wrap_exact_width_no_break() {
+        let s = "12345678901234567890"; // exactly 20 chars
+        let result = word_wrap(s, 20);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn word_wrap_zero_width_no_panic() {
+        let result = word_wrap("some text", 0);
+        assert_eq!(result.len(), 1);
     }
 }

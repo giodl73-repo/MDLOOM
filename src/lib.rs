@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod compile;
 pub mod element;
 pub mod figure;
+pub mod math;
 pub mod symbol;
 pub mod config;
 pub mod davinci;

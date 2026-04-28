@@ -199,9 +199,18 @@ enum Command {
         /// Explicit output path (only valid for single-file compile)
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Output directory for all compiled files (overrides per-file placement)
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
         /// Validate without writing any output files
         #[arg(long)]
         check: bool,
+        /// Watch for changes and recompile automatically
+        #[arg(long)]
+        watch: bool,
+        /// Delete output file when compile produces errors (default: leave stale output in place)
+        #[arg(long)]
+        delete_on_error: bool,
         /// Root directory for md:// URI resolution (default: proof.toml location or cwd)
         #[arg(long)]
         root: Option<PathBuf>,
@@ -303,9 +312,12 @@ fn main() -> Result<()> {
         Some(Command::SpecGenerate { uri, id, protection, root, output }) => {
             return cmd_spec_generate(uri, id, protection, root, output);
         }
-        Some(Command::Compile { paths, output, check, root }) => {
+        Some(Command::Compile { paths, output, output_dir, check, watch, delete_on_error, root }) => {
             let paths = if paths.is_empty() { vec![std::env::current_dir()?] } else { paths };
-            return cmd_compile(paths, output, check, root, &cli.config);
+            if watch {
+                return cmd_compile_watch(paths, output_dir, root, &cli.config);
+            }
+            return cmd_compile(paths, output, output_dir, check, delete_on_error, root, &cli.config);
         }
         Some(Command::Layout {
             sources, gap, align, labels, cols, width, direction, border, output, root,
@@ -930,28 +942,81 @@ fn cmd_spec_generate(
 fn cmd_compile(
     paths: Vec<PathBuf>,
     output_override: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
     check_only: bool,
+    delete_on_error: bool,
     root_override: Option<PathBuf>,
     config_override: &Option<PathBuf>,
 ) -> Result<()> {
-    // Collect .source.md files
-    let mut source_files: Vec<PathBuf> = Vec::new();
-    for path in &paths {
-        if path.is_file() {
-            source_files.push(path.clone());
-        } else {
-            for entry in walkdir::WalkDir::new(path)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_file())
-            {
-                let p = entry.path().to_path_buf();
-                if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
-                    source_files.push(p);
+    if output_override.is_some() && output_dir.is_some() {
+        eprintln!("{} -o and --output-dir are mutually exclusive", "error:".red());
+        process::exit(2);
+    }
+
+    let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
+    let config = load_config(&root, config_override);
+
+    // Build a list of (source_path, output_dir) pairs.
+    // When using [[compile]] targets from proof.toml (and no explicit paths/output-dir),
+    // route each source file to the correct target's output_dir.
+    let using_defaults = paths.iter().any(|p| p == &std::env::current_dir().unwrap());
+    let has_multi_targets = config.compile.len() > 1;
+
+    let source_dir_pairs: Vec<(PathBuf, Option<PathBuf>)> = if !config.compile.is_empty()
+        && using_defaults
+        && output_dir.is_none()
+        && output_override.is_none()
+    {
+        // Per-target routing from proof.toml
+        let mut pairs = Vec::new();
+        for target in &config.compile {
+            let src_dir = target.source_dir.as_ref()
+                .map(|s| root.join(s))
+                .unwrap_or_else(|| root.clone());
+            let out = target.output_dir.as_ref().map(|d| root.join(d));
+            if let Some(ref dir) = out { let _ = std::fs::create_dir_all(dir); }
+            if src_dir.is_dir() {
+                for entry in walkdir::WalkDir::new(&src_dir)
+                    .into_iter().filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                {
+                    let p = entry.path().to_path_buf();
+                    if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
+                        pairs.push((p, out.clone()));
+                    }
+                }
+            } else if src_dir.is_file() {
+                pairs.push((src_dir, out));
+            }
+        }
+        pairs
+    } else {
+        // Explicit paths or single output_dir override
+        let resolved_out = output_dir
+            .or_else(|| config.compile.first()
+                .and_then(|t| t.output_dir.as_ref())
+                .map(|d| root.join(d)));
+        if let Some(ref dir) = resolved_out { let _ = std::fs::create_dir_all(dir); }
+        let mut pairs = Vec::new();
+        for path in &paths {
+            if path.is_file() {
+                pairs.push((path.clone(), resolved_out.clone()));
+            } else {
+                for entry in walkdir::WalkDir::new(path)
+                    .into_iter().filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                {
+                    let p = entry.path().to_path_buf();
+                    if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
+                        pairs.push((p, resolved_out.clone()));
+                    }
                 }
             }
         }
-    }
+        pairs
+    };
+
+    let source_files: Vec<PathBuf> = source_dir_pairs.iter().map(|(p, _)| p.clone()).collect();
 
     if source_files.is_empty() {
         eprintln!("{} no .source.md files found", "proof compile:".yellow());
@@ -963,16 +1028,23 @@ fn cmd_compile(
         process::exit(2);
     }
 
-    let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
-    let config = load_config(&root, config_override);
-
     let mut total_errors = 0usize;
     let mut total_warnings = 0usize;
     let mut compiled = 0usize;
 
-    for source_path in &source_files {
+    for (source_path, target_out_dir) in &source_dir_pairs {
         let output_path = if let Some(ref out) = output_override {
             out.clone()
+        } else if let Some(ref dir) = target_out_dir {
+            // Derive filename, then place it in the output directory
+            if let Some(derived) = derive_output_path(source_path) {
+                let filename = derived.file_name().expect("derived path has filename");
+                dir.join(filename)
+            } else {
+                eprintln!("{} {} has no .source.md suffix — skipping",
+                    "skip:".yellow(), source_path.display());
+                continue;
+            }
         } else if let Some(p) = derive_output_path(source_path) {
             p
         } else {
@@ -1006,6 +1078,12 @@ fn cmd_compile(
             if !v.uri.is_empty() {
                 eprintln!("    uri:    {}", v.uri);
             }
+        }
+
+        // F119: --delete-on-error removes stale output when compile fails
+        if !result.written && delete_on_error && output_path.exists() {
+            let _ = std::fs::remove_file(&output_path);
+            eprintln!("{} deleted stale output: {}", "→".yellow(), output_path.display());
         }
 
         if result.written {
@@ -1043,6 +1121,224 @@ fn cmd_compile(
         );
     }
     Ok(())
+}
+
+// ─────────────────────────────────────────────────────────
+// compile --watch
+// ─────────────────────────────────────────────────────────
+
+fn cmd_compile_watch(
+    paths: Vec<PathBuf>,
+    output_dir_override: Option<PathBuf>,
+    root_override: Option<PathBuf>,
+    config_override: &Option<PathBuf>,
+) -> Result<()> {
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher, Event, EventKind};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    let root = root_override.unwrap_or_else(|| std::env::current_dir().unwrap());
+    let config = load_config(&root, config_override);
+
+    // Build watch targets from [[compile]] entries or CLI paths
+    // Each target is (source_dir, output_dir)
+    let using_default_paths = paths.iter().any(|p| p == &std::env::current_dir().unwrap());
+
+    let watch_targets: Vec<(PathBuf, Option<PathBuf>)> = if !config.compile.is_empty() && using_default_paths {
+        // Use all [[compile]] targets from proof.toml
+        config.compile.iter().map(|t| {
+            let src = t.source_dir.as_ref().map(|s| root.join(s))
+                .unwrap_or_else(|| root.clone());
+            let out = t.output_dir.as_ref()
+                .map(|d| root.join(d))
+                .or_else(|| output_dir_override.clone());
+            (src, out)
+        }).collect()
+    } else {
+        // CLI paths + optional output_dir override
+        let out = output_dir_override
+            .or_else(|| config.compile.first()
+                .and_then(|t| t.output_dir.as_ref())
+                .map(|d| root.join(d)));
+        paths.into_iter().map(|p| (p, out.clone())).collect()
+    };
+
+    // For watch, flatten to just watch_paths; output_dir isn't used here
+    let output_dir: Option<PathBuf> = None; // unused in watch — each target carries its own
+
+    if let Some(ref dir) = output_dir {
+        std::fs::create_dir_all(dir)?;
+    }
+
+    eprintln!("{} watching for changes (Ctrl-C to stop)", "proof compile --watch:".cyan().bold());
+    for (src, out) in &watch_targets {
+        if let Some(out) = out {
+            eprintln!("  {} → {}", src.display().to_string().dimmed(), out.display().to_string().dimmed());
+            std::fs::create_dir_all(out)?;
+        } else {
+            eprintln!("  {} (output next to source)", src.display().to_string().dimmed());
+        }
+    }
+    eprintln!();
+
+    // Initial compile pass for all targets
+    for (src_dir, out_dir) in &watch_targets {
+        compile_watch_pass(&[src_dir.clone()], out_dir, &root, &config)?;
+    }
+
+    let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
+    let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
+
+    for (src_dir, _) in &watch_targets {
+        if src_dir.exists() {
+            watcher.watch(src_dir, RecursiveMode::Recursive)?;
+        }
+    }
+
+    // Build a lookup: source path prefix → output_dir
+    let target_map: Vec<(PathBuf, Option<PathBuf>)> = watch_targets.clone();
+
+    let debounce = Duration::from_millis(100);
+    let mut pending: Vec<PathBuf> = Vec::new();
+    let mut last_event = Instant::now();
+
+    loop {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(Ok(event)) => {
+                if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                    for path in event.paths {
+                        if path.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
+                            if !pending.contains(&path) {
+                                pending.push(path);
+                            }
+                            last_event = Instant::now();
+                        }
+                    }
+                }
+            }
+            Ok(Err(e)) => eprintln!("{} watcher error: {}", "warn:".yellow(), e),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+
+        if !pending.is_empty() && last_event.elapsed() >= debounce {
+            let changed = std::mem::take(&mut pending);
+            for source_path in &changed {
+                // Find the matching target's output_dir
+                let out_dir = target_map.iter()
+                    .find(|(src, _)| source_path.starts_with(src))
+                    .and_then(|(_, out)| out.clone());
+                compile_one_watch(source_path, &out_dir, &root, &config);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn compile_watch_pass(
+    watch_paths: &[PathBuf],
+    output_dir: &Option<PathBuf>,
+    root: &std::path::Path,
+    config: &proof_lib::GlintConfig,
+) -> Result<()> {
+    let mut count = 0usize;
+    for watch_path in watch_paths {
+        for entry in walkdir::WalkDir::new(watch_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let p = entry.path().to_path_buf();
+            if p.to_str().map(|s| s.ends_with(".source.md")).unwrap_or(false) {
+                compile_one_watch(&p, output_dir, root, config);
+                count += 1;
+            }
+        }
+    }
+    eprintln!("{} initial compile: {} files", "→".cyan(), count);
+    Ok(())
+}
+
+fn compile_one_watch(
+    source_path: &PathBuf,
+    output_dir: &Option<PathBuf>,
+    root: &std::path::Path,
+    config: &proof_lib::GlintConfig,
+) {
+    let output_path = if let Some(dir) = output_dir {
+        if let Some(derived) = derive_output_path(source_path) {
+            let filename = derived.file_name().expect("has filename");
+            dir.join(filename)
+        } else {
+            return;
+        }
+    } else if let Some(p) = derive_output_path(source_path) {
+        p
+    } else {
+        return;
+    };
+
+    let ts = chrono_or_time();
+    match compile_file(source_path, &output_path, root, config) {
+        Ok(result) => {
+            let errors: Vec<_> = result.violations.iter()
+                .filter(|v| v.severity == ViolationSeverity::Error)
+                .collect();
+            if errors.is_empty() {
+                eprintln!("{} {} {} → {}  {}",
+                    ts.dimmed(),
+                    "✓".green(),
+                    source_path.file_name().unwrap_or_default().to_string_lossy().cyan(),
+                    output_path.file_name().unwrap_or_default().to_string_lossy(),
+                    format!("({} directives)", result.directives_resolved).dimmed(),
+                );
+            } else {
+                // File was NOT written — make this very visible
+                eprintln!("{} {} {} — {} error{} (output NOT updated)",
+                    ts.dimmed(),
+                    "✗".red().bold(),
+                    source_path.file_name().unwrap_or_default().to_string_lossy().red().bold(),
+                    errors.len(),
+                    if errors.len() == 1 { "" } else { "s" },
+                );
+                for e in &errors {
+                    eprintln!("  {}:{} {} [{}]: {}",
+                        source_path.display().to_string().dimmed(),
+                        e.source_line,
+                        "error".red(),
+                        e.code,
+                        e.message,
+                    );
+                    if !e.uri.is_empty() {
+                        eprintln!("    uri: {}", e.uri.dimmed());
+                    }
+                }
+                eprintln!("  {} fix the errors above, then save to recompile", "→".yellow());
+            }
+        }
+        Err(e) => {
+            eprintln!("{} {} {} — compile failed: {}",
+                ts.dimmed(),
+                "✗".red().bold(),
+                source_path.file_name().unwrap_or_default().to_string_lossy().red().bold(),
+                e,
+            );
+            eprintln!("  {} output NOT updated", "→".yellow());
+        }
+    }
+}
+
+fn chrono_or_time() -> String {
+    // Simple HH:MM:SS timestamp without pulling in chrono
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let h = (secs / 3600) % 24;
+    let m = (secs / 60) % 60;
+    let s = secs % 60;
+    format!("{:02}:{:02}:{:02}", h, m, s)
 }
 
 // ─────────────────────────────────────────────────────────

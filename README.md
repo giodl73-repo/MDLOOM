@@ -1,461 +1,325 @@
 # proof
 
-Document quality assurance for markdown corpora. `proof` catches ASCII art geometry defects, GFM table schema violations, broken links, and heading structure errors with file:line:col precision — then fixes them with an AI-assisted pipeline.
-
----
-
-## What it does
-
-Markdown documentation at scale accumulates drift: boxes whose borders don't add up, tables missing required rows, internal links that rotted, headings in the wrong order. `proof check` catches all of it. `proof draft` sends failures to an AI that writes a structured fix plan. `proof fix` applies the plan.
-
-```
-$ proof check languages/08-TYPESCRIPT.md
-
-languages/08-TYPESCRIPT.md:34:1  error    ascii_box_width      bottom border 64 chars, top border 63
-languages/08-TYPESCRIPT.md:34:1  warning  ascii_cell_padding   col 2 row 3: content flush against delimiter
-languages/08-TYPESCRIPT.md:112:1 warning  md_missing_section   required ## "Type System Snapshot" absent
-languages/08-TYPESCRIPT.md:198:1 error    table_missing_row    "Memory model" row required in Type System Snapshot
-
-4 diagnostics (2 errors, 2 warnings)
-```
-
----
-
-## Commands
-
-| Command | Purpose |
-|---------|---------|
-| `proof check [paths]` | Lint markdown files |
-| `proof draft [paths]` | Generate a pre-populated fix plan |
-| `proof fix --plan plan.json` | Apply a fix plan to the working tree |
-| `proof compile [paths]` | Compile `.source.md` files (resolves `proof:include` / `proof:layout`) |
-| `proof layout [uris/files]` | Compose N figures side-by-side as an ASCII collage |
-| `proof resolve "md://..."` | Resolve an `md://` URI, print content and metadata |
-| `proof pin "md://..."` | Register a figure with DaVinci invariants |
-| `proof spec-generate "md://..."` | Analyze a figure and suggest invariants to pin |
-| `proof pin-list` | List all pinned DaVinci figures |
-| `proof init` | Create a `proof.toml` in the current directory |
-| `proof config [path]` | Show effective config for a file |
-| `proof stats` | Error counts by directory and code |
-
----
-
-## What it validates
-
-### ASCII art
-
-Every code block that contains a box, flowchart, or bar chart is parsed as structured art:
-
-```
-+------------------+     +------------------+
-| token stream     | --> | AST              |     ← proof validates:
-+------------------+     +------------------+     • border widths match top/bottom
-                                                   • cell padding ≥ 1 space each side
-+----------+----------+                            • column separators aligned
-| col A    | col B    |                            • arrow bodies unbroken
-| value    | value    |                            • connector lines don't drift
-+----------+----------+
-```
-
-### GFM table schemas
-
-Tables carry structure that matters. Declare what you require in `proof.toml` and every file is held to it:
-
-```toml
-[[markdown_table.table_schemas]]
-heading = "Type System Snapshot"
-required_columns = ["Axis"]
-required_row_keys = ["Binding", "Typing", "Strength", "Type system", "Type inference", "Memory model"]
-min_body_rows = 4
-```
-
-### Link integrity
-
-```toml
-link_columns = ["Directory", "Entry Point"]
-verify_link_targets = true
-link_auto_fix = "directory"
-```
-
-Every cell in a link column must contain a markdown link. `verify_link_targets = true` resolves each path on disk.
-
-### Heading structure
-
-```toml
-[markdown]
-max_h1 = 1
-required_h2_all = ["Decision Cheat Sheet", "Type System Snapshot"]
-```
-
-### Character safety
-
-Wide and fullwidth Unicode characters (CJK, em-dashes in the wrong encoding, presentation forms) break ASCII art column alignment silently. `proof` flags them before they corrupt diagrams.
-
----
-
-## The fix pipeline
-
-```
-proof check --format rich . -o rich.json
-     │
-     │  rich format: each diagnostic includes the surrounding code block,
-     │  expected vs actual column widths, and adjacent lines — everything
-     │  an AI needs to reason about the fix without reading the whole file
-     ▼
-proof draft [paths] -o plan.json
-     │
-     │  generates a pre-populated fix plan
-     │  auto-fixable errors carry decision: auto
-     │  ambiguous cases carry decision: needs_review for human or AI triage
-     ▼
-proof fix --plan plan.json --dry-run          # review what will change
-proof fix --plan plan.json --min-confidence high   # apply high-confidence fixes
-     │
-     ▼
-proof check .                                 # verify: should be clean
-```
-
-The plan format is JSON and human-readable — review before applying:
-
-```json
-{
-  "schema_version": "1",
-  "fixes": [
-    {
-      "id": "fix-001",
-      "file": "languages/08-TYPESCRIPT.md",
-      "confidence": "high",
-      "description": "Remove extra char from bottom border of type table",
-      "reasoning": "Top border width: 63. Bottom width: 64. Extra trailing + has no matching top.",
-      "edit": {
-        "line": 34,
-        "old_string": "+------+------++",
-        "new_string": "+------+------+"
-      }
-    }
-  ]
-}
-```
-
-Fixes apply bottom-up (highest line number first) so earlier line numbers stay valid after later edits. If `old_string` doesn't match current file content, the fix is skipped and logged — no silent corruption.
-
----
-
-## proof compile
-
-Source documents use `proof:include` and `proof:layout` fenced directives to reference figures by `md://` URI. The compiler resolves each reference, validates DaVinci invariants, and writes the compiled `.md` file.
-
-**Mental model**: source markdown is source code. Compiled markdown is the artifact. DaVinci invariants are types. The compiler enforces types before output ships.
-
-### Source document format
-
-````markdown
-## Concurrency Model
-
-Intro text here.
-
-```proof:include
-md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler
-```
-
-Compare Go and Rust concurrency:
-
-```proof:layout gap=4 labels="Go,Rust"
-md://languages/10-GO.md#concurrency-model:0
-md://languages/09-RUST.md#ownership-model:0
-```
-````
-
-Compile it:
-
-```bash
-proof compile languages/10-GO.source.md
-# Output: languages/10-GO.md  (drops .source. in-place)
-
-proof compile src/*.source.md          # batch
-proof compile . --check                # validate without writing
-proof compile . --watch                # recompile on change
-```
-
-### Figure files
-
-Figure files are standalone `.md` files whose figures are marked with `<!-- proof:figure -->` HTML comments immediately preceding each code fence. The comment is hidden in rendered output but gives the following code block a stable named identity:
-
-```markdown
-<!-- proof:figure id="goroutine-scheduler" kind="figure.flowchart" -->
-```
-GOROUTINE SCHEDULER — M:N multiplexing
-┌─────────────────────────────────────┐
-│  OS Thread (M)                      │
-│  ┌──────┐ ┌──────┐ ┌──────┐        │
-│  │  G   │ │  G   │ │  G   │  ...   │
-│  └──────┘ └──────┘ └──────┘        │
-└─────────────────────────────────────┘
-```
-```
-
-### Compile diagnostics
-
-| Code | Meaning |
-|------|---------|
-| `COMPILE-001` | DaVinci invariant violation — compile aborted (error protection) |
-| `COMPILE-002` | URI resolve failure — `md://` address not found |
-| `COMPILE-003` | DaVinci invariant violation — warning only (warn protection) |
-| `COMPILE-007` | Figure validation warning — figure content changed since last pin |
-
----
-
-## proof layout
-
-Compose N figures side-by-side as a single aligned ASCII art collage. Figures are fetched by `md://` URI or file path; the engine handles height equalization, gap insertion, and unicode-width-aware column alignment.
-
-```bash
-# Two figures, 4-space gap, labelled
-proof layout \
-    "md://languages/10-GO.md#concurrency-model:0" \
-    "md://languages/09-RUST.md#ownership-model:0" \
-    --gap 4 \
-    --labels "Go,Rust"
-
-# Three files, wrap into 2 columns
-proof layout fig1.md fig2.md fig3.md --gap 3 --cols 2
-
-# Output to file
-proof layout fig1.md fig2.md --gap 4 -o layout.md
-```
-
-Example output (gap=4, labels="Go,Rust"):
-
-```
-Go                      Rust
-┌────────────────────┐    ┌────────────────────┐
-│  goroutines (M:N)  │    │  ownership system  │
-│  ┌──┐ ┌──┐ ┌──┐   │    │  ┌──────────────┐  │
-│  │G │ │G │ │G │   │    │  │  borrow ck   │  │
-│  └──┘ └──┘ └──┘   │    │  └──────────────┘  │
-└────────────────────┘    └────────────────────┘
-```
-
-Layout invariants guaranteed: all frames in a row equalized to the same height (L-2), visual gap exactly N spaces (L-4), unicode box-drawing chars measured at 1 column (L-5), labels centered over frame visual width (L-7).
-
----
-
-## DaVinci pinning
-
-Pin a figure with invariants it must always satisfy. If a future edit violates an invariant, `proof check --daVinci` reports it as an error, and `proof compile` aborts before writing the output.
-
-**Start with `proof spec-generate`** — it analyzes the figure's structure and suggests ready-to-paste invariants:
-
-```bash
-proof spec-generate "md://languages/10-GO.md#goroutine-scheduler:0" \
-    --id goroutine-scheduler
-```
-
-Output (paste into `proof.toml`, review, adjust):
-
-```toml
-# Generated by `proof spec generate` — review and adjust before committing
-[[davinci]]
-id = "goroutine-scheduler"
-uri = "md://languages/10-GO.md#goroutine-scheduler:0"
-protection = "error"
-
-  # [high] current figure is 12 lines; range allows ±2 lines of growth/shrink
-  [[davinci.invariant]]
-  rule = "line-count"
-  min = 10
-  max = 14
-
-  # [high] figure label identifies its purpose
-  [[davinci.invariant]]
-  rule = "contains-text"
-  value = "GOROUTINE SCHEDULER"
-
-  # [high] figure contains 1 box — structural minimum
-  [[davinci.invariant]]
-  rule = "box-count"
-  min = 1
-```
-
-Or register directly with `proof pin`:
-
-```bash
-proof pin "md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler" \
-    --id goroutine-scheduler
-```
-
-This writes a `[[davinci]]` entry to `proof.toml`:
-
-```toml
-[[davinci]]
-id = "goroutine-scheduler"
-uri = "md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler"
-protection = "error"
-
-  [[davinci.invariant]]
-  rule = "contains-text"
-  value = "M:N multiplexing"
-
-  [[davinci.invariant]]
-  rule = "box-count"
-  min = 2
-```
-
-List pinned figures:
-
-```bash
-proof pin-list
-```
-
-```
-goroutine-scheduler  md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler
-                     invariants: contains-text("M:N multiplexing"), box-count(min=2)
-                     protection: error
-```
-
----
-
-## proof resolve
-
-Resolve an `md://` URI and print the element content and metadata:
-
-```bash
-proof resolve "md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler"
-```
-
-```
-uri:             md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler
-file:            languages/10-GO.md
-lines:           47–61
-element_type:    figure
-kind:            flowchart
-label:           GOROUTINE SCHEDULER — M:N multiplexing
-section_heading: Concurrency Model
-
---- content ---
-GOROUTINE SCHEDULER — M:N multiplexing
-┌─────────────────────────────────────┐
-...
-```
-
----
-
-## Check codes
-
-### ASCII art
-
-| Code | Sev | Description |
-|------|-----|-------------|
-| `ascii_box_width` | error | Row or border width mismatch |
-| `ascii_box_col` | error | Column separator misaligned |
-| `ascii_cell_padding` | warning | Missing whitespace inside cell delimiter |
-| `ascii_char_range` | warning | Character outside expected ASCII range in art block |
-| `ascii_barchart_align` | warning | Horizontal bar chart column misaligned |
-
-### Markdown structure
-
-| Code | Sev | Description |
-|------|-----|-------------|
-| `md_h1_count` | warning | Too many H1 headings |
-| `md_missing_section` | warning | Required `## Heading` absent |
-| `md_duplicate_heading` | warning | Same heading appears more than once |
-| `md_heading_order` | warning | Heading level skips (H1 → H3 with no H2) |
-| `md_missing_pattern` | warning | Required content pattern absent |
-| `md_file_length` | warning | File exceeds `max_lines` |
-
-### Table schemas
-
-| Code | Sev | Description |
-|------|-----|-------------|
-| `table_missing_column` | error | Required column absent from table |
-| `table_missing_row` | error | Required row key absent from table |
-| `table_min_rows` | warning | Table has fewer body rows than `min_body_rows` |
-| `table_bad_value` | error | Cell value not in `allowed_values` list |
-
-### Link integrity
-
-| Code | Sev | Description |
-|------|-----|-------------|
-| `link_bare_text` | error | Link column cell contains plain text, not a markdown link |
-| `link_broken_target` | error | Link target does not exist on disk |
-| `link_missing` | warning | Expected link is absent from table cell |
-
----
-
-## proof.toml
-
-Schema-driven and cascading. A root `proof.toml` sets library-wide defaults. Per-directory `proof.toml` files inherit and extend — required lists are additive, scalars use nearest.
-
-```toml
-# root proof.toml
-[meta]
-name = "My Library"
-
-[files]
-include = ["**/*.md"]
-exclude = ["CHANGELOG.md", "_archive/**"]
-root = true
-
-[ascii_box]
-enabled = true
-tolerance = 0
-code_blocks_only = true
-
-[markdown]
-max_h1 = 1
-required_h2_all = ["Decision Cheat Sheet"]
-
-[[markdown.required_patterns]]
-pattern = "```"
-description = "every guide must contain at least one code block"
-severity = "warning"
-
-# languages/proof.toml — inherits root, adds more
-[[section_schemas]]
-paths = ["*.md"]
-paths_exclude = ["00-OVERVIEW.md"]
-required_h2_all = ["Type System Snapshot", "Syntax Reference Card"]
-
-[[markdown_table.table_schemas]]
-heading = "Type System Snapshot"
-required_columns = ["Axis"]
-required_row_keys = ["Binding", "Typing", "Strength"]
-min_body_rows = 3
-```
-
-A file at `languages/08-TYPESCRIPT.md` is checked against both the root rules and the `languages/` child schema. Effective config for any file: `proof config languages/08-TYPESCRIPT.md`.
+**Markdown quality assurance and compilation for terminal-first documentation.**
+
+proof does two things well. It **checks** markdown — catching ASCII art geometry
+errors, broken links, missing required sections, and misaligned table columns
+with file:line:col precision. And it **compiles** source documents — resolving
+`proof:` directives into rendered LaTeX math, ASCII presentations, data
+dashboards, tree diagrams, and more.
+
+The mental model: `.source.md` is source code. `.md` is the compiled artifact.
+proof is the compiler.
 
 ---
 
 ## Install
 
-Build from source:
+proof and its URI library live in the same workspace. Clone and build:
 
 ```bash
 git clone https://github.com/giodl73-repo/PROOF
+git clone https://github.com/giodl73-repo/MDPATH   # sibling directory
 cd PROOF
 cargo build --release
-./target/release/proof --version
 ```
 
-`cargo install proof` — available once the crate is published to crates.io.
-
-The `md://` URI resolver is a separate library crate (`mdpath`) at [github.com/giodl73-repo/MDPATH](https://github.com/giodl73-repo/MDPATH). `proof` depends on it via path in the workspace; no separate install step needed.
+Binary: `target/release/proof` (or `../../target/release/proof` from workspace root).
 
 ---
 
-## Design
+## Checking
 
-- [design/SPEC.md](design/SPEC.md) — full specification
-- [design/COMPILE-SPEC.md](design/COMPILE-SPEC.md) — compile pipeline specification
-- [design/LAYOUT-SPEC.md](design/LAYOUT-SPEC.md) — layout composer specification
-- [design/THREE-TIER-CACHE.md](design/THREE-TIER-CACHE.md) — caching architecture
-- [design/CACHE-SNAPSHOTS.md](design/CACHE-SNAPSHOTS.md) — cache snapshot system
-- [design/SCENARIOS.md](design/SCENARIOS.md) — 31 resolved spec findings
-- [design/INVARIANTS.md](design/INVARIANTS.md) — invariants with test traceability
-- [design/FIG-SPEC.md](design/FIG-SPEC.md) — `md://` URI addressing specification
-- [design/pitfalls/](design/pitfalls/) — detection and schema failure mode catalog
-- [.roles/](.roles/) — review roles: PIXEL, SIGNAL, SCHEMA, PARSE, BENCH, SOURCE, COMPOSE, CACHE
+```bash
+proof check .                      # lint all markdown
+proof check docs/ --errors-only    # errors only
+proof check . --fail-on-error      # CI mode: non-zero exit on errors
+```
+
+proof validates:
+
+- **ASCII art** — box widths, column separator alignment, connector continuity
+- **Markdown structure** — required headings, heading order, file length
+- **Tables** — column count, required columns, required row keys, allowed values
+- **Links** — targets exist on disk
+- **Source documents** — broken `md://` references caught before compile time
+
+Every diagnostic includes file, line, column, code, and message:
+
+```
+languages/08-TYPESCRIPT.md:34:1  error    ascii_box_width   bottom border 64, top 63
+docs/api.md:112:1                warning  md_missing_h2     required ## "Summary" absent
+src/guides/math.source.md:45:1   error    md_broken_uri     md:// URI references missing file
+```
+
+---
+
+## Compiling
+
+Source files (`.source.md`) contain `proof:` directives. Compile resolves every
+directive and writes the output `.md` file.
+
+```bash
+proof compile src/guides/          # compile directory → docs/guides/ (from proof.toml)
+proof compile --watch              # watch all [[compile]] targets for changes
+proof compile file.source.md -o out.md   # single file, explicit output
+```
+
+Configure targets in `proof.toml`:
+
+```toml
+[[compile]]
+source_dir = "src/guides"
+output_dir = "docs/guides"
+
+[[compile]]
+source_dir = "src/presentations"
+output_dir = "docs/presentations"
+```
+
+---
+
+## Directives
+
+### LaTeX math — `$...$` and `proof:math`
+
+Inline math expands anywhere in prose, bullets, and slide titles:
+
+```
+$\alpha + \beta = \gamma$  →  α + β = γ
+$x^2 + y^2 = z^2$          →  x² + y² = z²
+$\forall \epsilon > 0$      →  ∀ ε > 0
+```
+
+Display blocks render stacked fractions, integrals, matrices:
+
+````markdown
+```proof:math
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+```
+````
+
+No LaTeX installation required. Pure Rust renderer covering 60+ symbols,
+superscripts, subscripts, √, primes, stacked fractions, integrals with limits,
+matrices, and cases environments.
+
+---
+
+### ASCII presentations — `.slides.source.md`
+
+````markdown
+```proof:slide layout=title
+title: "proof"
+subtitle: "Markdown quality assurance"
+```
+---
+```proof:slide layout=title-content
+title: "What proof checks"
+---
+proof:bullets
+- ASCII art geometry errors
+- Broken md:// references
+- Missing required sections
+- Table schema violations
+```
+````
+
+Six layouts: `title` · `title-content` · `two-column` · `section` · `stats` · `blank`
+
+Body directives: `proof:bullets` · `proof:ol` · `proof:callout` · `proof:divider`
+· `proof:quote` · `proof:centered` · `proof:right` · `proof:stat` · `proof:notes`
+
+---
+
+### Tree diagrams — `proof:tree`
+
+````markdown
+```proof:tree kind=org
+root: proof workspace
+- proof: CLI + compile pipeline
+- proof-canvas: terminal char grid
+- proof-math: LaTeX renderer
+```
+````
+
+````markdown
+```proof:tree kind=dirtree root=src max_depth=2
+```
+````
+
+````markdown
+```proof:tree kind=taxonomy source=md://src/data/features.md name=name parent=category
+```
+````
+
+Kinds: `dirtree` · `org` · `taxonomy` · `dependency` · `outline`
+
+---
+
+### Data elements — `proof:element` and `proof:row`
+
+Fixed-width data cells that compose into column-aligned dashboards:
+
+````markdown
+```proof:element kind=sparkline value="1,3,2,5,4,7,9" width=14
+```
+```proof:element kind=value value="99.9%" label="uptime" width=14
+```
+```proof:row source=md://src/data/metrics.md foreach=row separator=" │ "
+proof:element kind=label field=name width=24
+proof:element kind=badge field=status width=10
+proof:element kind=sparkline field=trend width=14
+```
+````
+
+Kinds: `value` · `delta` · `sparkline` · `mini-bar` · `label` · `badge`
+
+---
+
+### ASCII dashboards — `.dashboard.source.md`
+
+Fixed-width canvas with named regions at exact x/y positions:
+
+```yaml
+---
+dashboard:
+  width: 80
+  height: 20
+  regions:
+    header: { x: 0, y: 0, width: 80, height: 3 }
+    metrics: { x: 0, y: 3, width: 80, height: 14 }
+    footer:  { x: 0, y: 17, width: 80, height: 3 }
+---
+```
+
+Each region is a mini-document supporting any `proof:` directive.
+
+---
+
+### Table of contents — `proof:toc`
+
+````markdown
+```proof:toc max-depth=3 style=list
+```
+````
+
+Auto-generates from headings in the current file or any `source=md://` file.
+
+---
+
+### Symbols — `[sym:name]` and `proof:symbol`
+
+Named Unicode glyphs that expand in prose, bullets, and slide titles:
+
+```
+[sym:checkmark] done  →  ✓ done
+[sym:star][sym:star][sym:star][sym:star-empty][sym:star-empty]  →  ★★★☆☆
+[sym:warning] check this  →  ⚠ check this
+```
+
+---
+
+## The md:// URI scheme
+
+Every figure, table, and element in every markdown file has a stable named
+address. proof uses `md://` URIs for cross-file references, figure pinning,
+and error reporting:
+
+```
+md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler
+md://src/data/metrics.md:table:0[row=Goroutine,col=Stack Size]
+md://docs/math.md:math:pythagorean
+```
+
+URIs survive edits because they address content by name, not line number. The
+resolver is the `mdpath` crate — see [mdpath](../mdpath/README.md).
+
+---
+
+## DaVinci figure pinning
+
+Lock a figure's structural invariants. Compile aborts if a future edit violates them:
+
+```bash
+proof spec-generate "md://figures/arch.md:figure:goroutine-scheduler"
+# → paste suggested [[davinci]] block into proof.toml
+
+proof pin "md://figures/arch.md:figure:goroutine-scheduler"
+proof check --daVinci .
+```
+
+---
+
+## Fix pipeline
+
+```bash
+proof fix . --dry-run                  # preview what changes
+proof fix . --min-confidence high      # apply safe auto-fixes
+proof fix . --min-confidence medium    # apply heuristic fixes too
+```
+
+---
+
+## proof.toml
+
+```toml
+[files]
+root = true
+
+[[compile]]
+source_dir = "src/guides"
+output_dir = "docs/guides"
+
+[ascii_box]
+enabled = true
+tolerance = 1
+
+[markdown]
+required_h2_all = ["Summary", "Examples"]
+
+[[section_schemas]]
+paths = ["docs/guides/*.md"]
+required_h2_all = ["Usage", "Examples"]
+paths_exclude = ["00-OVERVIEW.md"]
+```
+
+---
+
+## Workspace
+
+The proof repo contains three crates:
+
+| Crate | Purpose |
+|-------|---------|
+| `proof` | CLI, linting, compile pipeline |
+| `proof-canvas` | Fixed-width ASCII char grid (usable in any TUI) |
+| `proof-math` | LaTeX→terminal renderer (standalone library) |
+
+`mdpath` lives in a sibling repo and handles `md://` URI parsing and resolution.
+
+---
+
+## Guides
+
+Compiled guides live in `docs/guides/`. Rebuild with:
+
+```bash
+bash scripts/build-guides.sh           # compile all
+bash scripts/build-guides.sh --check   # validate without writing
+proof compile --watch                  # watch mode
+```
+
+| Guide | Content |
+|-------|---------|
+| [Getting started](docs/guides/00-getting-started.md) | Install, first check, first compile |
+| [Math](docs/guides/01-math.md) | LaTeX rendering — all tiers |
+| [Symbols](docs/guides/02-symbols.md) | Symbol library and shapes |
+| [Elements](docs/guides/03-elements.md) | Data cells and row compositor |
+| [Slides](docs/guides/04-slides.slides.md) | Presentation layouts |
+| [Trees](docs/guides/05-trees.md) | Tree diagrams |
+| [Dashboard](docs/guides/06-dashboard.md) | Canvas regions |
+| [Compile](docs/guides/07-compile.md) | Full directive reference |
+| [Lint](docs/guides/08-lint.md) | Check rules and proof.toml |
 
 ---
 

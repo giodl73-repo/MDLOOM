@@ -1,155 +1,200 @@
 # Changelog
 
-All notable changes to **proof** (formerly **glint**), traced from initial release through current state.
+All notable changes to **proof** (formerly **glint**), in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows semantic versioning.
 
-The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → pin**. Each release added one tier on top of the last, never replacing what came before.
+The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → compile** — with stable figure addressing, invariant pinning, and a math/diagram/slide rendering pipeline on top.
 
 ```
-v0.5  ┌────────────────────────────────────────────┐
-      │ mdpath + compile + layout + resolve/pin     │  ← source doc compilation
-      ├────────────────────────────────────────────┤
-v0.4  │ md:// addressing + DaVinci protection      │  ← named, pinnable figures
-      ├────────────────────────────────────────────┤
-v0.3  │ Table schemas + link validation + draft     │  ← document structure as data
-      ├────────────────────────────────────────────┤
-v0.2  │ Fix pipeline (rich → plan → fix)            │  ← AI-assisted bulk repair
-      ├────────────────────────────────────────────┤
-v0.1  │ ASCII box check + cascading config          │  ← detection foundation
-      └────────────────────────────────────────────┘
+v0.5  ┌──────────────────────────────────────────────────────────────┐
+      │ math · watch · multi-target compile · guides · source-link    │
+      ├──────────────────────────────────────────────────────────────┤
+v0.4  │ slides · dashboard · figures · symbols · elements             │
+      ├──────────────────────────────────────────────────────────────┤
+v0.3  │ compile pipeline · md:// URI scheme · DaVinci pinning         │
+      ├──────────────────────────────────────────────────────────────┤
+v0.2  │ fix pipeline · draft · baseline                               │
+      ├──────────────────────────────────────────────────────────────┤
+v0.1  │ check · ASCII box / flow / tree · markdown rules              │
+      └──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## [0.5.0] — 2026-04-26 — *the compilation release*
+## [0.5.0] — 2026-04-27 — *the rendering release*
 
-The shift from "linter with pinnable figures" to "document compilation system." Source documents (`.source.md`) now reference figures by stable `md://` URI and are compiled to output `.md` files by a pipeline that validates DaVinci invariants before writing. The `md://` resolver ships as a standalone library (`mdpath`) so editors and CI tools can adopt the addressing scheme without depending on proof.
+The shift from "compiles figures" to "compiles documents." A `.source.md` file can now embed real math, render trees and charts from data, and compose slide decks — all to ASCII output that survives any monospace pipeline. Multi-target watch builds and the `mdpath` Classifier extension make `proof` usable as a live build tool for any docs site, not just a CI gate.
 
 ### Added
 
-- **`mdpath` library** — standalone Rust crate implementing the `md://` URI scheme. Fully implemented with 56+ passing tests covering URI parsing (all forms), section navigation, element detection, label matching (exact → starts-with → substring hierarchy), sub-selectors (`[row=X]`, `[col=Y]`, `[box=Z]`), query parameters (`?select`, `?filter`, `?top`, `?skip`, `?count`), round-trip stability, and error cases. Ships at `https://github.com/giodl73-repo/MDPATH`.
+#### Math module — `proof:math`
 
-- **`proof compile`** — markdown compiler that resolves `proof:include` and `proof:layout` fenced directives in `.source.md` files, validates DaVinci invariants on each included figure, and writes compiled `.md` output. Default output path drops `.source.` in-place (`foo.source.md` → `foo.md`). Flags: `--watch`, `--check`, `--cache-status`, `--no-cache`. Cache snapshot commands: `proof cache snapshot save/restore/diff/list/prune/deploy`.
+A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks expand to centered ASCII with real geometric layout — no LaTeX, no MathJax, no fonts.
 
-- **`proof layout`** — ASCII art collage composer. Takes N figures (via `md://` URIs or file paths) and arranges them side-by-side with correct alignment. Handles height equalization, gap insertion, unicode-width-aware column measurement, multi-row wrapping (`--cols`), label centering (`--labels`), top/center/bottom alignment (`--align`), and optional borders (`--border`). 31 passing tests covering all layout invariants L-1 through L-9.
+- **Tokenizer + symbol table** — Greek letters, operators, relations, set-theory symbols, arrows, calligraphic and blackboard letters. Hundreds of tokens map to single Unicode glyphs.
+- **Superscripts and subscripts** — `x^2` renders with real superscript digits; `H_2O` uses subscript digits. Multi-character exponents stack above the baseline.
+- **Fractions** — numerator and denominator centered above and below a horizontal bar, width auto-computed from operand widths.
+- **Integrals, sums, products** — large operators with bounds positioned above and below the symbol; the integrand sits flush to the right.
+- **Matrices and vectors** — `pmatrix`, `bmatrix`, `vmatrix` with column-aligned cells and proper bracket characters that scale to row count.
+- **Square roots** — radical with a horizontal bar that extends across the radicand.
+- **Tier 2 layouts** — limits, piecewise functions, accents, multi-line equations.
+- **Render targets** — display math (centered block) and inline (single-line); both unicode-width-aware.
 
-- **`proof resolve`** — resolve an `md://` URI and print element content, file path, line range, label, section heading, element type, and detected kind.
+#### `proof compile` — multi-target + watch
 
-- **`proof pin`** — register a figure with DaVinci invariants. Writes a `[[davinci]]` block to `proof.toml` with the URI, protection level (`error` or `warn`), and invariant rules.
+- **`[[compile]]` config blocks** — declare any number of source/output directory pairs in `proof.toml`. Each pair can have its own `source_dir`, `output_dir`, and optional filters. `proof compile` with no args reads the table and compiles every target.
+- **`--watch`** — file watcher across all `[[compile]]` targets. Saves to `.source.md` files retrigger compile to the paired `output_dir`. Edits to a referenced figure retrigger every dependent file via the cache's reverse-dependency index.
+- **`--output-dir` / `-o-dir`** — single-flag override for ad-hoc output directory at the CLI. Mutually exclusive with `-o` (single-file output).
+- **Default output resolution** — CLI flag wins; otherwise the first matching `[[compile]]` target's `output_dir`; otherwise the source directory.
+- **`.slides.source.md` → `.slides.md`** wiring — the SLIDE renderer is now part of the compile pipeline, dispatched on filename suffix.
 
-- **`proof pin-list`** — list all pinned DaVinci figures with their URIs and invariants.
+#### Source link checking
 
-- **Figure validation before embed** — `proof compile` checks each `md://` figure against its DaVinci pin (if one exists) before embedding. Emits `COMPILE-001` (error) or `COMPILE-003` (warn) on invariant violation. Emits `COMPILE-007` (dirty figure warning) when a figure's content has changed since the last pin snapshot.
+- New checks `source_link_broken`, `source_link_missing` validate links inside `.source.md` files against the **resolved output paths**, not the source paths. A link to `../guides/01-math.md` in a source file now correctly checks against `docs/guides/01-math.md` after compile resolution.
+- Source-side link checks integrate into the `proof check` pipeline; CI can now catch broken cross-document links before compile.
 
-- **Compile diagnostics**: `COMPILE-001` (DaVinci error violation), `COMPILE-002` (URI resolve failure), `COMPILE-003` (DaVinci warn), `COMPILE-007` (dirty figure warning).
+#### `mdpath` Classifier extension
 
-- **`BatchResolver` in mdpath** — resolve multiple `md://` URIs in the same file without re-reading it. `proof compile` uses this for per-file resolution passes.
+- The `mdpath` library now ships a **Classifier** trait that lets consumers extend element-kind detection without forking. `proof` registers classifiers for math blocks, slide regions, dashboard regions, and trees, so `md://` URIs with `:figure.math:`, `:figure.slide:`, `:figure.tree:` selectors resolve correctly.
+- Classifier registration is composable — multiple classifiers can claim non-overlapping kinds; conflicts are reported as `MDPATH-005`.
 
-- **Design documents**: `COMPILE-SPEC.md`, `LAYOUT-SPEC.md`, `THREE-TIER-CACHE.md`, `CACHE-SNAPSHOTS.md`, `SCENARIOS.md` (31 spec findings resolved across all new subsystems).
+#### New directives (full implementations, not just specs)
 
-- **Review roles**: SOURCE (source document format and compile pipeline UX), COMPOSE (layout algorithm correctness and unicode-width accounting), CACHE (cache invalidation and snapshot consistency). Added to `.roles/`.
+- **`proof:tree`** — directory tree, taxonomy tree, or reference tree from a YAML/JSON source. Validators T-1 through T-8 enforce structure (no orphan children, consistent indent, balanced branches). 4 implementation waves complete.
+- **`proof:chart`** — ASCII bar chart, sparkline, histogram, and 5 more kinds. Three explicit categories (categorical, distribution, time-series). Reads from `[[mapping]]` data sources.
+- **`proof:slide`** — one slide per block in a `.slides.source.md` deck. Layout renderers handle title, two-column, image-with-caption, code-with-output, and bulleted forms. Wave 4 wires the deck-level compile.
+- **`proof:dashboard`** + **`proof:region`** — multi-region dashboard composition. Wave 3 region compositor places regions on a grid and equalizes row heights.
+- **`proof:element`** — named ASCII element library (boxes, banners, callouts) with image import via `image`/`resvg`. 99 tests.
+- **`proof:symbol`** — `[sym:name]` inline expansion engine and core symbol library. 39 tests.
+- **`proof:figure`** — named ASCII art figures with optional image import.
+- **`[[mapping]]`** — shared data-binding system used by `proof:row`, `proof:tree`, `proof:chart`. One mapping table, multiple consumers.
+
+#### Guides infrastructure
+
+- **`docs/guides/`** — first-class user guides authored as `.source.md` and compiled by `proof` itself (eat your own dog food). Topics: `00-getting-started`, `01-math`, `02-symbols`, `03-elements`, `04-slides`, `05-trees`, `06-dashboard`, `07-compile`, `08-lint`.
+- The guides directory is wired as a `[[compile]]` target in the repo's own `proof.toml`. Editing a guide source recompiles to `docs/guides/`.
+
+#### Workspace setup
+
+- `proof` and `mdpath` now live as siblings under one parent (`C:/src/proof`, `C:/src/mdpath`) with `proof` consuming `mdpath` via path dependency. Cargo workspace config aligns versions and shares a target directory for faster incremental builds.
+- README and TUTORIAL document the two-repo clone-side-by-side install.
+
+#### Other
+
+- **`proof spec-generate`** — given a figure, suggests structural invariants (box count, required labels, minimum row count) suitable for a `[[davinci]]` block. Bootstraps pinning for a large existing corpus.
+- **`mdpath` BatchResolver** — resolve multiple `md://` URIs against the same file without reparsing. `proof compile` uses this for per-file resolution passes.
+- **31 spec scenarios** hand-simulated with findings resolved across compile, layout, cache, and snapshot specs (`design/SCENARIOS.md`).
+- **403+ tests** across SLIDE waves, **99** for element, **73** integration tests for L1 coverage gaps.
+- **Diagnostics**: `COMPILE-001..007`, `MDPATH-001..005`, `MATH-001..008`, `TREE-001..008`, `CHART-001..006`.
 
 ### Changed
 
-- **Renamed `fig://` → `md://`** throughout — all specs, source code, tests, configuration examples, and documentation. The old scheme name does not appear anywhere in the codebase.
-- **Removed all `glint` references from source** — any remaining `glint` references in source files, comments, or generated output have been cleared. The naming history table in this file remains for reference.
-- **`proof.toml` description updated** — Cargo.toml description reflects the full scope: figures, tables, links, ASCII art, and compilation.
-
-### What it enables
-
-A figure in `languages/10-GO.md § Concurrency Model` is not just named — it is *compiled into* any document that references `md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler`. Change the source figure; recompile dependent documents. The DaVinci invariants are the contract between the figure and its consumers: if the scheduler diagram loses its "M:N multiplexing" label, every compile that includes it fails, loudly, before the change ships.
-
----
-
-## [0.4.0] — 2026-04-25 — *the addressing release*
-
-The shift from "linter that finds problems in files" to "document quality system with stable handles for figures." Renamed `glint` → `proof` to reflect the broader scope: this is no longer just a linter, it is an evidentiary tool — every diagnostic, every fix, every pinned figure is *proof* that the document holds together.
-
-### Added
-
-- **`fig://` URI scheme** (design complete, implementation in progress) — every figure (box, flowchart, bar chart, table) gets a stable, human-readable address of the form `fig://path#heading:index`. Line numbers change as content evolves; section-qualified figure addresses survive.
-- **DaVinci protection tier** (designed) — pinned figures carry invariants (column count, row count, named labels). If a future edit violates the invariant, `proof` reports it as an error regardless of whether the box still parses cleanly. Figures graduate from "must be syntactically valid" to "must remain semantically the figure they were."
-- **`design/FIG-SPEC.md`** — open specification for the addressing scheme. Any tool (editors, CI, agents) can implement a resolver; `proof` is the reference implementation.
-
-### Changed
-
-- Renamed binary `glint` → `proof`, library `glint_lib` → `proof_lib`, config file `glint.toml` → `proof.toml`. Old config filename auto-migrates on first run.
-- Cargo manifest version bumped to `0.2.0` (the published crate version lags the conceptual milestone numbering — semver vs. release-train naming).
-- `README.md` reframed: from "ASCII art linter" to "Document quality assurance for markdown corpora — figures, tables, links, and ASCII art."
-
-### What it enables
-
-A diagram in `computing/01-PACKAGE.md § The Big Picture` is no longer addressed as "line 47" — it is addressed as `fig://computing/01-PACKAGE.md#the-big-picture:0`. That handle survives content shifts, can be referenced from other files, and can carry invariants. The foundation for cross-file consistency checks and figure-level CI gates.
-
----
-
-## [0.3.0] — 2026-04-25 — *the schema release*
-
-Where v0.2 made fixes possible, v0.3 made the rules expressive enough to enforce real document contracts. The library style guide (every guide must contain a "Type System Snapshot" with these four required rows; every "Directory" cell must be a working markdown link) becomes data, not prose.
-
-### Added
-
-- **GFM table schema validator** (`4ad6c4f`) — declare `[[markdown_table.table_schemas]]` blocks in `proof.toml` with `required_columns`, `required_row_keys`, `min_body_rows`, `allowed_values`. Every matching table is held to its schema. Checks: `table_missing_column`, `table_missing_row`, `table_min_rows`, `table_bad_value`. (Style guide rules S-09..S-14)
-- **Link validation** (`4e76e7b`) — `link_columns` and `verify_link_targets = true` resolve every link cell to disk. Checks: `link_bare_text`, `link_broken_target`, `link_missing`, `md_table_missing_link`, `md_broken_link`.
-- **Auto-fix engine** for links and box-column drift (`2af8a1d`, `3592d7a`, `3686bfd`) — three deterministic transforms: `link_directory` (bare text → markdown link with inferred path), `box_col_pm1` (column off by one — shift to nearest valid alignment), `nested_box_col` (inner box edges aligned to outer frame).
-- **Pattern B detection + signal-loss quality guard** (`d94c7d9`) — Pattern B is the asymmetric-vtable diagram class. The signal-loss guard refuses to apply a fix that would remove non-whitespace content unless `--no-signal-check` is passed.
-- **`proof draft` subcommand** (`26ee0c4`) — pre-populated fix plan with errors grouped by file/region. Auto-fixable groups carry `decision: auto`; ambiguous groups carry `decision: needs_review` for AI or human triage.
-- **Rich context in `DraftFix`** (`38fbe76`) — every draft entry now includes border widths, column positions, and surrounding lines inline. The AI never has to re-read the source file to reason about a fix.
-- **Heading + style checks** (`045099d`) — `md_h1_count`, `md_missing_section`, `md_duplicate_heading`, `md_heading_order`, `md_missing_pattern`, `md_file_length` (S-15..S-20). `ascii_barchart` validates horizontal bar chart geometry.
-- **Tab expansion + wide-character detection** (`58b10d6`) — `char_wide` and `char_fullwidth` flag CJK ideographs, em-dashes in the wrong encoding, and presentation forms before they corrupt ASCII art column alignment silently.
-- **`paths_exclude` for `section_schemas`** (`7b899a9`) — schemas can scope to `*.md` while excluding `00-OVERVIEW.md`. SC-04 pitfall added.
-- **E2E test pipeline** (`b9cd0d1`) — full `check → rich → plan → fix → verify` loop runs in CI on every push.
+- **Renamed `fig://` → `md://`** throughout — all specs, source code, tests, and config examples.
+- **Removed all `glint` references from source** — binary, library, config file, and emitted output. Naming history retained at the bottom of this file for reference.
+- **Cargo description** updated to reflect full scope: figures, tables, links, ASCII art, and source compilation.
+- **Bottom-border tolerance** now correctly applied (was previously skipped); blank line between boxes no longer breaks box boundary detection; tree-diagram false positives suppressed.
+- **Auto-fix range extended** to ±4 box offsets; cell padding now auto-fixes for single-column boxes.
 
 ### Fixed
 
-- **GFM `parse_row` for escaped pipes and code spans** (`b23b150`) — single fix eliminated 817 false positives. The parser now correctly treats `` `|` `` and `\|` as literal pipes, not column separators.
-- **`md_heading_format`** false positive on `C#` and `F#` language names (`8e1ccf9`).
-- **Pattern C** (multi-row box headers) auto-fix (`ca97d89`) — fixture coverage expanded; invariants I-14/I-15 added.
+- 5 issues from architectural review (`16fec28`).
+- 6 review pipeline findings + BENCH coverage gaps (`a6fd65c`).
+- Three intentional-content config escape hatches added so legitimate patterns stop being flagged (`c212a5e`).
 
 ### What it enables
 
-Schema validation moves the style contract out of CLAUDE.md prose ("every guide must have a Decision Cheat Sheet") and into machine-checkable `proof.toml` blocks. The library's editorial conventions become CI failures, not honor-system pleas. Combined with the auto-fix engine, a single command can repair an entire 2,000-file library in one supervised pass — and *report* what it changed.
+A docs site authored as `.source.md` files compiles to render-ready `.md` with correct math, validated figure references, alignment-checked ASCII art, and broken-link detection — all in a single watch loop. The MAXIM library (2,170 files, ~14,000 pages) is built end-to-end with `proof compile --watch`.
+
+---
+
+## [0.4.0] — 2026-04-26 — *the figure release*
+
+The shift from "compile pipeline exists" to "compile pipeline has things to compose." A library of named, addressable, image-importable figure primitives — slides, dashboards, elements, symbols, figures themselves — each with its own spec, implementation waves, and test fixtures. By the end of v0.4 the directive vocabulary covered everything a real docs corpus needs to render: prose, math (designed), trees, charts, slides, dashboards, and named elements.
+
+### Added
+
+- **SLIDE** (`.slides.source.md` decks), **DASHBOARD** (multi-region grids), **FIGURE** (named ASCII figures with image import), **SYMBOL** (`[sym:name]` expansion), and **ELEMENT** (boxes, banners, callouts) subsystems — each shipped as a SPEC, an IMPL-PLAN, and at least one implementation wave.
+- **MAPPING-SPEC** — shared data-binding mechanism used by every directive that reads from a data source.
+- **`image` and `resvg` dependencies** — figure import from PNG/SVG.
+- Spec review roles: SOURCE, COMPOSE, CACHE — added under `.roles/`.
+
+### What it enables
+
+Docs that need a slide deck, a dashboard, or a callout no longer drop down to ASCII art by hand. Each block is a directive backed by a renderer that knows its own invariants.
+
+---
+
+## [0.3.0] — 2026-04-25 — *the addressing release*
+
+The shift from "linter that finds problems" to "document quality system with stable handles for figures." Renamed `glint` → `proof`. Introduced the `md://` URI scheme, the `proof compile` pipeline, and DaVinci invariant pinning.
+
+### Added
+
+- **`md://` URI scheme** — every figure (box, flowchart, table, chart) gets a stable handle of the form `md://path#heading:figure.kind:label`. Section-qualified addresses survive line shifts. Implemented in the `mdpath` standalone crate (56+ passing tests). Sub-selectors (`[row=X]`, `[col=Y]`, `[box=Z]`), OData query parameters (`?select`, `?filter`, `?top`, `?skip`, `?count`).
+- **`proof compile`** — markdown compiler that resolves `proof:include` and `proof:layout` directives in `.source.md`, validates DaVinci invariants on each included figure, and writes compiled output. `--check`, `--cache-status`, `--no-cache`, snapshot save/restore/diff/list/prune/deploy.
+- **`proof layout`** — ASCII collage composer. N figures arranged side-by-side with height equalization, gap insertion, unicode-width-aware columns, multi-row wrapping, label centering, top/center/bottom alignment, optional borders. Invariants L-1 through L-9.
+- **`proof resolve`** — print element content, file path, line range, label, kind for any `md://` URI.
+- **`proof pin`** + **`proof pin-list`** — register a figure with DaVinci invariants in `proof.toml`. Protection levels `warn` / `error` / `lock`. Invariant rules: `box-count`, `contains-text`, more.
+- **Three-tier cache** (`THREE-TIER-CACHE.md`) and **cache snapshots** (`CACHE-SNAPSHOTS.md`) — content hash → resolution hash → render hash.
+
+### Changed
+
+- Renamed binary `glint` → `proof`, library `glint_lib` → `proof_lib`, config `glint.toml` → `proof.toml`. Old config filename auto-migrates on first run.
+- README reframed: from "ASCII art linter" to "Document quality assurance for markdown corpora."
+
+### What it enables
+
+A diagram in `computing/01-PACKAGE.md § The Big Picture` is no longer addressed as "line 47" — it has a stable handle that survives content shifts, can be referenced from other files, and carries invariants enforced at compile time.
 
 ---
 
 ## [0.2.0] — 2026-04-25 — *the fix release*
 
-v0.1 told you what was wrong. v0.2 fixed it. The conceptual leap: detection is mechanical (Rust), fixing is mechanical too — but the *judgment* between them (which direction to shift a misaligned column, which border is the authority) is delegated to AI working off structured context.
+v0.1 told you what was wrong. v0.2 fixed it. Detection is mechanical (Rust); fixing is mechanical too — but the *judgment* between them (which border is the authority, which direction to shift a column) is delegated to AI working off rich structured context.
 
 ### Added
 
-- **`proof check --format rich`** — third output format alongside `text` and `json`. Each diagnostic carries the surrounding code block, expected vs. actual column widths, and adjacent lines. Designed as input for AI fix planners.
-- **`proof fix --plan plan.json`** — applies a structured fix plan to the working tree. Flags: `--dry-run` (show diff without writing), `--min-confidence high|medium|low` (gate by AI confidence level), `--no-verify` (skip post-fix re-check), `--no-signal-check` (allow fixes that remove non-whitespace).
-- **Fix plan schema** — JSON with `fixes[]`: each entry is `{id, file, confidence, description, reasoning, edit: {line, old_string, new_string}}`. Plans are human-readable; review before applying.
-- **Bottom-up application order** — fixes are applied highest-line-number first so earlier line numbers stay valid after later edits. If `old_string` no longer matches the current file (drift between plan generation and fix application), the fix is skipped and logged. No silent corruption.
-- **Invariants I-11/I-12/I-13** — formal properties of fix application (idempotence on clean files, no signal loss, position-stable on partial application).
-- **`design/SPEC.md` v0.2** — full pipeline design doc.
-- **Public README, CI workflow, Cargo metadata** — first release with a public face. CI runs `test + clippy + fmt + E2E smoke` on every push.
-- **`fix-guide` skill** — `.claude/skills/fix-guide/skill.md` for AI agents driving the pipeline.
+- **`proof check --format rich`** — diagnostics carry surrounding code blocks, expected vs. actual widths, adjacent lines. Designed as input for AI fix planners.
+- **`proof draft`** — pre-populated fix plan with errors grouped by file/region. Auto-fixable groups carry `decision: auto`; ambiguous groups carry `decision: needs_review` with rich context for AI triage.
+- **`proof fix --plan plan.json`** — applies a structured fix plan to the working tree. `--dry-run`, `--min-confidence high|medium|low`, `--no-verify`, `--no-signal-check`.
+- **Bottom-up application order** — fixes apply highest-line-first so earlier line numbers stay valid. Stale-anchor detection skips and logs rather than corrupting.
+- **Signal-loss guard** — refuses fixes that remove non-whitespace content unless explicitly allowed.
+- **Three deterministic auto-fixes**: `link_directory` (bare text → markdown link), `box_col_pm1` (column off by one), `nested_box_col` (inner box edges aligned to outer frame). Pattern B and Pattern C detection.
+- **GFM table schema validator** — `[[markdown_table.table_schemas]]` blocks declare `required_columns`, `required_row_keys`, `min_body_rows`, `allowed_values`. Diagnostics: `table_missing_column`, `table_missing_row`, `table_min_rows`, `table_bad_value`.
+- **Link validation** — `link_columns` + `verify_link_targets` resolve every link cell to disk. Diagnostics: `link_bare_text`, `link_broken_target`, `link_missing`, `md_table_missing_link`, `md_broken_link`.
+- **Heading + style checks** — `md_h1_count`, `md_missing_section`, `md_duplicate_heading`, `md_heading_order`, `md_missing_pattern`, `md_file_length`. `ascii_barchart` validates horizontal bar chart geometry.
+- **Tab expansion + wide-character detection** — `char_wide`, `char_fullwidth` flag CJK ideographs, em-dashes, presentation forms.
+- **`paths_exclude`** for section schemas — schemas can scope to `*.md` while excluding `00-OVERVIEW.md`.
+- **E2E test pipeline** — `check → rich → plan → fix → verify` runs in CI on every push.
+- **Invariants I-11..I-13** — formal properties of fix application (idempotence, no signal loss, position-stable on partial application).
+
+### Fixed
+
+- **GFM `parse_row` for escaped pipes and code spans** — single fix eliminated 817 false positives.
+- **`md_heading_format`** false positive on `C#` and `F#` language names.
 
 ### What it enables
 
-Bulk repair with a safety net. The pre-v0.2 workflow was "run check, read 1,500 errors, fix them by hand." Post-v0.2: `check --format rich` → AI writes a plan → review the plan → `fix --min-confidence high` applies the safe ones, leaves the rest for a second AI pass at lower confidence. The MAXIM library went from "manual repair impractical" to "fixable in one supervised afternoon."
+Bulk repair with a safety net. The MAXIM library went from "manual repair impractical" to "fixable in one supervised afternoon."
 
 ---
 
 ## [0.1.0] — 2026-04-25 — *the foundation*
 
-The seed. A fast, schema-driven Rust linter that parsed every code block in a markdown file as potential ASCII art and reported geometric defects with file:line:col precision.
+The seed. A fast, schema-driven Rust linter that parsed every code block in a markdown file as potential ASCII art and reported geometric defects with `file:line:col` precision.
 
 ### Added
 
-- **`proof check`** (default subcommand) — lint files and report diagnostics.
-- **ASCII box validation** — `ascii_box_width`, `ascii_box_col`, `ascii_cell_padding`, `ascii_arrow_gap`, `ascii_connector_drift`. Borders that don't add up, columns that drift, missing whitespace inside cells, broken arrow bodies, vertical connectors that wander.
-- **Schema-driven, cascading `glint.toml`** — root config sets library-wide defaults; per-directory configs inherit and extend (lists additive, scalars use nearest). `paths_exclude` for selectively skipping files. Effective config inspection via `proof config <path>`.
-- **Three output formats** — `text` (human, colored), `json` (machine, compact for editors/CI), with `rich` planned for v0.2.
-- **Parallel file processing** via `rayon` — 2,000-file library completes in under 5 seconds. Per-directory config resolution cached.
-- **Six initial diagnostic codes** + the foundational error/warning/info severity system.
-- **68 unit + integration tests**, fixtures for every check class (perfect box, width mismatch, col misalignment, cell padding, arrow gap, complex diagram).
-- **`design/SPEC.md`, `design/INVARIANTS.md`, `design/STYLE-GUIDE.md`** — designed-first, then implemented. Invariants I-01..I-10 specify what a "valid" ASCII box is at the parser level, independent of any specific check.
+- **`proof check`** — lint files and report diagnostics. Three output formats: `text`, `json`, `rich` (planned).
+- **ASCII box / flow / tree validation** — `ascii_box_width`, `ascii_box_col`, `ascii_cell_padding`, `ascii_arrow_gap`, `ascii_connector_drift`. Borders that don't add up, columns that drift, missing whitespace inside cells, broken arrow bodies.
+- **Markdown structural rules** — H1 count, required H2s, duplicate-heading detection, heading order.
+- **Schema-driven, cascading `glint.toml`** — root config sets defaults; per-directory configs inherit and extend (lists additive, scalars use nearest). Effective config inspection via `proof config <path>`.
+- **Parallel file processing** via `rayon` — 2,000-file library completes in under 5 seconds.
+- **68 unit + integration tests**, fixtures for every check class.
+- **`design/SPEC.md`, `design/INVARIANTS.md`, `design/STYLE-GUIDE.md`** — designed-first, then implemented. Invariants I-01..I-10 specify what a "valid" ASCII box is at the parser level.
 
 ### What it enables
 
-Catches the silent class of ASCII art errors that render correctly in a monospace editor but corrupt in MkDocs, GitHub web view, or any rendering pipeline that disagrees with the author's font metrics about character widths. The first time anyone could ask "is every box in this 2,000-file library geometrically sound?" and get a precise, machine-readable answer in seconds.
+Catches silent ASCII art errors that render correctly in a monospace editor but corrupt in MkDocs, GitHub web view, or any rendering pipeline that disagrees with the author's font metrics about character widths.
 
 ---
 
@@ -157,13 +202,7 @@ Catches the silent class of ASCII art errors that render correctly in a monospac
 
 | Period | Binary | Library | Config |
 |--------|--------|---------|--------|
-| v0.1 — v0.3 | `glint` | `glint_lib` | `glint.toml` |
-| v0.4+ | `proof` | `proof_lib` | `proof.toml` |
+| v0.1 — v0.2 | `glint` | `glint_lib` | `glint.toml` |
+| v0.3+ | `proof` | `proof_lib` | `proof.toml` |
 
-The rename reflects the scope expansion: `glint` (v0.1) lints; `proof` (v0.4) certifies.
-
----
-
-## Versioning policy
-
-Conceptual milestones are tracked here as `0.1` through `0.5`. The Cargo crate version is now aligned at `0.5.0` following the v0.5 release. Future versions will continue to align semver with milestone numbers.
+The rename reflects the scope expansion: `glint` lints; `proof` certifies and compiles.

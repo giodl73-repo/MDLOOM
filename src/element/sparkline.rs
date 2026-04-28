@@ -39,7 +39,7 @@ fn repeat_fill(series: &[f64], width: usize) -> Vec<f64> {
 /// Render a series of values as a sparkline string of exactly cfg.width characters.
 /// - width < series.len(): bucket-aggregate (mean per bucket)
 /// - width > series.len(): repeat-fill
-/// - all equal: all '▁' (min level)
+/// - all equal: all '▄' (mid level, per spec F76)
 pub fn render_sparkline(series: &[f64], cfg: &ElementConfig) -> String {
     let width = cfg.width;
 
@@ -59,7 +59,7 @@ pub fn render_sparkline(series: &[f64], cfg: &ElementConfig) -> String {
 
     working.iter().map(|&v| {
         if range == 0.0 {
-            '▁' // all equal → lowest level
+            '▄' // constant series → mid-height block (per spec F76)
         } else {
             level_char((v - min) / range)
         }
@@ -111,7 +111,7 @@ mod tests {
     fn test_render_sparkline_all_equal() {
         let series = vec![5.0; 5];
         let out = render_sparkline(&series, &spark_cfg(5));
-        assert!(out.chars().all(|c| c == '▁'), "all-equal: {:?}", out);
+        assert!(out.chars().all(|c| c == '▄'), "all-equal should be mid-height ▄: {:?}", out);
     }
 
     #[test]

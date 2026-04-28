@@ -287,3 +287,15 @@ proof compile dashboard.source.md
 - [Chart Spec](./chart-spec.md) — chart generation used inside regions
 - [Tree Spec](./tree-spec.md) — tree generation used inside regions
 - [Compile Spec](./compile-spec.md) — base compilation pipeline
+
+---
+
+## Spec Clarifications (from scenario findings)
+
+- **F63** (region fill): Rows in a region not covered by content remain as space characters. No padding, borders, or fill lines are added.
+- **F64** (canvas init char): `Canvas::new` initializes all cells to ASCII space (U+0020). The fill character is fixed — not configurable.
+- **F65** (overlap complexity): AABB overlap check is O(N²) over region pairs. For dashboards with up to ~20 regions this is acceptable. Large dashboards (50+ regions) may optimize with a spatial index in future.
+- **F66** (adjacent not overlapping): Adjacent regions are NOT overlapping. Region at x=0,width=40 occupies columns 0-39. Region at x=40,width=40 occupies columns 40-79. They share no cell. DASHBOARD-003 only fires when rectangles have at least one cell in common.
+- **F67** (element placement in region): Elements rendered inside a region are left-aligned within the region by default. Element `width` must be ≤ region `width` — oversized elements are clipped at the region boundary.
+- **F70** (tree overflow in region): If a tree's output is taller than the region height, excess lines are silently clipped by the canvas paste operation. No DASHBOARD-002 is emitted for this case (content-overflow is expected).
+

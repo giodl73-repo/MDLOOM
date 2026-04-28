@@ -64,6 +64,7 @@ enum Directive {
     Tree {
         kind: String,                   // dirtree | org | taxonomy | dependency | outline
         source: Option<String>,         // md:// URI for schema-driven kinds
+        inline_body: Vec<String>,       // inline indented tree body (when no source)
         attrs: TreeAttrs,
         line_start: usize,
         line_end: usize,
@@ -102,6 +103,21 @@ enum Directive {
     Region {
         name: String,
         body: Vec<String>,
+        line_start: usize,
+        line_end: usize,
+    },
+    Math {
+        expr: String,
+        width: usize,
+        align: crate::math::MathAlign,
+        no_chrome: bool,
+        line_start: usize,
+        line_end: usize,
+    },
+    Toc {
+        source: Option<String>,
+        max_depth: usize,
+        style: String,
         line_start: usize,
         line_end: usize,
     },
@@ -228,12 +244,14 @@ impl Directive {
             Directive::Include { line_start, .. } => *line_start,
             Directive::Layout { line_start, .. } => *line_start,
             Directive::Table { line_start, .. } => *line_start,
-            Directive::Tree { line_start, .. } => *line_start,
+            Directive::Tree { line_start, .. }  => *line_start,
             Directive::Element { line_start, .. } => *line_start,
             Directive::Row { line_start, .. } => *line_start,
             Directive::Symbol { line_start, .. } => *line_start,
             Directive::Shape { line_start, .. } => *line_start,
             Directive::Region { line_start, .. } => *line_start,
+            Directive::Math { line_start, .. } => *line_start,
+            Directive::Toc  { line_start, .. } => *line_start,
         }
     }
     fn line_end(&self) -> usize {
@@ -247,6 +265,8 @@ impl Directive {
             Directive::Symbol { line_end, .. } => *line_end,
             Directive::Shape { line_end, .. } => *line_end,
             Directive::Region { line_end, .. } => *line_end,
+            Directive::Math { line_end, .. } => *line_end,
+            Directive::Toc  { line_end, .. } => *line_end,
         }
     }
 }
@@ -430,13 +450,23 @@ fn collect_directives(source: &str) -> Vec<Directive> {
 
                     let attrs = TreeAttrs::parse(&info_after);
 
-                    // Source URI is the first md:// line in the body (for schema kinds)
-                    let source = body.iter().find_map(|l| {
-                        let t = l.trim();
-                        if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                    // Source URI: from info string attr OR first md:// body line
+                    let source_from_attrs = extract_attr_value(&info_after, "source")
+                        .filter(|s| s.starts_with("md://") || s.contains('/'));
+                    let source = source_from_attrs.or_else(|| {
+                        body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                        })
                     });
 
-                    directives.push(Directive::Tree { kind, source, attrs, line_start, line_end });
+                    // Inline body: non-md:// lines for inline tree content
+                    let inline_body: Vec<String> = body.iter()
+                        .filter(|l| !l.trim().starts_with("md://") && !l.trim().is_empty())
+                        .map(|l| l.to_string())
+                        .collect();
+
+                    directives.push(Directive::Tree { kind, source, inline_body, attrs, line_start, line_end });
                 }
                 "element" => {
                     // Info string: "proof:element kind=value field=pts_82 width=8 align=right"
@@ -544,6 +574,47 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         line_end,
                     });
                 }
+                "math" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:math")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let width: usize = extract_attr_value(&info_after, "width")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let align = match extract_attr_value(&info_after, "align").as_deref() {
+                        Some("left")  => crate::math::MathAlign::Left,
+                        Some("right") => crate::math::MathAlign::Right,
+                        _             => crate::math::MathAlign::Center,
+                    };
+                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let expr = body.join("\n");
+                    directives.push(Directive::Math {
+                        expr, width, align, no_chrome, line_start, line_end,
+                    });
+                }
+                "toc" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:toc")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let source = extract_attr_value(&info_after, "source")
+                        .or_else(|| body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
+                        }));
+                    let max_depth = extract_attr_value(&info_after, "max-depth")
+                        .or_else(|| extract_attr_value(&info_after, "max_depth"))
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(3);
+                    let style = extract_attr_value(&info_after, "style")
+                        .unwrap_or_else(|| "list".to_string());
+                    directives.push(Directive::Toc { source, max_depth, style, line_start, line_end });
+                }
                 _ => {}
             }
         }
@@ -594,6 +665,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("symbol")  { Some("symbol") }
     else if rest.starts_with("shape")   { Some("shape") }
     else if rest.starts_with("region")  { Some("region") }
+    else if rest.starts_with("math")    { Some("math") }
+    else if rest.starts_with("toc")     { Some("toc") }
     else { None }
 }
 
@@ -744,8 +817,8 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Tree { kind, source, attrs, .. } => {
-                generate_tree_block(kind, source.as_deref(), attrs, root, line_start, &mut violations)
+            Directive::Tree { kind, source, inline_body, attrs, .. } => {
+                generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, &mut violations)
                     .unwrap_or_else(|e| {
                         violations.push(CompileViolation {
                             code: "COMPILE-002",
@@ -756,7 +829,7 @@ pub fn compile_file(
                             message: format!("tree generation failed: {}", e),
                             source_line: line_start + 1,
                         });
-                        source_lines[line_start..=line_end].join("\n")
+                        source_fallback(&source_lines, line_start, line_end)
                     })
             }
 
@@ -845,6 +918,64 @@ pub fn compile_file(
                     source_line: line_start + 1,
                 });
                 source_lines[line_start..=line_end].join("\n")
+            }
+
+            Directive::Math { expr, width, align, no_chrome, .. } => {
+                let (math_lines, math_diags) = crate::math::render_display_math(expr, *width, *align);
+                resolved_count += 1;
+                for d in &math_diags {
+                    violations.push(CompileViolation {
+                        code: d.code,
+                        severity: ViolationSeverity::Warning,
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: d.message.clone(),
+                        source_line: line_start + 1,
+                    });
+                }
+                let rendered = math_lines.join("\n");
+                if *no_chrome {
+                    format!("```\n{}\n```", rendered)
+                } else {
+                    format!(
+                        "<!-- proof:compiled from=\"proof:math\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                        rendered
+                    )
+                }
+            }
+
+            Directive::Toc { source, max_depth, style, .. } => {
+                let content_opt: Option<String> = if let Some(uri) = source {
+                    match resolve_source_for_compile(uri, root) {
+                        Ok(c) => Some(c),
+                        Err(e) => {
+                            violations.push(CompileViolation {
+                                code: "COMPILE-002",
+                                severity: ViolationSeverity::Error,
+                                uri: uri.clone(),
+                                figure_id: None,
+                                invariant: String::new(),
+                                message: format!("toc source error: {}", e),
+                                source_line: line_start + 1,
+                            });
+                            None
+                        }
+                    }
+                } else {
+                    Some(source_lines.join("\n"))
+                };
+                match content_opt {
+                    Some(content) => {
+                        resolved_count += 1;
+                        let toc = generate_toc(&content, *max_depth, style);
+                        format!(
+                            "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
+                            toc
+                        )
+                    }
+                    None => source_fallback(&source_lines, line_start, line_end),
+                }
             }
         };
 
@@ -1038,6 +1169,7 @@ fn apply_replacements(source_lines: &[&str], replacements: &[(usize, usize, Stri
 fn generate_tree_block(
     kind: &str,
     source: Option<&str>,
+    inline_body: &[String],
     attrs: &TreeAttrs,
     root: &Path,
     source_line: usize,
@@ -1059,20 +1191,42 @@ fn generate_tree_block(
             dirtree_generate(&opts)?
         }
         _ => {
-            let src_uri = source.ok_or_else(|| {
-                anyhow::anyhow!("proof:tree kind={} requires a source URI in the body", kind)
-            })?;
-            let content = resolve_source_for_compile(src_uri, root)?;
-            let mut map = FieldMap::default();
-            match kind {
-                "org"        => generate_org(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                "taxonomy"   => generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                "dependency" => generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                "outline"    => generate_outline(&content, attrs.indent_width)?,
-                other => anyhow::bail!("unknown tree kind {:?}", other),
+            if let Some(src_uri) = source {
+                let content = resolve_source_for_compile(src_uri, root)?;
+                let mut map = FieldMap {
+                    name: attrs.name.clone(),
+                    parent: attrs.parent.clone(),
+                    label: attrs.label.clone(),
+                    ..Default::default()
+                };
+                match kind {
+                    "org"        => generate_org(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                    "taxonomy"   => generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                    "dependency" => generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                    "outline"    => generate_outline(&content, attrs.indent_width)?,
+                    other => anyhow::bail!("unknown tree kind {:?}", other),
+                }
+            } else if !inline_body.is_empty() {
+                let content = inline_body.join("\n");
+                match kind {
+                    "org" | "taxonomy" | "dependency" => render_inline_tree(&content, attrs.indent_width)?,
+                    "outline" => render_inline_outline(&content)?,
+                    other => anyhow::bail!("unknown tree kind {:?}", other),
+                }
+            } else {
+                anyhow::bail!("proof:tree kind={} requires either source=md://... or an inline body", kind)
             }
         }
     };
+
+    if body.trim().is_empty() {
+        anyhow::bail!(
+            "proof:tree kind={} produced empty output — check source table columns (name={:?}, parent={:?})",
+            kind,
+            attrs.name.as_deref().unwrap_or("name"),
+            attrs.parent.as_deref().unwrap_or("parent"),
+        );
+    }
 
     let uris = source.map(|s| s.to_string()).unwrap_or_default();
     Ok(format!(
@@ -1081,13 +1235,122 @@ fn generate_tree_block(
     ))
 }
 
+fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
+    let (target_level, _) = headings.last().unwrap();
+    let target_depth = target_level - min_level;
+    let mut counters: Vec<usize> = vec![0; target_depth + 1];
+    for (level, _) in headings {
+        let depth = level - min_level;
+        if depth <= target_depth {
+            counters[depth] += 1;
+            for d in (depth + 1)..=target_depth { counters[d] = 0; }
+        }
+    }
+    let parts: Vec<String> = counters[..=target_depth].iter().map(|n| n.to_string()).collect();
+    format!("{}.", parts.join("."))
+}
+
+fn generate_toc(content: &str, max_depth: usize, style: &str) -> String {
+    let mut headings: Vec<(usize, String)> = Vec::new();
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") { in_fence = !in_fence; continue; }
+        if in_fence { continue; }
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let text = trimmed[level..].trim().to_string();
+            if !text.is_empty() && level <= max_depth { headings.push((level, text)); }
+        }
+    }
+    if headings.is_empty() { return String::new(); }
+    let min_level = headings.iter().map(|(l, _)| *l).min().unwrap_or(1);
+    let mut out = String::new();
+    for (i, (level, text)) in headings.iter().enumerate() {
+        let depth = level - min_level;
+        let indent = "  ".repeat(depth);
+        if style == "tree" && depth > 0 {
+            let is_last = !headings[i+1..].iter().any(|(l, _)| *l <= *level);
+            let connector = if is_last { "└── " } else { "├── " };
+            let parent_indent = "  ".repeat(depth.saturating_sub(1));
+            out.push_str(&format!("{}  {}{}\n", parent_indent, connector, text));
+        } else if style == "numbered" {
+            let number = build_numbered_label(&headings[..=i], min_level);
+            out.push_str(&format!("{}{} {}\n", indent, number, text));
+        } else {
+            out.push_str(&format!("{}- {}\n", indent, text));
+        }
+    }
+    out.trim_end().to_string()
+}
+
+fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
+    let iw = indent_width.max(2);
+    let mut nodes: Vec<(usize, String)> = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() { continue; }
+        if let Some(rest) = trimmed.strip_prefix("root:") {
+            nodes.push((0, rest.trim().to_string()));
+            continue;
+        }
+        let leading = line.len() - line.trim_start_matches([' ', '-']).len();
+        // F86: first non-indented line without root: is treated as root
+        if leading == 0 && nodes.is_empty() && !trimmed.starts_with('-') {
+            nodes.push((0, trimmed.trim_start_matches([' ', '-']).trim().to_string()));
+            continue;
+        }
+        let depth = (leading / iw).max(1);
+        let label = trimmed.trim_start_matches([' ', '-']).trim();
+        if label.is_empty() { continue; }
+        nodes.push((depth, label.to_string()));
+    }
+
+    if nodes.is_empty() { anyhow::bail!("inline tree body is empty"); }
+
+    let mut out = String::new();
+    let n = nodes.len();
+    for (i, (depth, label)) in nodes.iter().enumerate() {
+        if *depth == 0 { out.push_str(label); out.push('\n'); continue; }
+        let prefix = " ".repeat((*depth - 1) * iw);
+        let is_last = !nodes[i+1..].iter().any(|(d, _)| *d == *depth || *d < *depth);
+        let connector = if is_last { "└── " } else { "├── " };
+        out.push_str(&prefix);
+        out.push_str(connector);
+        out.push_str(label);
+        out.push('\n');
+    }
+    Ok(out.trim_end().to_string())
+}
+
+fn render_inline_outline(content: &str) -> Result<String> {
+    let mut out = String::new();
+    for line in content.lines() {
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() { continue; }
+        out.push_str(trimmed);
+        out.push('\n');
+    }
+    Ok(out.trim_end().to_string())
+}
+
 fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
     if src.starts_with("md://") {
-        let parsed = mdpath::parse(src)
-            .map_err(|e| anyhow::anyhow!("invalid URI {:?}: {}", src, e))?;
-        let element = mdpath::resolve(&parsed, root)
-            .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", src, e))?;
-        Ok(element.content)
+        // Try mdpath element resolution first (for addressed elements with selectors)
+        if let Ok(parsed) = mdpath::parse(src) {
+            if let Ok(element) = mdpath::resolve_with_classifier(&parsed, root, &mdpath::DefaultClassifier) {
+                return Ok(element.content);
+            }
+        }
+        // Fall back to reading the whole file directly (for plain data files without selectors)
+        let path_part = src.strip_prefix("md://").unwrap_or(src);
+        let path = root.join(path_part);
+        if path.exists() {
+            return std::fs::read_to_string(&path)
+                .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e));
+        }
+        anyhow::bail!("cannot resolve md:// URI {:?} — file not found and no addressed element", src)
     } else {
         let path = root.join(src);
         std::fs::read_to_string(&path)
@@ -1100,6 +1363,15 @@ fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
 // ─────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
+/// Safe fallback: return source lines for the directive block, guarded against OOB.
+fn source_fallback(source_lines: &[&str], source_line: usize, line_end: usize) -> String {
+    if source_line <= line_end && line_end < source_lines.len() {
+        source_lines[source_line..=line_end].join("\n")
+    } else {
+        String::new()
+    }
+}
+
 fn compile_element(
     kind: &str,
     source: Option<&str>,
@@ -1131,7 +1403,7 @@ fn compile_element(
                     message: "proof:element requires either value=\"...\" or a source URI in the body".to_string(),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         };
 
@@ -1148,7 +1420,7 @@ fn compile_element(
                     message: format!("{}", e),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         };
 
@@ -1170,7 +1442,7 @@ fn compile_element(
                     message: format!("source parse error: {}", e),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         };
 
@@ -1187,7 +1459,7 @@ fn compile_element(
                     message: "proof:element with a source URI requires field=\"ColumnName\"".to_string(),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         };
 
@@ -1203,7 +1475,7 @@ fn compile_element(
                     message: "source resolved to empty table".to_string(),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         };
 
@@ -1219,7 +1491,7 @@ fn compile_element(
                     message: format!("field {:?} not found in source table headers", col),
                     source_line: source_line + 1,
                 });
-                return source_lines[source_line..=line_end].join("\n");
+                return source_fallback(source_lines, source_line, line_end);
             }
         }
     };
@@ -1237,7 +1509,7 @@ fn compile_element(
                 message: format!("unknown element kind {:?} — use value, delta, sparkline, mini-bar, label, or badge", kind),
                 source_line: source_line + 1,
             });
-            return source_lines[source_line..=line_end].join("\n");
+            return source_fallback(source_lines, source_line, line_end);
         }
     };
 
@@ -1254,7 +1526,7 @@ fn compile_element(
                 message: "proof:element requires width=N".to_string(),
                 source_line: source_line + 1,
             });
-            return source_lines[source_line..=line_end].join("\n");
+            return source_fallback(source_lines, source_line, line_end);
         }
     };
 
@@ -1301,15 +1573,25 @@ fn compile_element(
                         message: format!("sparkline field value {:?} cannot be parsed as comma-separated numbers", raw_value),
                         source_line: source_line + 1,
                     });
-                    return source_lines[source_line..=line_end].join("\n");
+                    return source_fallback(source_lines, source_line, line_end);
                 }
             }
         }
         ElementKind::Label | ElementKind::Badge => {
             ElementData::Text(raw_value.clone())
         }
+        ElementKind::Value => {
+            // F79: accept formatted display strings ("1,024", "99.9%", "142ms")
+            // Strip commas and trailing % then try numeric; fall back to Text display.
+            let cleaned = raw_value.replace(',', "");
+            let cleaned = cleaned.trim_end_matches('%');
+            match cleaned.parse::<f64>() {
+                Ok(v) => ElementData::Scalar(v),
+                Err(_) => ElementData::Text(raw_value.clone()),
+            }
+        }
         _ => {
-            // value, delta, mini-bar: scalar
+            // delta, mini-bar: strictly numeric
             match raw_value.parse::<f64>() {
                 Ok(v) => ElementData::Scalar(v),
                 Err(_) => {
@@ -1322,7 +1604,7 @@ fn compile_element(
                         message: format!("element kind={} requires a numeric value; got {:?}", kind, raw_value),
                         source_line: source_line + 1,
                     });
-                    return source_lines[source_line..=line_end].join("\n");
+                    return source_fallback(source_lines, source_line, line_end);
                 }
             }
         }
@@ -1347,7 +1629,7 @@ fn compile_element(
                 message: format!("rendered element width {} exceeds budget {}", actual, budget),
                 source_line: source_line + 1,
             });
-            source_lines[source_line..=line_end].join("\n")
+            source_fallback(source_lines, source_line, line_end)
         }
         Err(e) => {
             violations.push(CompileViolation {
@@ -1359,7 +1641,7 @@ fn compile_element(
                 message: format!("element render error: {}", e),
                 source_line: source_line + 1,
             });
-            source_lines[source_line..=line_end].join("\n")
+            source_fallback(source_lines, source_line, line_end)
         }
     }
 }
@@ -1385,14 +1667,23 @@ fn format_row_block(uri: &str, rendered: &str) -> String {
 /// Parse `foreach=VAR in URI` from the info string after `proof:row`.
 /// Returns (var_name, source_uri). Both empty strings on parse failure.
 fn parse_foreach(info: &str) -> (String, String) {
-    // Expect: foreach=VARNAME in md://...
+    // Supports two forms:
+    //   source=md://file.md foreach=row    (attr style — source= anywhere)
+    //   foreach=row in md://file.md        (positional style — md:// after foreach=)
     let mut var_name = String::new();
     let mut source_uri = String::new();
+
+    // Check source= attr first
+    if let Some(s) = extract_attr_value(info, "source") {
+        if s.starts_with("md://") || s.contains('/') {
+            source_uri = s;
+        }
+    }
 
     for tok in info.split_whitespace() {
         if tok.starts_with("foreach=") {
             var_name = tok["foreach=".len()..].to_string();
-        } else if tok.starts_with("md://") && !var_name.is_empty() {
+        } else if tok.starts_with("md://") && source_uri.is_empty() {
             source_uri = tok.to_string();
         }
     }
@@ -1451,7 +1742,7 @@ fn compile_row(
                 message: format!("{}", e),
                 source_line: source_line + 1,
             });
-            return source_lines[source_line..=line_end].join("\n");
+            return source_fallback(source_lines, source_line, line_end);
         }
     };
 
@@ -1479,15 +1770,14 @@ fn compile_row(
 
     if rows.is_empty() {
         violations.push(CompileViolation {
-            code: "ELEMENT-007",
-            severity: ViolationSeverity::Error,
+            code: "COMPILE-004",
+            severity: ViolationSeverity::Warning,
             uri: source_uri.to_string(),
             figure_id: None,
             invariant: String::new(),
-            message: "proof:row source resolved to zero rows".to_string(),
+            message: format!("proof:row produced no output — source table {:?} has 0 data rows", source_uri),
             source_line: source_line + 1,
         });
-        return source_lines[source_line..=line_end].join("\n");
     }
 
     // R-1 invariant check
@@ -1938,8 +2228,8 @@ fn render_one_directive_no_chrome(
                 resolved_count,
             )
         }
-        Directive::Tree { kind, source, attrs, .. } => {
-            match generate_tree_block(kind, source.as_deref(), attrs, root, line_start, violations) {
+        Directive::Tree { kind, source, inline_body, attrs, .. } => {
+            match generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, violations) {
                 Ok(block) => {
                     // generate_tree_block wraps in chrome — strip it for canvas paste.
                     strip_compiled_chrome(&block)

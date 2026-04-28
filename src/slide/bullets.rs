@@ -80,22 +80,68 @@ pub fn render_bullets(
 
         let bullet_char = config.level_chars[level.min(4) - 1];
         let indent = " ".repeat((level - 1) * config.indent_width);
-        let bullet_line = format!("{}{} {}", indent, bullet_char, content);
+        let prefix = format!("{}{} ", indent, bullet_char);
+        let prefix_w = prefix.chars().count();
+        let first_line = format!("{}{}", prefix, content);
 
-        // Clip to width
-        let clipped = clip_to_width(&bullet_line, width);
-        lines.push(clipped);
+        // Word-wrap with hanging indent — continuation lines align past the bullet char
+        let wrapped = word_wrap_hanging(&first_line, prefix_w, width);
+        lines.extend(wrapped);
     }
 
     (lines, warnings)
 }
 
-fn clip_to_width(s: &str, width: usize) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= width { return s.to_string(); }
-    let mut out: String = chars[..width.saturating_sub(1)].iter().collect();
-    out.push('…');
-    out
+/// Word-wrap with hanging indent.
+/// `hanging` = number of columns to indent continuation lines (past the bullet prefix).
+fn word_wrap_hanging(s: &str, hanging: usize, width: usize) -> Vec<String> {
+    use crate::layout::visual_width;
+    if width == 0 || visual_width(s) <= width {
+        return vec![s.to_string()];
+    }
+    let continuation_indent = " ".repeat(hanging);
+    let cont_width = width.saturating_sub(hanging).max(1);
+
+    let mut result = Vec::new();
+    let mut first = true;
+    let mut current = String::new();
+    let mut current_w = 0usize;
+
+    // Split the string: first word includes the prefix (already formatted)
+    // We treat the whole first line as tokens
+    for word in s.split(' ') {
+        let word_w = visual_width(word);
+        let max_w = if first && result.is_empty() { width } else { cont_width };
+        if current.is_empty() {
+            current.push_str(word);
+            current_w = word_w;
+        } else if current_w + 1 + word_w <= max_w {
+            current.push(' ');
+            current.push_str(word);
+            current_w += 1 + word_w;
+        } else {
+            // Flush
+            if first {
+                result.push(current.clone());
+                first = false;
+            } else {
+                result.push(format!("{}{}", continuation_indent, current));
+            }
+            current = word.to_string();
+            current_w = word_w;
+        }
+    }
+    if !current.is_empty() {
+        if first {
+            result.push(current);
+        } else {
+            result.push(format!("{}{}", continuation_indent, current));
+        }
+    }
+    if result.is_empty() {
+        result.push(s.to_string());
+    }
+    result
 }
 
 #[cfg(test)]
@@ -145,5 +191,46 @@ mod tests {
         let long = "- ".to_string() + &"x".repeat(100);
         let (lines, _) = render_bullets(&long, 20, &cfg);
         assert!(lines[0].chars().count() <= 20);
+    }
+
+    #[test]
+    fn bullet_long_text_wraps_not_clips() {
+        let cfg = BulletConfig::default();
+        let text = "- This is a very long bullet point that exceeds the slide width and should wrap onto the next line";
+        let (lines, _) = render_bullets(text, 40, &cfg);
+        // Should produce more than one line
+        assert!(lines.len() > 1, "long bullet should wrap, not clip");
+        // First line should start with the bullet
+        assert!(lines[0].contains('●'), "first line should have bullet char");
+        // No line should exceed width
+        for line in &lines {
+            assert!(line.chars().count() <= 40,
+                "line {:?} exceeds width 40", line);
+        }
+    }
+
+    #[test]
+    fn bullet_continuation_has_hanging_indent() {
+        let cfg = BulletConfig::default();
+        let text = "- First item that is long enough to need wrapping onto the second line here";
+        let (lines, _) = render_bullets(text, 30, &cfg);
+        if lines.len() > 1 {
+            // Continuation line should be indented to align past the bullet
+            // "● " = 2 chars, so continuation has 2 spaces indent
+            assert!(lines[1].starts_with("  "),
+                "continuation line should have hanging indent: {:?}", lines[1]);
+        }
+    }
+
+    #[test]
+    fn nested_bullets_wrap_correctly() {
+        let cfg = BulletConfig::default();
+        let text = "- Top\n  - This nested bullet point is also very long and should word-wrap properly here";
+        let (lines, _) = render_bullets(text, 30, &cfg);
+        // Should have the top bullet + nested bullet (possibly wrapped)
+        assert!(lines.len() >= 2);
+        // The nested bullet line should contain ◦
+        assert!(lines.iter().any(|l| l.contains('◦')),
+            "nested bullet should use ◦ char");
     }
 }

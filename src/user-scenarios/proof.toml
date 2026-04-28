@@ -1,0 +1,14 @@
+[files]
+root = false
+
+[ascii_box]
+enabled = true
+tolerance = 2
+code_blocks_only = true
+check_col_separators = false
+
+[ascii_char]
+error_on_wide = false
+
+[markdown]
+enabled = true

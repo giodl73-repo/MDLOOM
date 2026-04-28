@@ -443,3 +443,111 @@ Slide navigation in the TUI: `→`/`←` advances slides. `n` opens speaker note
 - [Chart Spec](./chart-spec.md) — charts embeddable in slide body
 - [Tree Spec](./tree-spec.md) — trees embeddable in slide body
 - [Mapping Spec](./mapping-spec.md) — field binding for data-driven slides
+
+---
+
+## Spec Clarifications (from scenario findings)
+
+These clarifications resolve ambiguities surfaced during scenario testing. They are normative — implementations must conform.
+
+### F47 — Title slide blank-row padding
+
+In a `title` layout at `height = H`, the renderer emits all declared fields (title, subtitle, author, date) in order, then pads remaining rows with blank lines (each line is exactly `width` spaces). Total rendered lines always equals `H`, satisfying SL-1.
+
+Fields not provided in the slide front-matter are skipped (no blank slot reserved); the remaining rows absorb the extra space.
+
+### F48 — Overlong slide titles are clipped
+
+If a title string's `visual_width` exceeds the slide `width`, it is clipped via `clip_to_width()` — the function appends `…` (U+2026) when truncation occurs. Slide titles are **never wrapped** to a second line; the title bar is always exactly one row.
+
+This applies to all layouts that render a title (`title`, `title-content`, `section`, `stats`, etc.).
+
+### F49 — Bullet indent width
+
+Default bullet indent is `indent_width = 2` spaces per level. Configurable per slide deck via the front-matter:
+
+```yaml
+---
+slides:
+  width: 120
+  height: 34
+  indent-width: 4
+---
+```
+
+`indent-width` is a slide-deck-level setting only — it is **not** currently configurable in `proof.toml`. Each level adds `indent_width` spaces of leading whitespace before the bullet character.
+
+### F50 — Tabs in bullet source
+
+Tab characters in bullet source lines are normalized to 2 spaces **before** indent-level detection runs. A single leading tab therefore counts as exactly one indent level (when `indent_width = 2`).
+
+This normalization happens in the parser; downstream code never sees tabs in bullet text.
+
+### F51 — Two-column remainder distribution
+
+For a `proof:columns` block with `ratio=N:M` at total content width `width`:
+
+```
+left_w  = floor(width × N / (N + M))
+right_w = width - left_w
+```
+
+The remainder column always goes to the **right** column.
+
+> **Note:** This supersedes the earlier "Rounding rule" stated under `proof:columns` ("remainder added to the first column"). F51 is the canonical behavior — remainder lands on the right column. The two-column compositor and SL-3 conform to this rule.
+
+### F52 — `---` disambiguation: column separator vs. slide separator
+
+A literal `---` line has two meanings, distinguished by lexical context:
+
+| Context | Meaning |
+|---------|---------|
+| Inside a `proof:slide` fenced block body (and the slide is `layout=two-column` or contains a `proof:columns`) | **Column separator** — splits the body into left/right columns |
+| Outside any fenced block (top-level of the source file, after front-matter) | **Slide separator** — ends the current slide, starts the next |
+
+There is no ambiguity at parse time: the parser tracks fence depth, so the same character sequence resolves deterministically by where it appears.
+
+### F53 — Stats remainder distribution
+
+For a `stats` layout with `n` stat cells at total content `width`:
+
+```
+cell_w   = floor(width / n)
+extra    = width % n
+```
+
+The `extra` remainder columns are distributed **left-to-right** — the first `extra` cells each receive one additional column. (This differs from F51's right-biased split for two-column layouts; stats are intentionally left-biased so the lead stat gets the extra space.)
+
+This is the renderer rule referenced in §7 ("stats layout").
+
+### F54 — Stat overflow clipping
+
+If a stat's value string exceeds its allocated cell width, it is clipped via `clip_to_width()` (appending `…` on truncation). Stat values are **never wrapped** inside cells. Authors who need a longer label should use a smaller stat count or a wider slide.
+
+This also applies to stat sublabels.
+
+### F56 — Unknown callout style fallback
+
+`proof:callout style=<unknown>` falls back silently to `CalloutStyle::Note` (the `◆` style). No diagnostic is emitted — callout style parsing is permissive by design.
+
+Authors who want strict validation can lint callout styles externally; the renderer will not fail or warn on unknown values.
+
+### F59 — `---` in YAML front-matter vs. slide separators
+
+The slide-file parser reads YAML front-matter from the **first** `---` line to the **second** `---` line. Subsequent `---` lines in slide mode are slide separators.
+
+- The front-matter block must be at the top of the file (line 1 begins with `---`) and is terminated by exactly one closing `---`.
+- The closing `---` is **not** counted as a slide separator (per the existing parser disambiguation rules and SL-7).
+- Files with no front-matter: parsing starts in slide mode at line 1.
+
+### F61 — Speaker notes have no sidecar output
+
+Per SL-5, `proof:notes` blocks are excluded from compiled slide output. The current implementation **silently drops notes** during normal compile — no `.notes.md` sidecar is written.
+
+To extract notes, use `proof compile --format notes` (already specified). A future flag `--notes-output <path>` is **planned** to write a sidecar file alongside the compiled deck; until shipped, notes exist only in the source file or in `--format notes` output.
+
+### F62 — `proof check` does not currently verify SL-5
+
+`proof check` does **not** scan compiled `.slides.md` output for leaked `proof:notes` content. SL-5 is enforced at compile time (notes are dropped before output) but there is no post-compile verification rule.
+
+This is a known gap. A future check rule `slide_notes_leaked` would scan compiled output for any `proof:notes` markers or content blocks and emit a diagnostic. Until that rule ships, SL-5 violations would only surface as a compile-time bug, not a check-time finding.

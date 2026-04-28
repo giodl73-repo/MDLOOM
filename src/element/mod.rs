@@ -118,8 +118,13 @@ pub fn render_element(data: &ElementData, cfg: &ElementConfig) -> Result<String,
 
     let raw = match cfg.kind {
         ElementKind::Value => {
-            let v = require_scalar(data, "value")?;
-            value::render_value(v, cfg)
+            match data {
+                ElementData::Text(s) => render_label_str(s, cfg),
+                _ => {
+                    let v = require_scalar(data, "value")?;
+                    value::render_value(v, cfg)
+                }
+            }
         }
         ElementKind::Delta => {
             let v = require_scalar(data, "delta")?;
@@ -447,12 +452,12 @@ mod tests {
     }
 
     #[test]
-    fn sparkline_all_equal_maps_to_lowest() {
-        // E-3 edge: all same value → all ▁
+    fn sparkline_all_equal_maps_to_mid() {
+        // E-3 edge: all same value → all ▄ (mid-height, per spec F76)
         let series = vec![5.0, 5.0, 5.0, 5.0];
         let cfg = cfg_sparkline(4);
         let out = render_element(&ElementData::Series(series), &cfg).unwrap();
-        assert!(out.chars().all(|c| c == '▁'), "all-equal series: {:?}", out);
+        assert!(out.chars().all(|c| c == '▄'), "all-equal series should be ▄: {:?}", out);
     }
 
     #[test]
@@ -487,8 +492,8 @@ mod tests {
         let cfg = cfg_sparkline(4);
         let out = render_element(&ElementData::Series(series), &cfg).unwrap();
         assert_eq!(visual_width(&out), 4);
-        // single value: all same, all ▁
-        assert!(out.chars().all(|c| c == '▁'), "single value: {:?}", out);
+        // single value: all same → all ▄ (mid-height per spec F76)
+        assert!(out.chars().all(|c| c == '▄'), "single value should be ▄: {:?}", out);
     }
 
     #[test]

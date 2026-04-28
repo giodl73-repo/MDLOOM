@@ -1,0 +1,12 @@
+[package]
+name = "proof-math"
+version = "0.1.0"
+edition = "2021"
+description = "LaTeX math rendering to Unicode and ASCII art for terminal output"
+license = "MIT"
+repository = "https://github.com/giodl73-repo/PROOF"
+keywords = ["latex", "math", "unicode", "ascii", "terminal"]
+categories = ["text-processing", "rendering"]
+
+[dependencies]
+unicode-width = "0.2"

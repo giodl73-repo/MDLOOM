@@ -5,6 +5,7 @@ use crate::checks::ascii_flow::AsciiFlowCheck;
 use crate::checks::ascii_tree::AsciiTreeCheck;
 use crate::checks::markdown::MarkdownCheck;
 use crate::checks::markdown_table::MarkdownTableCheck;
+use crate::checks::source_links::SourceLinkCheck;
 use crate::checks::Check;
 use crate::config::{AsciiBarchartConfig, AsciiBoxConfig, AsciiCharConfig, AsciiFlowConfig, AsciiTreeConfig, GlintConfig, MarkdownConfig, MarkdownTableConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
@@ -164,6 +165,9 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
             config: config.markdown_table.clone(),
         }));
     }
+
+    // Source link check — always on for .source.md files; skips non-source files internally
+    checks.push(Box::new(SourceLinkCheck { root: root.to_path_buf() }));
 
     checks
 }
