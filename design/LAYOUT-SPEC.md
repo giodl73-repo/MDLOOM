@@ -1,6 +1,6 @@
 # proof layout — ASCII Art Collage Composer v0.2
 
-**Status:** Design — implementation in progress.
+**Status:** ✅ Implemented — `src/layout.rs`. `proof layout` CLI command and `proof:layout` compile directive both live. Side-by-side, stacked, and grid arrangements with configurable gap, alignment, direction, and labels.
 
 ---
 

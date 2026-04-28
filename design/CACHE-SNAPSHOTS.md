@@ -1,6 +1,6 @@
 # Cache Snapshots — Named Compile States for Safe Experimentation
 
-> **Status**: Planned — types and APIs described here are design targets, not yet implemented.
+> **Status**: 🔲 Not yet implemented. Deferred — Tier 3 compile cache landed first. Snapshot API (named states, restore, diff) is the next cache milestone after Tiers 1/2.
 
 ## When you need this
 

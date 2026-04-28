@@ -1,6 +1,6 @@
 # proof symbol — Named Symbol and Shape Library
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented — `src/symbol/`. `[sym:name]` inline expansion, `proof:symbol` and `proof:shape` directives, built-in library (Core + Extended + Domain tiers), custom symbols via proof.toml. Did-you-mean suggestions for unknown names.
 
 ---
 

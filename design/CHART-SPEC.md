@@ -1,6 +1,6 @@
 # proof chart — ASCII Chart Composer and Validator
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented (MVP) — `src/chart/`. Bar and line chart kinds live. Full kind roster (scatter, heatmap, stacked-bar, waterfall, gantt, area, candlestick, sankey, timeline) deferred to future milestone.
 
 ---
 

@@ -1,6 +1,6 @@
 # proof dashboard — Fixed-Width ASCII Canvas Compositor
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented — `src/dashboard/`. Canvas, region parser, compositor, proof:region compile directive all live. DASHBOARD-001 through DASHBOARD-006 diagnostics wired.
 
 ---
 

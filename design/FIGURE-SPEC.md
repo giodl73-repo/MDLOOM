@@ -1,6 +1,6 @@
 # proof figure — Named ASCII Art Figures with Image Import
 
-> **Status**: Design — not yet implemented (DaVinci pinning partial via proof pin).
+> **Status**: ⚡ Partially implemented. DaVinci pinning fully live (`proof pin`, `proof check --daVinci`, `[[davinci]]` in proof.toml, inline `pin=` on `proof:include`). Image→ASCII engine built (`src/figure/`). Full figure validation pipeline (FIGURE-001 through FIGURE-006 diagnostics) implemented.
 
 ---
 

@@ -1,6 +1,6 @@
 # proof slide — ASCII Presentation Composer
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented — `src/slide/`. All 8 layouts live (title, title-content, two-column, section, content-caption, comparison, stats, blank + agenda). proof:bullets, proof:ol, proof:columns, proof:quote, proof:centered, proof:right, proof:stat, proof:callout, proof:divider, proof:notes, proof:reveal all wired. Footer, progress-bar, show-numbers in front-matter. Default two-column ratio 60:40.
 
 ---
 

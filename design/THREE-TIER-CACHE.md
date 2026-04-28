@@ -1,6 +1,6 @@
 # Three-Tier Build Cache — Parse, Resolve, Compile
 
-> **Status**: Ready to implement. None of the three tiers exist in the codebase yet — `CompileResult.from_cache` is wired into the public type but always set to `false`. mdpath ships an in-process `BatchResolver` (per-file `ParsedDocument` reuse within a single command), but no on-disk cache exists. This spec is the implementation target.
+> **Status**: ⚡ Tier 3 (compile output cache) implemented — `src/cache.rs`. Content-addressed storage, path index, `compute_key()`, `load_compile_cache()`, `store_compile_cache()`. Tiers 1 (parse) and 2 (resolve) remain as stubs — path index scaffolded but no on-disk parse/resolve cache yet.
 
 ## When you need this
 

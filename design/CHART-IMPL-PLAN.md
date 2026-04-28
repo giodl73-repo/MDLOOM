@@ -1,8 +1,8 @@
 # proof chart — Implementation Plan
 
 > **Spec**: `design/CHART-SPEC.md`  
-> **Status**: Not started.  
-> **Target**: All 5 waves complete; `proof chart check` and `proof chart generate` fully operational; `proof:chart` compile directive live.
+> **Status**: ⚡ MVP implemented — `src/chart/` (bar, line kinds). Full wave plan (scatter, heatmap, stacked-bar, waterfall, gantt, area) deferred.  
+> **Implemented**: `proof:chart` compile directive live. `proof chart check` and `proof chart generate` CLI stubs present.
 
 ---
 

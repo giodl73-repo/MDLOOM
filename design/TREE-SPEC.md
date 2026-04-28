@@ -1,6 +1,6 @@
 # proof tree — ASCII Tree Composer and Validator
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented — `src/tree/`. Kinds: dirtree, org, taxonomy, dependency, outline. Schema-driven from md:// table or JSON sources. Inline body support. `proof tree generate` and `proof tree verify` CLI commands live.
 
 ---
 

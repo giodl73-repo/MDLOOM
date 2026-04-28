@@ -1,6 +1,6 @@
 # proof compile — Markdown Compilation Specification v0.2
 
-**Status:** Design — not yet implemented.
+**Status:** ✅ Implemented — `src/compile.rs`. All directives wired: include, layout, table, tree, element, row, symbol, shape, region, math, toc, xref, blockquote, chart, ol/numbered-list. Watch mode, --progress, --delete-on-error, multi-target [[compile]] routing all live.
 
 ---
 

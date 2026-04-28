@@ -1,6 +1,6 @@
 # proof math — LaTeX Math Rendering for ASCII/Terminal Output
 
-> **Status**: Design — not yet implemented.
+> **Status**: ✅ Implemented — `src/math/`. Inline `$...$` expansion and `proof:math` block directive live. 60+ symbols, superscripts, subscripts, fractions, integrals, matrices, cases. `proof-math` standalone crate extracted.
 
 ---
 

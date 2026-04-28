@@ -1,6 +1,6 @@
 # proof tree — Implementation Plan
 
-> **Status**: Planning — Wave 1 ready to start.
+> **Status**: ✅ Complete — all waves implemented.
 > **Spec**: [TREE-SPEC.md](./TREE-SPEC.md)
 
 ---

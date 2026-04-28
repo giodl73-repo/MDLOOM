@@ -1,6 +1,6 @@
 # proof field mapping — Shared Data Binding System
 
-> **Status**: Design — not yet implemented (partial implementation in tree/schema.rs Wave 3).
+> **Status**: ⚡ Partially implemented. `FieldMap`, `parse_md_table`, `parse_json_source` live in `src/tree/schema.rs`. Full query parameter support (`?select`, `?filter`, `?count`, `?top`, `?skip`) is deferred.
 
 ---
 
