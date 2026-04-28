@@ -8,6 +8,7 @@ pub mod math;
 pub mod symbol;
 pub mod config;
 pub mod davinci;
+pub mod depends;
 pub mod diagnostic;
 pub mod draft;
 pub mod fix;

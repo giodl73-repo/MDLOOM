@@ -16,12 +16,29 @@ use crate::slide::{Slide, SlideLayout, SlideMeta, SlideTheme};
 /// Render body content — dispatches proof: directives, passes literal lines through.
 /// Handles: proof:bullets, proof:centered, proof:quote, proof:callout, proof:divider, proof:stat.
 /// proof:notes blocks are excluded from output (SL-5).
+///
+/// Warnings (SLIDE-001 max-bullets, SLIDE-007 max-depth) are discarded — callers
+/// who need them should use [`render_body_lines_with_warnings`].
 pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
-    use crate::slide::bullets::{render_bullets, BulletConfig};
+    use crate::slide::bullets::BulletConfig;
+    let (out, _) = render_body_lines_with_warnings(body, width, &BulletConfig::default());
+    out
+}
+
+/// Same as [`render_body_lines`] but accepts an explicit [`BulletConfig`]
+/// (so `max_bullets`/`max_depth` from slide front-matter take effect) and
+/// returns the warnings produced by `proof:bullets` rendering.
+pub fn render_body_lines_with_warnings(
+    body: &str,
+    width: usize,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    use crate::slide::bullets::render_bullets;
     use crate::slide::inline::{render_quote, render_centered, render_right, render_ol,
                                 render_callout, render_divider, CalloutStyle, DividerStyle};
 
     let mut output: Vec<String> = Vec::new();
+    let mut warnings: Vec<crate::slide::bullets::BulletWarning> = Vec::new();
     let lines: Vec<&str> = body.lines().collect();
     let mut i = 0;
 
@@ -50,9 +67,9 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
                 bullet_lines.push('\n');
                 i += 1;
             }
-            let cfg = BulletConfig::default();
-            let (rendered, _) = render_bullets(&bullet_lines, width, &cfg);
+            let (rendered, warns) = render_bullets(&bullet_lines, width, bullet_cfg);
             output.extend(rendered);
+            warnings.extend(warns);
             continue;
         }
 
@@ -113,8 +130,8 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
             continue;
         }
 
-        // proof:ol — ordered (numbered) list
-        if line == "proof:ol" {
+        // proof:numbered-list (primary) / proof:ol (short-form alias) — ordered list
+        if line == "proof:numbered-list" || line == "proof:ol" {
             i += 1;
             let mut text = String::new();
             while i < lines.len() && !lines[i].trim().is_empty()
@@ -150,7 +167,7 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
         i += 1;
     }
 
-    output
+    (output, warnings)
 }
 
 /// Expand inline `$...$` math and `[sym:name]` in a single prose line.
@@ -528,20 +545,355 @@ pub fn render_blank(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 }
 
 /// Dispatch to the correct renderer based on SlideLayout.
+///
+/// Bullet-list warnings are discarded — callers who need them (e.g. the compile
+/// pipeline, which surfaces SLIDE-WARN HTML comments to the author) should use
+/// [`render_slide_with_warnings`].
 pub fn render_slide(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
-    let raw = match &slide.layout {
-        SlideLayout::Title       => render_title(slide, meta),
-        SlideLayout::TitleContent => render_title_content(slide, meta),
-        SlideLayout::TwoColumn { ratio } => render_two_column(slide, meta, *ratio),
-        SlideLayout::Section     => render_section(slide, meta),
-        SlideLayout::Stats       => render_stats(slide, meta),
-        SlideLayout::Blank       => render_blank(slide, meta),
+    let (lines, _) = render_slide_with_warnings(slide, meta);
+    lines
+}
+
+/// Render a slide and return both the rendered lines and any bullet-list warnings
+/// (SLIDE-001 max-bullets, SLIDE-007 max-depth) collected from `proof:bullets`
+/// directives in the slide body.
+///
+/// `BulletConfig` is derived from `meta.max_bullets` / `meta.max_depth` so authors
+/// can tune the threshold via slide front-matter (`max-bullets: N`).
+pub fn render_slide_with_warnings(
+    slide: &Slide,
+    meta: &SlideMeta,
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    use crate::slide::bullets::BulletConfig;
+    let bullet_cfg = BulletConfig {
+        max_bullets: meta.max_bullets,
+        max_depth: meta.max_depth,
+        ..BulletConfig::default()
+    };
+
+    let (raw, warnings) = match &slide.layout {
+        SlideLayout::Title => (render_title(slide, meta), Vec::new()),
+        SlideLayout::TitleContent => render_title_content_with_warnings(slide, meta, &bullet_cfg),
+        SlideLayout::TwoColumn { ratio } => {
+            render_two_column_with_warnings(slide, meta, *ratio, &bullet_cfg)
+        }
+        SlideLayout::Section => (render_section(slide, meta), Vec::new()),
+        SlideLayout::Stats => (render_stats(slide, meta), Vec::new()),
+        SlideLayout::Blank => render_blank_with_warnings(slide, meta, &bullet_cfg),
         SlideLayout::ContentCaption | SlideLayout::Comparison => {
             // Fallback to title-content for unimplemented layouts
-            render_title_content(slide, meta)
+            render_title_content_with_warnings(slide, meta, &bullet_cfg)
         }
     };
-    apply_theme(&raw, meta)
+    (apply_theme(&raw, meta), warnings)
+}
+
+fn render_title_content_with_warnings(
+    slide: &Slide,
+    meta: &SlideMeta,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = 3usize;
+    let body_height = h.saturating_sub(title_height + 1);
+
+    let title_str = slide.title.as_deref().unwrap_or("");
+    let mut result: Vec<String> = Vec::with_capacity(h);
+    result.push(fit_to_width(title_str, w));
+    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    result.push(separator(w));
+
+    let (body_lines, warnings) = render_body_lines_with_warnings(&slide.body_content, w, bullet_cfg);
+    result.extend(lines_to_canvas(&body_lines, w, body_height));
+
+    result.truncate(h);
+    while result.len() < h { result.push(" ".repeat(w)); }
+    (result, warnings)
+}
+
+fn render_two_column_with_warnings(
+    slide: &Slide,
+    meta: &SlideMeta,
+    ratio: (u8, u8),
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = if slide.title.is_some() { 2usize } else { 0 };
+    let body_height = h.saturating_sub(title_height);
+
+    let ratio_sum = (ratio.0 as usize) + (ratio.1 as usize);
+    let col_a_raw = (w * ratio.0 as usize) / ratio_sum;
+    let col_b_raw = (w * ratio.1 as usize) / ratio_sum;
+    let remainder = w.saturating_sub(col_a_raw + col_b_raw);
+    let col_a_width = col_a_raw + remainder;
+    let col_b_width = col_b_raw;
+
+    let (col_a_content, col_b_content) = split_two_column(&slide.body_content);
+    let (col_a_lines, mut warns_a) =
+        render_body_lines_with_warnings(&col_a_content, col_a_width, bullet_cfg);
+    let (col_b_lines, warns_b) =
+        render_body_lines_with_warnings(&col_b_content, col_b_width, bullet_cfg);
+    warns_a.extend(warns_b);
+
+    let col_a = lines_to_canvas(&col_a_lines, col_a_width, body_height);
+    let col_b = lines_to_canvas(&col_b_lines, col_b_width, body_height);
+
+    let mut result: Vec<String> = Vec::with_capacity(h);
+    if let Some(ref t) = slide.title {
+        result.push(fit_to_width(t, w));
+        result.push(separator(w));
+    }
+    for i in 0..body_height {
+        let a = col_a.get(i).map(|s| s.as_str()).unwrap_or("");
+        let b = col_b.get(i).map(|s| s.as_str()).unwrap_or("");
+        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+    }
+    result.truncate(h);
+    while result.len() < h { result.push(" ".repeat(w)); }
+    (result, warns_a)
+}
+
+fn render_blank_with_warnings(
+    slide: &Slide,
+    meta: &SlideMeta,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
+    let (body_lines, warnings) =
+        render_body_lines_with_warnings(&slide.body_content, meta.width, bullet_cfg);
+    (lines_to_canvas(&body_lines, meta.width, meta.height), warnings)
+}
+
+// ─────────────────────────────────────────────────────────
+// Reveal: progressive-reveal page generation
+// ─────────────────────────────────────────────────────────
+
+/// Render a slide as one or more reveal "pages" (frames).
+///
+/// When a `proof:bullets` block in the slide body contains `[N]` reveal-step
+/// prefixes, the slide is expanded into multiple pages — one per distinct step
+/// value.  Page N shows all bullets with step ≤ N (cumulative reveal).  The
+/// title/chrome is identical on every page; only the bullet visibility changes.
+///
+/// If no `[N]` markers (N ≥ 2) are present, returns a `Vec` with exactly one
+/// element, identical to `render_slide`.
+///
+/// The caller is responsible for joining pages with the appropriate output
+/// separator (e.g. `---` for the `.slides.md` format or a form-feed for paging
+/// terminal output).
+pub fn render_slide_pages(slide: &Slide, meta: &SlideMeta) -> Vec<Vec<String>> {
+    use crate::slide::bullets::{BulletConfig, has_reveal_markers, render_bullets_pages};
+
+    let bullet_cfg = BulletConfig {
+        max_bullets: meta.max_bullets,
+        max_depth: meta.max_depth,
+        ..BulletConfig::default()
+    };
+
+    // Fast path: no reveal markers anywhere in the body
+    if !has_reveal_markers(&slide.body_content) {
+        return vec![render_slide(slide, meta)];
+    }
+
+    // Only title-content and blank layouts support reveal pages today.
+    // Two-column and others fall back to single-page rendering.
+    match &slide.layout {
+        SlideLayout::TitleContent | SlideLayout::ContentCaption | SlideLayout::Comparison => {
+            render_reveal_pages_title_content(slide, meta, &bullet_cfg)
+        }
+        SlideLayout::Blank => {
+            render_reveal_pages_blank(slide, meta, &bullet_cfg)
+        }
+        _ => vec![render_slide(slide, meta)],
+    }
+}
+
+/// Build reveal pages for title-content layout.
+fn render_reveal_pages_title_content(
+    slide: &Slide,
+    meta: &SlideMeta,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> Vec<Vec<String>> {
+    use crate::slide::bullets::render_bullets_pages;
+
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = 3usize;
+    let body_height = h.saturating_sub(title_height + 1);
+
+    // Build the fixed chrome (title area + separator) — same on every page
+    let title_str = slide.title.as_deref().unwrap_or("");
+    let mut chrome: Vec<String> = Vec::with_capacity(title_height + 1);
+    chrome.push(fit_to_width(title_str, w));
+    for _ in 1..title_height { chrome.push(" ".repeat(w)); }
+    chrome.push(separator(w));
+
+    // Expand the body: split on proof:bullets, generate pages for each bullets block,
+    // then reassemble. For simplicity, we treat the entire body as a single bullets
+    // block if it starts with proof:bullets; otherwise fall back to single-page.
+    //
+    // Strategy: render_body_lines_pages returns Vec<Vec<String>> — one body rendition
+    // per reveal step.  We then combine chrome + each body rendition into a full page.
+    let body_pages = render_body_lines_pages(&slide.body_content, w, bullet_cfg);
+
+    body_pages.into_iter().map(|body_lines| {
+        let mut page = chrome.clone();
+        page.extend(lines_to_canvas(&body_lines, w, body_height));
+        page.truncate(h);
+        while page.len() < h { page.push(" ".repeat(w)); }
+        apply_theme(&page, meta)
+    }).collect()
+}
+
+/// Build reveal pages for blank layout.
+fn render_reveal_pages_blank(
+    slide: &Slide,
+    meta: &SlideMeta,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> Vec<Vec<String>> {
+    let body_pages = render_body_lines_pages(&slide.body_content, meta.width, bullet_cfg);
+    body_pages.into_iter().map(|body_lines| {
+        let page = lines_to_canvas(&body_lines, meta.width, meta.height);
+        apply_theme(&page, meta)
+    }).collect()
+}
+
+/// Render body content for each reveal step, returning one `Vec<String>` per step.
+///
+/// Scans the body for `proof:bullets` directives that contain `[N]` reveal
+/// markers.  For each step, renders the body with that step's bullet visibility.
+/// Non-bullet directives and prose are identical across all pages.
+///
+/// If no reveal markers are present returns a single-element vec.
+pub fn render_body_lines_pages(
+    body: &str,
+    width: usize,
+    bullet_cfg: &crate::slide::bullets::BulletConfig,
+) -> Vec<Vec<String>> {
+    use crate::slide::bullets::{has_reveal_markers, render_bullets_pages};
+
+    // Quick scan: does any proof:bullets block in this body have reveal markers?
+    // We need to find such blocks first.
+    let lines: Vec<&str> = body.lines().collect();
+    let mut has_any_reveal = false;
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line.starts_with("proof:bullets") {
+            i += 1;
+            let mut block = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                block.push_str(lines[i]);
+                block.push('\n');
+                i += 1;
+            }
+            if has_reveal_markers(&block) {
+                has_any_reveal = true;
+                break;
+            }
+            continue;
+        }
+        i += 1;
+    }
+
+    if !has_any_reveal {
+        let (out, _) = render_body_lines_with_warnings(body, width, bullet_cfg);
+        return vec![out];
+    }
+
+    // Full pass: for each proof:bullets block with reveal markers, collect the
+    // pages it generates.  All other directives emit a single Vec<String> (same
+    // on every page).  We then transpose: for page N, assemble the Nth slice of
+    // each segment.
+
+    #[derive(Debug)]
+    enum Segment {
+        // Same lines on every reveal page
+        Fixed(Vec<String>),
+        // Different lines per reveal step
+        Paged(Vec<Vec<String>>),
+    }
+
+    let mut segments: Vec<Segment> = Vec::new();
+    let lines: Vec<&str> = body.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line == "proof:notes" {
+            i += 1;
+            while i < lines.len() && !lines[i].trim().is_empty() { i += 1; }
+            i += 1;
+            continue;
+        }
+
+        if line.starts_with("proof:bullets") {
+            i += 1;
+            let mut bullet_lines = String::new();
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                bullet_lines.push_str(lines[i]);
+                bullet_lines.push('\n');
+                i += 1;
+            }
+            if has_reveal_markers(&bullet_lines) {
+                let (pages, _) = render_bullets_pages(&bullet_lines, width, bullet_cfg);
+                segments.push(Segment::Paged(pages));
+            } else {
+                let (rendered, _) = crate::slide::bullets::render_bullets(
+                    &bullet_lines, width, bullet_cfg);
+                segments.push(Segment::Fixed(rendered));
+            }
+            continue;
+        }
+
+        // All other directives and prose: render normally into a Fixed segment
+        // We render this single line/block via a mini body string
+        let mut mini_body = String::new();
+        if line.starts_with("proof:") {
+            // Consume the whole directive block
+            mini_body.push_str(lines[i]);
+            mini_body.push('\n');
+            i += 1;
+            while i < lines.len() && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:") {
+                mini_body.push_str(lines[i]);
+                mini_body.push('\n');
+                i += 1;
+            }
+        } else {
+            mini_body.push_str(lines[i]);
+            mini_body.push('\n');
+            i += 1;
+        }
+        let (rendered, _) = render_body_lines_with_warnings(&mini_body, width, bullet_cfg);
+        segments.push(Segment::Fixed(rendered));
+    }
+
+    // Determine total page count = max pages across all Paged segments
+    let page_count = segments.iter().map(|seg| match seg {
+        Segment::Fixed(_) => 1,
+        Segment::Paged(pages) => pages.len(),
+    }).max().unwrap_or(1).max(1);
+
+    // Assemble: for each page index, concatenate Fixed lines + Paged[page_idx] lines
+    (0..page_count).map(|page_idx| {
+        let mut out: Vec<String> = Vec::new();
+        for seg in &segments {
+            match seg {
+                Segment::Fixed(lines) => out.extend_from_slice(lines),
+                Segment::Paged(pages) => {
+                    // Use the last page if page_idx exceeds available pages
+                    let idx = page_idx.min(pages.len().saturating_sub(1));
+                    out.extend_from_slice(&pages[idx]);
+                }
+            }
+        }
+        out
+    }).collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -746,5 +1098,204 @@ mod tests {
     fn word_wrap_zero_width_no_panic() {
         let result = word_wrap("some text", 0);
         assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn ol_body_dispatch_short_alias() {
+        let body = "proof:ol\n- A\n- B";
+        let lines = render_body_lines(body, 40);
+        assert!(lines.iter().any(|l| l.contains("1.") && l.contains('A')));
+        assert!(lines.iter().any(|l| l.contains("2.") && l.contains('B')));
+    }
+
+    #[test]
+    fn numbered_list_body_dispatch_primary_name() {
+        // proof:numbered-list must produce identical output to proof:ol.
+        let from_long = render_body_lines("proof:numbered-list\n- A\n- B", 40);
+        let from_short = render_body_lines("proof:ol\n- A\n- B", 40);
+        assert_eq!(from_long, from_short);
+    }
+
+    // ── SLIDE-001: max-bullets warnings flow through render_slide_with_warnings ──
+
+    #[test]
+    fn slide_with_six_bullets_emits_slide001_at_default_threshold() {
+        // Default max_bullets is 4 (the 30-second rule). 6 bullets must warn twice
+        // (bullets 5 and 6 each exceed the threshold).
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::TitleContent);
+        s.title = Some("Too many points".into());
+        s.body_content = "proof:bullets\n- One\n- Two\n- Three\n- Four\n- Five\n- Six\n".into();
+
+        let (_, warnings) = render_slide_with_warnings(&s, &meta);
+        let slide001: Vec<_> = warnings.iter().filter(|w| w.code == "SLIDE-001").collect();
+        assert_eq!(slide001.len(), 2,
+            "expected 2 SLIDE-001 warnings (bullets 5 and 6) at default max_bullets=4, got: {:?}",
+            warnings);
+    }
+
+    #[test]
+    fn slide_with_four_bullets_no_warning_at_default_threshold() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::TitleContent);
+        s.title = Some("Just right".into());
+        s.body_content = "proof:bullets\n- One\n- Two\n- Three\n- Four\n".into();
+
+        let (_, warnings) = render_slide_with_warnings(&s, &meta);
+        assert!(
+            warnings.iter().all(|w| w.code != "SLIDE-001"),
+            "4 bullets at threshold 4 should not warn, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn slide_max_bullets_configurable_via_meta() {
+        // Author overrides the threshold via slide front-matter (max-bullets: 8).
+        // 6 bullets is then under the threshold and should not warn.
+        let meta = SlideMeta { max_bullets: 8, ..meta_80x24() };
+        let mut s = blank_slide(SlideLayout::TitleContent);
+        s.title = Some("Higher threshold".into());
+        s.body_content = "proof:bullets\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n".into();
+
+        let (_, warnings) = render_slide_with_warnings(&s, &meta);
+        assert!(
+            warnings.iter().all(|w| w.code != "SLIDE-001"),
+            "6 bullets at threshold 8 should not warn, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn slide_max_bullets_two_column_layout_collects_both_columns() {
+        // Two-column slide with 3 bullets per column (6 total) at default threshold 4.
+        // Should warn — the warning is per-slide, not per-column.
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::TwoColumn { ratio: (50, 50) });
+        s.title = Some("Compare".into());
+        s.body_content = concat!(
+            "## col:left\n",
+            "proof:bullets\n- L1\n- L2\n- L3\n",
+            "## col:right\n",
+            "proof:bullets\n- R1\n- R2\n- R3\n",
+        ).into();
+
+        let (_, warnings) = render_slide_with_warnings(&s, &meta);
+        // Each column independently re-counts bullets, so each column emits warnings
+        // when its OWN bullet count exceeds the threshold. With 3 bullets per side
+        // at threshold 4, neither column should warn — this documents that the
+        // counter is per-bullet-list, not per-slide.
+        assert!(
+            warnings.iter().all(|w| w.code != "SLIDE-001"),
+            "3 bullets per column at threshold 4 should not warn, got: {:?}",
+            warnings
+        );
+    }
+
+    // ── render_slide_pages / proof:reveal ─────────────────
+
+    fn make_reveal_slide(layout: SlideLayout, title: Option<&str>, body: &str) -> (Slide, SlideMeta) {
+        let mut s = blank_slide(layout);
+        s.title = title.map(|t| t.into());
+        s.body_content = body.into();
+        (s, meta_80x24())
+    }
+
+    #[test]
+    fn reveal_no_markers_single_page() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::TitleContent, Some("Title"),
+            "proof:bullets\n- A\n- B\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        assert_eq!(pages.len(), 1, "no reveal markers → single page");
+        assert_sl1(&pages[0], &meta);
+    }
+
+    #[test]
+    fn reveal_two_steps_two_pages_sl1() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::TitleContent, Some("Title"),
+            "proof:bullets\n- Always\n[2] - Step 2\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        assert_eq!(pages.len(), 2, "two steps → two pages");
+        for page in &pages {
+            assert_sl1(page, &meta);
+        }
+    }
+
+    #[test]
+    fn reveal_page_1_hides_step_2() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::TitleContent, Some("Title"),
+            "proof:bullets\n- Always\n[2] - Step 2\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        let p1 = pages[0].join("\n");
+        assert!( p1.contains("Always"), "page 1 should show step-1 bullet");
+        assert!(!p1.contains("Step 2"), "page 1 should hide step-2 bullet");
+    }
+
+    #[test]
+    fn reveal_page_2_shows_all() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::TitleContent, Some("Title"),
+            "proof:bullets\n- Always\n[2] - Step 2\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        let p2 = pages[1].join("\n");
+        assert!(p2.contains("Always") && p2.contains("Step 2"),
+            "page 2 should show all bullets");
+    }
+
+    #[test]
+    fn reveal_title_identical_on_all_pages() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::TitleContent, Some("My Deck Title"),
+            "proof:bullets\n- A\n[2] - B\n[3] - C\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        assert_eq!(pages.len(), 3);
+        for page in &pages {
+            assert!(page[0].contains("My Deck Title"),
+                "title row must be identical on every page");
+        }
+    }
+
+    #[test]
+    fn reveal_blank_layout_pages_sl1() {
+        let (s, meta) = make_reveal_slide(
+            SlideLayout::Blank, None,
+            "proof:bullets\n- One\n[2] - Two\n",
+        );
+        let pages = render_slide_pages(&s, &meta);
+        assert_eq!(pages.len(), 2);
+        for page in &pages {
+            assert_sl1(page, &meta);
+        }
+    }
+
+    #[test]
+    fn render_body_lines_pages_no_markers_single_page() {
+        use crate::slide::bullets::BulletConfig;
+        let cfg = BulletConfig::default();
+        let body = "proof:bullets\n- A\n- B\n";
+        let pages = render_body_lines_pages(body, 80, &cfg);
+        assert_eq!(pages.len(), 1);
+    }
+
+    #[test]
+    fn render_body_lines_pages_fixed_segment_on_every_page() {
+        use crate::slide::bullets::BulletConfig;
+        let cfg = BulletConfig { max_bullets: 10, ..BulletConfig::default() };
+        // A fixed centered block, then a reveal bullets block
+        let body = "proof:centered\nIntro\n\nproof:bullets\n- Always\n[2] - Step 2\n";
+        let pages = render_body_lines_pages(body, 80, &cfg);
+        assert_eq!(pages.len(), 2, "reveal block → 2 pages");
+        for page in &pages {
+            let text = page.join("\n");
+            assert!(text.contains("Intro"), "fixed prose must appear on every page");
+        }
     }
 }

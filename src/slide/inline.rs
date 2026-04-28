@@ -134,10 +134,13 @@ pub fn render_right(text: &str, width: usize) -> Vec<String> {
 }
 
 // ─────────────────────────────────────────────────────────
-// proof:ol  (ordered / numbered list)
+// proof:numbered-list  (alias: proof:ol — ordered / numbered list)
 // ─────────────────────────────────────────────────────────
 
 /// Render a numbered (ordered) list.
+///
+/// Dispatched from both `proof:numbered-list` (primary) and `proof:ol`
+/// (short-form alias) — both names render identically.
 ///
 /// Input lines starting with `- ` are items; indented items (2+ spaces) are
 /// sub-items and get decimal numbering (1.1, 1.2, ...).

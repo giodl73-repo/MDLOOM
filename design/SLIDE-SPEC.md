@@ -211,7 +211,28 @@ proof:bullets
 
 Bullet characters (configurable): `•` (level 1), `◦` (level 2), `▸` (level 3), `–` (level 4+).
 
-Max recommended bullets per slide: 6 (configurable via `max-bullets` in slide front-matter).
+**Max bullets per slide: 4** (configurable via `max-bullets` in slide front-matter — the **30-second rule**: more than 4 bullets cannot reasonably be read aloud in the typical 30-second slide pacing). Authors who genuinely need more should opt in explicitly:
+
+```yaml
+---
+slides:
+  width: 120
+  height: 34
+  max-bullets: 8     # raise the threshold for this deck
+---
+```
+
+When a `proof:bullets` block exceeds `max-bullets`, the compiler emits **SLIDE-001** as a warning and prepends an HTML comment to the compiled output:
+
+```
+<!-- SLIDE-WARN SLIDE-001 slide=3: bullet 5 exceeds max_bullets 4 -->
+SLIDE 3 ──────────────────────────────────────── 3/12
+...
+```
+
+This makes the warning visible to readers of the compiled deck, not just to authors who run `proof compile` in a terminal. SLIDE-001 is non-blocking — the deck still compiles and writes successfully.
+
+**Counter scope:** the bullet counter is per-`proof:bullets` block, not per-slide. A two-column slide with 3 bullets in each column does not trigger SLIDE-001 at threshold 4 — each column's `proof:bullets` is counted independently.
 
 **Depth limit:** `max-depth=4` (configurable) limits nesting. Levels beyond `max-depth` are rendered at the deepest defined bullet char. `SLIDE-007: bullet depth exceeds max-depth` (planned warning).
 

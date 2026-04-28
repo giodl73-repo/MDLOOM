@@ -120,6 +120,9 @@ enum Directive {
         source: Option<String>,
         max_depth: usize,
         style: String,
+        /// Restrict TOC to headings nested under the heading with this text.
+        /// `None` lists every heading in the document.
+        section: Option<String>,
         line_start: usize,
         line_end: usize,
     },
@@ -617,7 +620,10 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         .unwrap_or(3);
                     let style = extract_attr_value(&info_after, "style")
                         .unwrap_or_else(|| "list".to_string());
-                    directives.push(Directive::Toc { source, max_depth, style, line_start, line_end });
+                    let section = extract_attr_value(&info_after, "section");
+                    directives.push(Directive::Toc {
+                        source, max_depth, style, section, line_start, line_end,
+                    });
                 }
                 _ => {}
             }
@@ -671,6 +677,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
     else if rest.starts_with("region")  { Some("region") }
     else if rest.starts_with("math")    { Some("math") }
     else if rest.starts_with("toc")     { Some("toc") }
+    else if rest.starts_with("numbered-list") { Some("ol") } // primary name
+    else if rest.starts_with("ol")      { Some("ol") }       // short-form alias
     else { None }
 }
 
@@ -985,7 +993,7 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Toc { source, max_depth, style, .. } => {
+            Directive::Toc { source, max_depth, style, section, .. } => {
                 let content_opt: Option<String> = if let Some(uri) = source {
                     match resolve_source_for_compile(uri, root) {
                         Ok(c) => Some(c),
@@ -1008,7 +1016,7 @@ pub fn compile_file(
                 match content_opt {
                     Some(content) => {
                         resolved_count += 1;
-                        let toc = generate_toc(&content, *max_depth, style);
+                        let toc = generate_toc(&content, *max_depth, style, section.as_deref());
                         format!(
                             "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
                             toc
@@ -1315,8 +1323,11 @@ fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> Strin
     format!("{}.", parts.join("."))
 }
 
-fn generate_toc(content: &str, max_depth: usize, style: &str) -> String {
-    let mut headings: Vec<(usize, String)> = Vec::new();
+fn generate_toc(content: &str, max_depth: usize, style: &str, section: Option<&str>) -> String {
+    // Collect every ATX heading outside fenced code blocks. Depth filtering and
+    // section narrowing happen below so that a target section can sit at any
+    // level relative to `max_depth`.
+    let mut all: Vec<(usize, String)> = Vec::new();
     let mut in_fence = false;
     for line in content.lines() {
         let trimmed = line.trim_start();
@@ -1325,9 +1336,41 @@ fn generate_toc(content: &str, max_depth: usize, style: &str) -> String {
         if trimmed.starts_with('#') {
             let level = trimmed.chars().take_while(|&c| c == '#').count();
             let text = trimmed[level..].trim().to_string();
-            if !text.is_empty() && level <= max_depth { headings.push((level, text)); }
+            if !text.is_empty() { all.push((level, text)); }
         }
     }
+
+    // If `section` is given, narrow `all` to the descendants of the first
+    // heading whose text matches (case-insensitive trim). Descendants run from
+    // the heading after the match through to the next heading at the same or
+    // shallower level. The matching heading itself is excluded — only its
+    // children are listed.
+    let scoped: Vec<(usize, String)> = if let Some(target) = section {
+        let want = target.trim().to_lowercase();
+        let start = all.iter().position(|(_, t)| t.trim().to_lowercase() == want);
+        match start {
+            Some(idx) => {
+                let parent_level = all[idx].0;
+                let mut out = Vec::new();
+                for (level, text) in all.iter().skip(idx + 1) {
+                    if *level <= parent_level { break; }
+                    out.push((*level, text.clone()));
+                }
+                out
+            }
+            None => Vec::new(),
+        }
+    } else {
+        all
+    };
+
+    // Apply max_depth as the last filter so it always means "the absolute
+    // heading level cap" (`level <= max_depth`).
+    let headings: Vec<(usize, String)> = scoped
+        .into_iter()
+        .filter(|(level, _)| *level <= max_depth)
+        .collect();
+
     if headings.is_empty() { return String::new(); }
     let min_level = headings.iter().map(|(l, _)| *l).min().unwrap_or(1);
     let mut out = String::new();
@@ -1920,12 +1963,12 @@ fn compile_slides_file(
     config: &GlintConfig,
 ) -> Result<CompileResult> {
     use crate::slide::parser::parse_slide_doc;
-    use crate::slide::layout::render_slide;
+    use crate::slide::layout::render_slide_with_warnings;
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
 
-    let violations: Vec<CompileViolation> = Vec::new();
+    let mut violations: Vec<CompileViolation> = Vec::new();
 
     let doc = match parse_slide_doc(&source_text) {
         Ok(d) => d,
@@ -1966,11 +2009,37 @@ fn compile_slides_file(
 
     for slide in &doc.slides {
         let n = slide.index; // parser already 1-indexes slides
+
+        let (rendered, warnings) = render_slide_with_warnings(slide, meta);
+
+        // Surface bullet warnings as both an HTML comment in the output (so
+        // authors see them when reading the compiled deck) and as
+        // CompileViolations (so `proof compile` exit reporting picks them up).
+        // De-duplicate per slide: emit one SLIDE-WARN per (code, message).
+        if !warnings.is_empty() {
+            let mut seen: std::collections::HashSet<(&'static str, String)> = Default::default();
+            for w in &warnings {
+                if seen.insert((w.code, w.message.clone())) {
+                    parts.push(format!(
+                        "<!-- SLIDE-WARN {} slide={}: {} -->",
+                        w.code, n, w.message
+                    ));
+                    violations.push(CompileViolation {
+                        code: w.code,
+                        severity: ViolationSeverity::Warning,
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("slide {}: {}", n, w.message),
+                        source_line: slide.source_line,
+                    });
+                }
+            }
+        }
+
         let separator = format!("SLIDE {} {}", n,
             "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len())));
         parts.push(format!("{} {}/{}", separator, n, total));
-
-        let rendered = render_slide(slide, meta);
         parts.extend(rendered);
     }
     parts.push("```".to_string());
@@ -2850,6 +2919,13 @@ mod tests {
     }
 
     #[test]
+    fn test_proof_directive_kind_ol_alias() {
+        // Both names resolve to the same kind, dispatching to render_ol().
+        assert_eq!(proof_directive_kind("```proof:numbered-list"), Some("ol"));
+        assert_eq!(proof_directive_kind("```proof:ol"), Some("ol"));
+    }
+
+    #[test]
     fn test_collect_directives_region() {
         let src = "```proof:region name=header\nHello world\nproof:element kind=label value=\"X\" width=5\n```";
         let dirs = collect_directives(src);
@@ -2985,5 +3061,111 @@ mod tests {
         let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
         assert!(codes.contains(&"DASHBOARD-003"),
             "expected DASHBOARD-003 (overlap), got: {:?}", codes);
+    }
+
+    // ── generate_toc: section= scoping ────────────────────────────────────────
+
+    const SAMPLE_DOC: &str = "\
+# Doc Title
+
+## Intro
+
+Some prose.
+
+## API Reference
+
+### Endpoints
+
+#### GET /widgets
+
+#### POST /widgets
+
+### Authentication
+
+## Migration
+
+### Upgrade Steps
+";
+
+    #[test]
+    fn toc_no_section_lists_everything() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", None);
+        assert!(out.contains("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Migration"));
+        assert!(out.contains("Upgrade Steps"));
+    }
+
+    #[test]
+    fn toc_section_filters_to_descendants() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Authentication"));
+        assert!(out.contains("GET /widgets"));
+        // The anchor heading itself is NOT listed — only its children
+        assert!(!out.contains("API Reference"),
+            "section anchor heading must be excluded from output, got:\n{}", out);
+        // Sibling sections must NOT appear
+        assert!(!out.contains("Migration"),
+            "headings outside the section must be excluded, got:\n{}", out);
+        assert!(!out.contains("Upgrade Steps"));
+        assert!(!out.contains("Intro"));
+    }
+
+    #[test]
+    fn toc_section_respects_max_depth() {
+        // max-depth=3 + section="API Reference" => H3 only (H4 endpoints excluded)
+        let out = generate_toc(SAMPLE_DOC, 3, "list", Some("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Authentication"));
+        assert!(!out.contains("GET /widgets"),
+            "H4 must be filtered by max_depth=3, got:\n{}", out);
+        assert!(!out.contains("POST /widgets"));
+    }
+
+    #[test]
+    fn toc_section_case_insensitive_match() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("api reference"));
+        assert!(out.contains("Endpoints"),
+            "section match must be case-insensitive, got:\n{}", out);
+    }
+
+    #[test]
+    fn toc_section_not_found_returns_empty() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Nonexistent Section"));
+        assert!(out.is_empty(),
+            "missing section should produce empty TOC, got:\n{}", out);
+    }
+
+    #[test]
+    fn toc_section_works_for_h3_anchor() {
+        // section= can target any heading, not just H2
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Endpoints"));
+        assert!(out.contains("GET /widgets"));
+        assert!(out.contains("POST /widgets"));
+        // Must stop at sibling ### Authentication
+        assert!(!out.contains("Authentication"));
+    }
+
+    #[test]
+    fn toc_section_numbered_renumbers_from_section() {
+        let out = generate_toc(SAMPLE_DOC, 4, "numbered", Some("API Reference"));
+        // Within the section, the first H3 is "1." (re-rooted by min_level)
+        assert!(out.starts_with("1. Endpoints"),
+            "numbered TOC must renumber from the section root, got:\n{}", out);
+    }
+
+    #[test]
+    fn toc_directive_parses_section_attr() {
+        let src = "```proof:toc section=\"API Reference\" max-depth=3\n```\n";
+        let dirs = collect_directives(src);
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Toc { section, max_depth, .. } => {
+                assert_eq!(section.as_deref(), Some("API Reference"));
+                assert_eq!(*max_depth, 3);
+            }
+            _ => panic!("expected Directive::Toc"),
+        }
     }
 }

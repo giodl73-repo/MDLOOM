@@ -77,7 +77,7 @@ root: proof directives
   - proof:stat: KPI stat cell
   - proof:notes: Speaker notes (excluded from slide output)
   - proof:right: Right-align a block of text (complement to proof:centered)
-  - proof:ol: Ordered (numbered) list with decimal sub-numbering
+  - proof:numbered-list (alias: proof:ol): Ordered (numbered) list with decimal sub-numbering
   - proof:toc: Auto-generate table of contents from headings
 - Compositor directives
   - proof:slide: Full slide declaration in a .slides.source.md file
@@ -153,6 +153,32 @@ root: My Project
 - Backend: Rust
 ```
 ````
+
+---
+
+## proof:toc — Table of Contents
+
+Generate a TOC from the headings of any markdown source. With no `source=`,
+the TOC is built from the surrounding compiled file. Use `style=` for the
+visual form, `max-depth=` to cap heading levels, and `section=` to scope
+the TOC to a single subsection — only the descendants of the heading whose
+text matches `section=` are listed (the anchor heading itself is omitted).
+
+Attributes: `source` (md:// URI, optional), `max-depth` (default 3),
+`style` (`list` | `tree` | `numbered`), `section` (heading text — case-insensitive match).
+
+````markdown
+```proof:toc max-depth=2 style=numbered
+```
+
+```proof:toc section="API Reference" max-depth=4
+```
+````
+
+The second example produces a TOC of every heading nested under
+`## API Reference`, stopping at the next H2 sibling. Combine with
+`style=tree` for a navigable visual, or `style=numbered` to call out
+"we are on item 3.2" during a walkthrough.
 
 ---
 

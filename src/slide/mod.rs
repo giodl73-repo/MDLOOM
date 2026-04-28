@@ -5,12 +5,15 @@ pub mod layout;
 pub mod parser;
 
 pub use canvas::SlideCanvas;
-pub use bullets::{render_bullets, BulletConfig, BulletWarning};
+pub use bullets::{render_bullets, BulletConfig, BulletWarning,
+                  parse_reveal_step, has_reveal_markers, render_bullets_pages};
 pub use inline::{render_quote, render_centered, render_right, render_ol,
                  render_stat, render_callout, render_divider, CalloutStyle, DividerStyle};
-pub use layout::{render_slide, render_title, render_title_content, render_two_column,
-                 render_section, render_stats, render_blank, apply_theme, center_in_width,
-                 render_body_lines};
+pub use layout::{render_slide, render_slide_with_warnings, render_slide_pages,
+                 render_title, render_title_content,
+                 render_two_column, render_section, render_stats, render_blank, apply_theme,
+                 center_in_width, render_body_lines, render_body_lines_with_warnings,
+                 render_body_lines_pages};
 pub use parser::{parse_slide_doc, SlideError};
 
 // ─────────────────────────────────────────────────────────
@@ -36,7 +39,7 @@ impl Default for SlideMeta {
             theme: SlideTheme::Minimal,
             show_numbers: false,
             font_width: 1,
-            max_bullets: 6,
+            max_bullets: 4,   // 30-second rule — see bullets.rs SLIDE-001
             max_depth: 4,
         }
     }

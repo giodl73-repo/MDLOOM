@@ -194,7 +194,7 @@ title: "Narrow slide"
 
 ```proof:slide layout=section
 title: "New Directives"
-subtitle: "proof:right · proof:ol · proof:toc · word-wrap"
+subtitle: "proof:right · proof:numbered-list · proof:toc · word-wrap"
 ```
 
 ---
@@ -217,16 +217,17 @@ Date: 2026-04-28
 ---
 
 ```proof:slide layout=title-content
-title: "proof:ol — Ordered (numbered) list"
+title: "proof:numbered-list — Ordered (numbered) list"
 ---
-Use proof:ol when sequence matters — install steps, runbook procedures,
-ranked priorities, anything the reader is meant to follow in order.
-Indented children get decimal sub-numbering (1.1, 1.2, 2.1) so cross-
-references stay stable as the list grows. Reach for proof:bullets
-instead when the items are peers with no implied order; switching to
-proof:ol is the cheapest way to signal "do these in this sequence."
+Use proof:numbered-list (short-form: proof:ol) when sequence matters —
+install steps, runbook procedures, ranked priorities, anything the
+reader is meant to follow in order. Indented children get decimal
+sub-numbering (1.1, 1.2, 2.1) so cross-references stay stable as the
+list grows. Reach for proof:bullets instead when the items are peers
+with no implied order; switching to proof:numbered-list is the
+cheapest way to signal "do these in this sequence."
 
-proof:ol
+proof:numbered-list
 - Install proof
   - Clone the repo
   - Run cargo build
@@ -246,12 +247,16 @@ an opening agenda, a section divider in long decks, or a recap before
 Q&A. Headings stay the single source of truth: rename a section in
 prose and the TOC follows, no manual sync. Pick `tree` when nesting
 matters, `numbered` when you want to call out "we are here on item 3,"
-and `list` (default) for a flat agenda.
+and `list` (default) for a flat agenda. Use `section="API Reference"`
+to scope the TOC to one subsection — only the descendants of that
+heading appear, perfect for a per-section mini-TOC at the top of a
+long chapter.
 
 proof:bullets
 - style=list: - heading bullet list
 - style=tree: └── tree connectors
 - style=numbered: 1. decimal numbering
+- section="…": only descendants of that heading
 ```
 
 ---
