@@ -289,6 +289,248 @@ output_dir = "docs/presentations"
 
 ---
 
+## US-31 — Writer adding attributed block quotes to a guide
+
+**Who**: A technical writer who wants visually distinct quotations in a guide.
+**Goal**: Render `proof:blockquote` with a left-bar margin and attribution line.
+
+`src/user-scenarios/31-blockquote.source.md`:
+
+---
+
+## US-32 — Analyst building a bar chart from a data table
+
+**Who**: An analyst with a markdown table of benchmark results.
+**Goal**: Render a horizontal bar chart directly from the data with `proof:chart`.
+
+`src/user-scenarios/32-benchmark-chart.source.md`:
+
+---
+
+## US-33 — Presenter using cross-references that survive heading renames
+
+**Who**: A technical author who writes `See Section X` links between documents.
+**Goal**: `proof:xref` resolves heading text at compile time; when the heading is renamed, one recompile updates all references.
+
+`src/user-scenarios/33-xref-guide.source.md`:
+
+---
+
+## US-34 — Presenter building a progressive reveal deck
+
+**Who**: A speaker who wants to reveal bullet points one at a time during a live talk.
+**Goal**: `.slides.source.md` with `[N]` markers; compiled output has one canvas per reveal step.
+
+`src/user-scenarios/34-reveal-deck.slides.source.md`:
+
+---
+
+## US-35 — Team lead adding consistent footer and agenda to a deck
+
+**Who**: An engineering manager who wants every slide to show the author, date, and a slide counter, plus an auto-generated agenda slide.
+**Goal**: `footer: true` + `layout=agenda` in front-matter.
+
+`src/user-scenarios/35-footer-agenda.slides.source.md`:
+
+---
+
+## US-36 — Ops engineer checking corpus health before a deploy
+
+**Who**: An ops engineer running `proof status` to confirm the corpus is fully compiled and error-free before a docs release.
+**Goal**: Single-screen health summary — source count, stale count, last compile time.
+
+```bash
+proof status docs/
+```
+
+**Covers**: `proof status`, `.proof/last-check.json`
+
+---
+
+## US-37 — Author finding orphaned figures before archiving
+
+**Who**: A documentation manager cleaning up a large corpus.
+**Goal**: `proof check --unused` identifies figures that no `.source.md` references.
+
+```bash
+proof check . --unused
+```
+
+**Covers**: `proof check --unused`, `md_unused_figure`
+
+---
+
+## US-38 — Developer safely renaming a heading
+
+**Who**: A developer who wants to rename `## Authentication` to `## Auth Flow` without breaking any source references.
+**Goal**: `proof depends` lists every file to update before making the rename.
+
+```bash
+proof depends md://api.md#authentication
+```
+
+**Covers**: `proof depends`, reverse dependency lookup
+
+---
+
+## US-39 — Documentation lead enforcing no Draft sections in production
+
+**Who**: A team lead who wants to prevent `## Draft` or `## TODO` headings from shipping.
+**Goal**: `forbidden_h2` in `[[section_schemas]]` emits `md_forbidden_section` on any matching H2.
+
+```toml
+[[section_schemas]]
+paths = ["docs/**/*.md"]
+forbidden_h2 = ["Draft", "TODO", "WIP", "Placeholder"]
+```
+
+**Covers**: `forbidden_h2`, `md_forbidden_section`
+
+---
+
+## US-40 — Technical writer enforcing strict section structure
+
+**Who**: A writer who wants each guide to use only approved H2 sections.
+**Goal**: `optional_h2` allowlist — any H2 not in the approved list emits `md_unexpected_section`.
+
+```toml
+[[section_schemas]]
+paths = ["guides/**/*.md"]
+required_h2_all = ["Overview", "Decision Cheat Sheet"]
+optional_h2 = ["Background", "See Also", "Examples"]
+```
+
+**Covers**: `optional_h2`, H2 allowlist, `md_unexpected_section`
+
+---
+
+## US-41 — Author generating DaVinci invariants with an AI CLI
+
+**Who**: A developer who wants to lock a complex architecture diagram but doesn't know which invariants to write.
+**Goal**: `proof spec-generate --ai` calls `claude -p` with the figure content and returns a `[[davinci]]` block.
+
+```toml
+[ai]
+command = "claude"
+args    = ["-p", "{prompt}"]
+```
+
+```bash
+proof spec-generate "md://figures/arch.md:figure:goroutine-scheduler" --ai
+```
+
+**Covers**: `[ai]` config block, `proof spec-generate --ai`, configurable CLI
+
+---
+
+## US-42 — Developer protecting a figure with an inline pin declaration
+
+**Who**: A developer who wants to declare a figure's expected DaVinci pin in the source document, not just in proof.toml.
+**Goal**: `proof:include pin=id` emits COMPILE-007 warning when no matching `[[davinci]]` entry exists.
+
+`src/user-scenarios/42-inline-pin.source.md`:
+
+---
+
+## US-43 — CI engineer grouping 200 slide warnings into a summary
+
+**Who**: A CI engineer running `proof check` on a 50-slide deck corpus.
+**Goal**: `--deduplicate` collapses `42x SLIDE-001 in docs/slides/*.md` instead of 42 individual lines.
+
+```bash
+proof check . --deduplicate
+```
+
+**Covers**: `proof check --deduplicate`, `format_deduplicated`
+
+---
+
+## US-44 — Developer catching a renamed heading before compile
+
+**Who**: A developer who renamed `## Setup` to `## Installation` in `guide.md` and wants to catch all broken references.
+**Goal**: `proof check` emits `md_broken_heading` for any `.source.md` that references `md://guide.md#setup`.
+
+```bash
+proof check src/
+# → error [md_broken_heading]: Heading 'setup' not found in 'guide.md'
+```
+
+**Covers**: heading path validation, `md_broken_heading`
+
+---
+
+## US-45 — Author scoping a TOC to one section
+
+**Who**: A writer maintaining a long API reference who wants a TOC only for the Authentication section.
+**Goal**: `proof:toc section="Authentication"` lists only headings nested under that section.
+
+`src/user-scenarios/45-scoped-toc.source.md`:
+
+---
+
+## US-46 — Analyst adding a progress bar to a live deck
+
+**Who**: An analyst presenting a 10-slide deck who wants the audience to see their position.
+**Goal**: `progress-bar: true` in `.slides.source.md` front-matter renders `████░░░ N/M` between each separator and canvas.
+
+`src/user-scenarios/46-progress-deck.slides.source.md`:
+
+---
+
+## US-47 — Author catching a symbol typo
+
+**Who**: A writer who types `[sym:checkmar]` instead of `[sym:checkmark]`.
+**Goal**: Compile emits `Unknown symbol 'checkmar' — did you mean 'checkmark'?`
+
+`src/user-scenarios/47-symbol-typo.source.md`:
+
+---
+
+## US-48 — Developer configuring ollama as the AI CLI
+
+**Who**: A developer who runs local models and wants `proof spec-generate --ai` to use ollama instead of claude.
+**Goal**: `[ai]` config block with `command = "ollama"` and `args = ["run", "llama3", "{prompt}"]`.
+
+```toml
+[ai]
+command = "ollama"
+args    = ["run", "llama3", "{prompt}"]
+```
+
+```bash
+proof spec-generate "md://figures/arch.md:figure:0" --ai
+```
+
+**Covers**: `[ai]` config, stdin vs arg substitution, configurable CLI
+
+---
+
+## US-49 — Writer using proof:xref with note format
+
+**Who**: A technical writer who wants "See also" callouts in a prose document.
+**Goal**: `proof:xref format=note` renders `> **See also:** [Heading](link)`.
+
+`src/user-scenarios/49-xref-note.source.md`:
+
+---
+
+## US-50 — Second compile faster due to Tier 2 resolve cache
+
+**Who**: A developer iterating on a guide that includes the same figure 5 times.
+**Goal**: On the second compile, all 5 includes hit the Tier 2 resolve cache — no mdpath re-parse.
+
+```bash
+# First compile: 5 cache misses → 5 mdpath resolves → 5 cache stores
+proof compile src/guide.source.md
+
+# Second compile (figure unchanged): 5 cache hits → 0 mdpath calls
+proof compile src/guide.source.md
+```
+
+**Covers**: Tier 2 resolve cache, `resolve_uri_cached`, `.proof/cache/resolve/`
+
+---
+
 ## Results
 
 Run: `proof compile src/user-scenarios/ --output-dir docs/user-scenarios/`
@@ -325,8 +567,28 @@ Run: `proof compile src/user-scenarios/ --output-dir docs/user-scenarios/`
 | US-28 | ✓ compiles | Large corpus scan — 2,703-file baseline check, 0 errors |
 | US-29 | ✓ CLI | Fix pipeline on 47 errors — `proof fix --min-confidence high` |
 | US-30 | ✓ compiles | CI `--delete-on-error` workflow — stale output cleaned on failure |
+| US-31 | ✓ compiles | proof:blockquote — bar margin + attribution renders correctly |
+| US-32 | ✓ compiles | proof:chart bar charts from inline data — two charts |
+| US-33 | ✓ compiles | proof:xref inline + note format — self-referential headings resolve |
+| US-34 | ✓ compiles | proof:reveal — 4-slide deck, 2 SLIDE-001 warnings (expected in demo) |
+| US-35 | ✓ compiles | Slide footer + layout=agenda — footer on all slides, agenda auto-generated |
+| US-36 | ✓ CLI | proof status — source/compiled/stale counts, last compile time |
+| US-37 | ✓ CLI | proof check --unused — md_unused_figure for orphaned figures |
+| US-38 | ✓ CLI | proof depends — lists all references before renaming |
+| US-39 | ✓ config | forbidden_h2 — md_forbidden_section emitted for Draft/TODO headings |
+| US-40 | ✓ config | optional_h2 allowlist — md_unexpected_section for unlisted H2s |
+| US-41 | note | proof spec-generate --ai — requires claude or other CLI on PATH |
+| US-42 | ✓ compiles | proof:include pin= — document compiles, COMPILE-007 path explained |
+| US-43 | ✓ CLI | proof check --deduplicate — collapses repeated warnings |
+| US-44 | ✓ CLI | proof check catches md_broken_heading on renamed heading |
+| US-45 | ✓ compiles | proof:toc section= — scoped TOC for Authentication section only |
+| US-46 | ✓ compiles | progress-bar: true — 5-slide deck with ████░░░ N/M bars |
+| US-47 | ✓ compiles | [sym:checkmar] typo → SYMBOL-001 with did-you-mean 'checkmark' |
+| US-48 | note | [ai] config with ollama — requires ollama installed locally |
+| US-49 | ✓ compiles | proof:xref format=note and format=callout both render |
+| US-50 | ✓ perf | Tier 2 resolve cache — second compile skips mdpath re-parse |
 
-**Passed**: 28/30 runnable (US-07 and US-21 are library usage examples, not standalone CLI scenarios)
+**Passed**: 46/50 runnable (US-07, US-21 are library examples; US-41, US-48 require external AI CLI)
 
 ## Bugs found during scenario validation
 
