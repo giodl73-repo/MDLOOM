@@ -33,9 +33,12 @@ notify = { version = "6", features = ["macos_fsevent"] }
 # Workspace sub-crates
 proof-canvas = { path = "crates/proof-canvas" }
 proof-math   = { path = "crates/proof-math" }
-# Local development: uses sibling directory
-# Published: change to mdpath = "0.1" once crates.io is set up
-mdpath = { path = "../mdpath" }
+# Pinned by SHA so downstream consumers (e.g. icelines) can build from
+# git without needing the mdpath repo as a sibling on disk. Local dev
+# overrides this via `.cargo/config.toml` with `[patch."https://...MDPATH"]`
+# pointing at `../mdpath` — see README for the snippet. Once mdpath
+# publishes to crates.io we'll switch to a version constraint.
+mdpath = { git = "https://github.com/giodl73-repo/MDPATH", rev = "6666cb4368ebc4b1b7ec8d77169b524821e90e9c" }
 # Figure import — image-to-ASCII conversion
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
 # SVG rasterization (optional — enable with --features svg)

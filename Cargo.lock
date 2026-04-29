@@ -606,6 +606,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 [[package]]
 name = "mdpath"
 version = "0.5.0"
+source = "git+https://github.com/giodl73-repo/MDPATH?rev=6666cb4368ebc4b1b7ec8d77169b524821e90e9c#6666cb4368ebc4b1b7ec8d77169b524821e90e9c"
 dependencies = [
  "thiserror",
 ]
