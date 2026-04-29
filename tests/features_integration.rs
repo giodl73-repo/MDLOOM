@@ -454,6 +454,33 @@ fn tree_directive_counted_in_resolved_directives() {
 }
 
 #[test]
+fn directives_resolved_persists_through_cache_hit() {
+    // Regression for issue #5: the [[compile]] / repeated-compile flow returned
+    // directives_resolved=0 from the Tier-3 compile cache, even though the
+    // cached output contained correctly-rendered directives. The count must
+    // round-trip through the cache.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n\n```proof:blockquote\nQ.\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_path = dir.path().join("doc.md");
+    let cfg = GlintConfig::default();
+
+    // First compile: cold cache → real count.
+    let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert_eq!(first.directives_resolved, 2, "first compile must count both directives");
+    assert!(!first.from_cache, "first compile is a cache miss");
+
+    // Second compile: warm cache → must report the same count, not 0.
+    let second = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(second.from_cache, "second compile must hit the cache");
+    assert_eq!(
+        second.directives_resolved, 2,
+        "cached compile must restore the directive count, not return 0"
+    );
+}
+
+#[test]
 fn mixed_tree_and_other_directives_counted() {
     let dir = tempfile::tempdir().unwrap();
     // Two trees + one blockquote = 3 resolved

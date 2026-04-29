@@ -142,6 +142,12 @@ pub struct CompileCacheEntry {
     pub resolved_uris: Vec<String>,
     pub proof_version: String,
     pub created_at: u64,
+    /// Number of proof:* directives resolved during the compile that produced
+    /// this entry. Restored on cache hit so the "(N directives)" output stays
+    /// truthful across recompiles. `#[serde(default)]` keeps old entries
+    /// loadable (they restore as 0 — acceptable; they'll be re-cached on miss).
+    #[serde(default)]
+    pub directives_resolved: usize,
 }
 
 /// Compute the Tier 3 compile key.
@@ -223,6 +229,7 @@ pub fn store_compile_cache(
         resolved_uris,
         proof_version: proof_version().to_string(),
         created_at: epoch_ms(),
+        directives_resolved: 0,
     };
     save_compile_cache(root, &entry);
 }
@@ -397,10 +404,34 @@ mod tests {
             resolved_uris: vec!["md://data.md".to_string()],
             proof_version: proof_version().to_string(),
             created_at: epoch_ms(),
+            directives_resolved: 3,
         };
         save_compile_cache(root, &entry);
         let loaded = load_compile_cache(root, "testkey").unwrap();
         assert_eq!(loaded.compiled_text, "# Hello\n");
+        assert_eq!(loaded.directives_resolved, 3, "directives_resolved must round-trip through cache");
+    }
+
+    #[test]
+    fn compile_cache_old_entry_loads_with_zero_directives() {
+        // Older entries on disk lack the directives_resolved field. Verify the
+        // serde(default) annotation lets them load (as 0) instead of failing.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let _ = std::fs::create_dir_all(compile_dir(root));
+        let raw = r#"{
+            "compile_key": "oldkey",
+            "source_path": "src/x.source.md",
+            "output_path": "docs/x.md",
+            "compiled_text": "old",
+            "resolved_uris": [],
+            "proof_version": "0.5.0",
+            "created_at": 0
+        }"#;
+        std::fs::write(compile_dir(root).join("oldkey.json"), raw).unwrap();
+        let loaded = load_compile_cache(root, "oldkey").expect("must load old entry");
+        assert_eq!(loaded.compiled_text, "old");
+        assert_eq!(loaded.directives_resolved, 0);
     }
 
     #[test]

@@ -872,7 +872,7 @@ pub fn compile_file(
             crate::cache::save_path_index(root, &path_index);
             return Ok(CompileResult {
                 output_path: output_path.to_path_buf(),
-                directives_resolved: 0,
+                directives_resolved: entry.directives_resolved,
                 violations: vec![],
                 from_cache: true,
                 resolved_files: vec![],
@@ -1320,6 +1320,7 @@ pub fn compile_file(
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as u64,
+            directives_resolved: resolved_count,
         };
         crate::cache::save_compile_cache(root, &entry);
         crate::cache::save_path_index(root, &path_index);
