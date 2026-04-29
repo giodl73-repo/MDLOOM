@@ -435,3 +435,37 @@ fn cli_toc_compiles_correctly() {
     assert!(content.contains("Install"), "TOC should contain Install heading");
     assert!(content.contains("Usage"), "TOC should contain Usage heading");
 }
+
+// ─────────────────────────────────────────────────────────
+// Regression: proof:tree directive counted in directives_resolved (issue #3)
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn tree_directive_counted_in_resolved_directives() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    assert_eq!(result.directives_resolved, 1,
+        "expected 1 resolved directive for a single proof:tree, got {}", result.directives_resolved);
+}
+
+#[test]
+fn mixed_tree_and_other_directives_counted() {
+    let dir = tempfile::tempdir().unwrap();
+    // Two trees + one blockquote = 3 resolved
+    let src = "# Doc\n\n\
+        ```proof:tree kind=taxonomy\nroot: R1\n- a\n```\n\n\
+        ```proof:blockquote\nQuote text.\n```\n\n\
+        ```proof:tree kind=org\nroot: R2\n- b\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    assert_eq!(result.directives_resolved, 3,
+        "expected 3 resolved directives (2 tree + 1 blockquote), got {}", result.directives_resolved);
+}

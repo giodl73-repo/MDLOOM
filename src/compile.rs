@@ -1016,8 +1016,12 @@ pub fn compile_file(
             }
 
             Directive::Tree { kind, source, inline_body, attrs, .. } => {
-                generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, &mut violations)
-                    .unwrap_or_else(|e| {
+                match generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, &mut violations) {
+                    Ok(block) => {
+                        resolved_count += 1;
+                        block
+                    }
+                    Err(e) => {
                         // stub=true: WIP directive — downgrade error to warning, keep source block
                         let severity = if attrs.stub { ViolationSeverity::Warning } else { ViolationSeverity::Error };
                         violations.push(CompileViolation {
@@ -1031,7 +1035,8 @@ pub fn compile_file(
                             source_line: line_start + 1,
                         });
                         source_fallback(&source_lines, line_start, line_end)
-                    })
+                    }
+                }
             }
 
             Directive::Element { kind, source, field, inline_value, attrs, .. } => {
@@ -1514,8 +1519,8 @@ fn generate_tree_block(
     inline_body: &[String],
     attrs: &TreeAttrs,
     root: &Path,
-    _source_line: usize,
-    _violations: &mut Vec<CompileViolation>,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
 ) -> Result<String> {
     let body = match kind {
         "dirtree" => {
@@ -1552,7 +1557,7 @@ fn generate_tree_block(
                 let content = inline_body.join("\n");
                 match kind {
                     "org" | "taxonomy" | "dependency" => render_inline_tree(&content, attrs.indent_width)?,
-                    "outline" => render_inline_outline(&content)?,
+                    "outline" => render_inline_outline(&content, attrs.indent_width, source_line + 1, violations)?,
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else {
@@ -1662,36 +1667,79 @@ fn generate_toc(content: &str, max_depth: usize, style: &str, section: Option<&s
 }
 
 fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
-    let iw = indent_width.max(2);
-    let mut nodes: Vec<(usize, String)> = Vec::new();
+    let render_iw = indent_width.max(2);
 
+    // Pass 1: extract (raw_leading_ws, label, has_bullet) for each non-empty line.
+    // Strip leading whitespace and bullet markers separately so the parser can detect
+    // the input's indent unit independently of the rendering indent_width.
+    let mut parsed: Vec<(usize, String, bool)> = Vec::new();
     for line in content.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() { continue; }
-        if let Some(rest) = trimmed.strip_prefix("root:") {
-            nodes.push((0, rest.trim().to_string()));
+        let trimmed_end = line.trim_end();
+        if trimmed_end.is_empty() { continue; }
+
+        if let Some(rest) = trimmed_end.strip_prefix("root:") {
+            parsed.push((0, rest.trim().to_string(), false));
             continue;
         }
-        let leading = line.len() - line.trim_start_matches([' ', '-']).len();
-        // F86: first non-indented line without root: is treated as root
-        if leading == 0 && nodes.is_empty() && !trimmed.starts_with('-') {
-            nodes.push((0, trimmed.trim_start_matches([' ', '-']).trim().to_string()));
-            continue;
-        }
-        let depth = (leading / iw).max(1);
-        let label = trimmed.trim_start_matches([' ', '-']).trim();
+
+        let ws_len = line.len() - line.trim_start().len();
+        let after_ws = &line[ws_len..];
+        let (has_bullet, label_start) = if let Some(rest) = after_ws.strip_prefix("- ") {
+            (true, rest)
+        } else if after_ws == "-" {
+            (true, "")
+        } else {
+            (false, after_ws)
+        };
+        let label = label_start.trim().to_string();
         if label.is_empty() { continue; }
-        nodes.push((depth, label.to_string()));
+        parsed.push((ws_len, label, has_bullet));
     }
 
-    if nodes.is_empty() { anyhow::bail!("inline tree body is empty"); }
+    if parsed.is_empty() { anyhow::bail!("inline tree body is empty"); }
+
+    // Auto-detect input indent unit: smallest non-zero leading whitespace among
+    // bulleted lines. Falls back to 2 when no indented lines exist (single-level tree).
+    let parse_iw = parsed.iter()
+        .filter_map(|(ws, _, bullet)| if *bullet && *ws > 0 { Some(*ws) } else { None })
+        .min()
+        .unwrap_or(2);
+
+    // Pass 2: build (depth, label) using detected indent unit.
+    let mut nodes: Vec<(usize, String)> = Vec::with_capacity(parsed.len());
+    let mut have_root = false;
+    for (i, (ws, label, has_bullet)) in parsed.iter().enumerate() {
+        if !has_bullet && i == 0 && !have_root {
+            // First line without bullet acts as root (with or without root: prefix).
+            nodes.push((0, label.clone()));
+            have_root = true;
+            continue;
+        }
+        let depth = (ws / parse_iw) + 1;
+        nodes.push((depth, label.clone()));
+    }
 
     let mut out = String::new();
-    let _n = nodes.len();
     for (i, (depth, label)) in nodes.iter().enumerate() {
         if *depth == 0 { out.push_str(label); out.push('\n'); continue; }
-        let prefix = " ".repeat((*depth - 1) * iw);
-        let is_last = !nodes[i+1..].iter().any(|(d, _)| *d == *depth || *d < *depth);
+        // Build prefix: for each ancestor level 1..depth, emit `│` + (iw-1) spaces
+        // if that level is still "open" (has a later sibling), else iw spaces.
+        let mut prefix = String::new();
+        for ancestor in 1..*depth {
+            if is_ancestor_level_open(&nodes, i, ancestor) {
+                prefix.push('│');
+                for _ in 0..render_iw.saturating_sub(1) { prefix.push(' '); }
+            } else {
+                for _ in 0..render_iw { prefix.push(' '); }
+            }
+        }
+        // is_last: walk forward; the first node with depth <= current decides.
+        // - Hits depth < current first → we left this subtree without a sibling → last.
+        // - Hits depth == current first → there is a later sibling → not last.
+        // - End of list → last.
+        let is_last = nodes[i+1..].iter()
+            .find(|(d, _)| *d <= *depth)
+            .map_or(true, |(d, _)| *d < *depth);
         let connector = if is_last { "└── " } else { "├── " };
         out.push_str(&prefix);
         out.push_str(connector);
@@ -1701,7 +1749,44 @@ fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
     Ok(out.trim_end().to_string())
 }
 
-fn render_inline_outline(content: &str) -> Result<String> {
+/// Returns true if the ancestor at `level` has a later sibling reachable from `pos`,
+/// i.e. there is some node after `pos` with depth == level encountered before any
+/// node with depth < level.
+fn is_ancestor_level_open(nodes: &[(usize, String)], pos: usize, level: usize) -> bool {
+    for (d, _) in &nodes[pos + 1..] {
+        if *d < level { return false; }
+        if *d == level { return true; }
+    }
+    false
+}
+
+fn render_inline_outline(
+    content: &str,
+    indent_width: usize,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
+) -> Result<String> {
+    // Detect dash-bulleted body — kind=outline expects numbered bullets ("1. Foo")
+    // for inline content (per docs/guides/05-trees.md), but users coming from
+    // kind=org/kind=taxonomy commonly write dash bullets. Warn and auto-promote
+    // to taxonomy rendering rather than emitting the body verbatim.
+    let has_dash_bullet = content.lines().any(|line| {
+        let after_ws = line.trim_start();
+        after_ws.starts_with("- ") || after_ws == "-"
+    });
+    if has_dash_bullet {
+        violations.push(CompileViolation {
+            code: "TREE-001",
+            severity: ViolationSeverity::Warning,
+            uri: String::new(),
+            figure_id: None,
+            invariant: String::new(),
+            message: "kind=outline expects numbered bullets (e.g. '1. Foo', '1.1 Bar') for inline content; rendering as kind=taxonomy. Did you mean kind=taxonomy?".to_string(),
+            source_line,
+        });
+        return render_inline_tree(content, indent_width);
+    }
+
     let mut out = String::new();
     for line in content.lines() {
         let trimmed = line.trim_end();
@@ -2924,6 +3009,7 @@ fn render_one_directive_no_chrome(
         Directive::Tree { kind, source, inline_body, attrs, .. } => {
             match generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, violations) {
                 Ok(block) => {
+                    *resolved_count += 1;
                     // generate_tree_block wraps in chrome — strip it for canvas paste.
                     strip_compiled_chrome(&block)
                 }
@@ -3945,5 +4031,80 @@ Some prose.
             }
             other => panic!("expected Blockquote, got {:?}", other),
         }
+    }
+
+    // ── inline tree rendering: 2-space-indent nesting (issue #2) ─────────
+
+    #[test]
+    fn inline_tree_two_space_indent_renders_nested() {
+        // Reproduces issue #2: 2-space-indented children under a `- foo` parent
+        // must produce a nested tree, not flatten everything to siblings.
+        let body = "root: Plugin runtime channels\n\
+                    - Typed plugin hooks\n  \
+                    - File: src/plugins/hook-types.ts\n  \
+                    - Style: pull, modify\n\
+                    - Diagnostic event stream\n  \
+                    - File: src/infra/diagnostic-events.ts\n  \
+                    - Style: push, observe";
+        let out = render_inline_tree(body, 4).expect("render must succeed");
+        // Root.
+        assert!(out.starts_with("Plugin runtime channels"), "root must come first: {}", out);
+        // First-level children: Typed plugin hooks (Tee), Diagnostic event stream (Corner).
+        assert!(out.contains("├── Typed plugin hooks"), "first parent should be Tee:\n{}", out);
+        assert!(out.contains("└── Diagnostic event stream"), "second parent should be Corner:\n{}", out);
+        // Children must be indented under their parent and use Tee/Corner correctly.
+        assert!(out.contains("│   ├── File: src/plugins/hook-types.ts"), "first parent's first child should be Tee under │:\n{}", out);
+        assert!(out.contains("│   └── Style: pull, modify"), "first parent's last child should be Corner under │:\n{}", out);
+        assert!(out.contains("    ├── File: src/infra/diagnostic-events.ts"), "second parent's first child should be Tee under spaces:\n{}", out);
+        assert!(out.contains("    └── Style: push, observe"), "second parent's last child should be Corner under spaces:\n{}", out);
+    }
+
+    #[test]
+    fn inline_tree_four_space_indent_also_nests() {
+        // Auto-detect: 4-space input should also nest correctly.
+        let body = "root: Top\n\
+                    - One\n    \
+                    - One.A\n\
+                    - Two";
+        let out = render_inline_tree(body, 4).unwrap();
+        assert!(out.contains("├── One"), "got:\n{}", out);
+        assert!(out.contains("│   └── One.A"), "got:\n{}", out);
+        assert!(out.contains("└── Two"), "got:\n{}", out);
+    }
+
+    #[test]
+    fn inline_tree_last_sibling_uses_corner() {
+        // The buggy is_last logic flagged last-of-non-last-parent as Tee instead of Corner.
+        let body = "root: R\n- A\n  - A1\n  - A2\n- B";
+        let out = render_inline_tree(body, 4).unwrap();
+        // A2 is last child of A → must be Corner.
+        assert!(out.contains("│   └── A2"), "last child A2 should be Corner under non-last parent A:\n{}", out);
+    }
+
+    // ── inline outline: dash-bullet detection + auto-promote (issue #1) ──
+
+    #[test]
+    fn inline_outline_dash_bullets_warn_and_promote() {
+        let body = "root: Plugin lifecycle\n- 1 Discovery\n- 2 Manifest read\n- 3 Activation";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut violations).expect("must render");
+        // Warning emitted with TREE-001 code.
+        assert_eq!(violations.len(), 1, "expected exactly one warning, got {:?}", violations.iter().map(|v| v.code).collect::<Vec<_>>());
+        assert_eq!(violations[0].code, "TREE-001");
+        assert!(matches!(violations[0].severity, ViolationSeverity::Warning));
+        assert!(violations[0].message.contains("kind=taxonomy"), "warning should suggest kind=taxonomy: {}", violations[0].message);
+        // Body promoted to a rendered tree, not emitted verbatim.
+        assert!(out.contains("├──") || out.contains("└──"), "must contain tree connectors:\n{}", out);
+        assert!(out.contains("Plugin lifecycle"), "root must appear:\n{}", out);
+    }
+
+    #[test]
+    fn inline_outline_no_bullets_no_warning() {
+        // Numbered/heading content should NOT warn — render verbatim.
+        let body = "1. First\n1.1 Sub\n2. Second";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut violations).unwrap();
+        assert!(violations.is_empty(), "no warnings expected for numbered body");
+        assert!(out.contains("1. First"));
     }
 }
