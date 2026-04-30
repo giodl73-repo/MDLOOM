@@ -6,6 +6,7 @@ The throughline: a tool that began as an ASCII-box width checker has grown into 
 
 ```
 v0.7  ┌──────────────────────────────────────────────────────────────┐
+      │ stress test (US-61..110) + 4 real bugs surfaced & fixed       │
       │ spec-honesty · 8 chart kinds · md:// query params · snapshots │
       ├──────────────────────────────────────────────────────────────┤
 v0.6  │ xref · chart · reveal · AI CLI · author experience            │
@@ -21,6 +22,29 @@ v0.2  │ fix pipeline · draft · baseline                               │
 v0.1  │ check · ASCII box / flow / tree · markdown rules              │
       └──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## [0.7.1] — 2026-04-30 — *the stress-test release*
+
+A 50-scenario authoring stress test (US-61..110) shook out four real bugs that the v0.7.0 audit and the existing test suite had missed — exactly the value of writing realistic fixtures over narrow unit tests. All four are fixed in this release.
+
+### Fixed
+
+- **Chart-from-table parser was the *old* strict pipe parser.** `chart_data_from_table` still required `starts_with('|')` so it failed on mdpath's unbounded `a | b | c` output (parse_md_table was lenient since v0.7.0 but this site wasn't). Now delegates to parse_md_table for consistent behavior across every md:// table consumer.
+- **`kind=decision` had no inline-body dispatch.** generate_decision was wired into the source-URI arm but not the inline-body arm; an inline decision-table directive failed with "unknown tree kind 'decision'". The inline arm now also routes to generate_decision.
+- **`?count` silently dropped because split_md_query required `key=value`.** The query parser used `split_once('=')?` and bare keys like `?count` were filtered out before reaching apply_md_query. Bare keys now carry an empty value; operators that don't need one (count) work, ones that do error out cleanly.
+- **SYMBOL-SPEC overpromised proof:shape kinds.** Spec listed banner, badge, star, cloud (+ ribbon, callout-cloud, arrow examples). Code only ships banner, badge, ribbon. Spec trimmed to match what ships and now points readers at `proof figure import --shape <name>` for the 10-shape geometric roster (those live behind the figure-import path, not proof:shape).
+
+### Added
+
+- 50 new user scenarios (US-61..110) covering chart variants, tree kinds, slide layouts, dashboard compositions, md:// query params, math, symbols/elements, compile directives, lint cases, and full-doc integration. Each scenario has a committed source.md and rendered .md sibling so the output is reviewable in the diff.
+- Two new user guides: `docs/guides/10-query-params.md` (worked examples for ?select / ?filter / ?count / ?top / ?skip with composition rules) and `docs/guides/11-cache-snapshots.md` (save / restore / list / diff / prune / deploy workflow).
+- Release workflow (`.github/workflows/release.yml`) — pushing a `v*.*.*` tag now auto-builds the release binary, extracts the matching CHANGELOG section as notes, and creates the GitHub release with the binary attached.
+
+### Tests
+
+793 unit + integration tests still pass; zero build warnings. The 50-scenario stress test runs with 48 clean compiles + 2 intentional negative tests (US-85 ?select bogus column, US-109 missing source file) verifying error paths.
 
 ---
 
