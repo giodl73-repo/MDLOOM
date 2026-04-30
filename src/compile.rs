@@ -1342,11 +1342,17 @@ pub fn compile_file(
 // ─────────────────────────────────────────────────────────
 
 fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
-    let parsed = mdpath::parse(uri)
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
         .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    Ok((element.content, element.file))
+    let content = if query.is_empty() {
+        element.content
+    } else {
+        apply_md_query(&element.content, &query)?
+    };
+    Ok((content, element.file))
 }
 
 /// Tier 2 cached version of `resolve_uri`.
@@ -1357,7 +1363,8 @@ fn resolve_uri_cached(
     root: &Path,
     path_index: &mut crate::cache::PathIndex,
 ) -> Result<(String, PathBuf)> {
-    let parsed = mdpath::parse(uri)
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
         .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
 
     let target_file = root.join(&parsed.path);
@@ -1368,13 +1375,17 @@ fn resolve_uri_cached(
         Ok(c) => c,
         Err(_) => return resolve_uri(uri, root),
     };
-    if let Some(cached) = crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, uri, path_index) {
-        return Ok((cached, target_file));
+    if let Some(cached) = crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, &clean_uri, path_index) {
+        let final_content = if query.is_empty() { cached } else { apply_md_query(&cached, &query)? };
+        return Ok((final_content, target_file));
     }
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    crate::cache::store_resolve_cache(root, &target_file, &target_content, uri, &element.content, path_index);
-    Ok((element.content, element.file))
+    // Cache the *raw* mdpath content (independent of query params) so multiple
+    // queries against the same source share a single cache entry.
+    crate::cache::store_resolve_cache(root, &target_file, &target_content, &clean_uri, &element.content, path_index);
+    let final_content = if query.is_empty() { element.content } else { apply_md_query(&element.content, &query)? };
+    Ok((final_content, element.file))
 }
 
 /// Validate figure content with the proof linter before embedding.
@@ -1946,26 +1957,146 @@ fn heading_slug(text: &str) -> String {
 }
 
 fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
-    if src.starts_with("md://") {
-        // Try mdpath element resolution first (for addressed elements with selectors)
-        if let Ok(parsed) = mdpath::parse(src) {
+    // Split off any query string (?select=… &filter=… etc.) before delegating
+    // resolution so mdpath sees a clean URI. Transforms apply to table content
+    // after the file is read.
+    let (clean_src, query) = split_md_query(src);
+
+    let raw = if clean_src.starts_with("md://") {
+        if let Ok(parsed) = mdpath::parse(&clean_src) {
             if let Ok(element) = mdpath::resolve_with_classifier(&parsed, root, &mdpath::DefaultClassifier) {
-                return Ok(element.content);
+                element.content
+            } else {
+                let path_part = clean_src.strip_prefix("md://").unwrap_or(&clean_src);
+                let path = root.join(path_part);
+                if !path.exists() {
+                    anyhow::bail!("cannot resolve md:// URI {:?} — file not found and no addressed element", src);
+                }
+                std::fs::read_to_string(&path)
+                    .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+            }
+        } else {
+            let path_part = clean_src.strip_prefix("md://").unwrap_or(&clean_src);
+            let path = root.join(path_part);
+            std::fs::read_to_string(&path)
+                .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+        }
+    } else {
+        let path = root.join(&clean_src);
+        std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+    };
+
+    if query.is_empty() { return Ok(raw); }
+    apply_md_query(&raw, &query)
+}
+
+/// Split a URI into (uri_without_query, query_pairs). Query starts at the
+/// first `?`. Pairs are `&`-separated `key=value`. Mdpath's own selector
+/// syntax uses `#` so query stays distinct.
+fn split_md_query(src: &str) -> (String, Vec<(String, String)>) {
+    if let Some((head, tail)) = src.split_once('?') {
+        let pairs: Vec<(String, String)> = tail.split('&')
+            .filter_map(|kv| {
+                let (k, v) = kv.split_once('=')?;
+                Some((k.trim().to_string(), v.trim().to_string()))
+            })
+            .collect();
+        (head.to_string(), pairs)
+    } else {
+        (src.to_string(), Vec::new())
+    }
+}
+
+/// Apply query-param transforms to raw table content. Returns the transformed
+/// table as a markdown-table string. Operations applied in this order:
+///   filter → skip → top → select → count
+/// (count returns a single-cell synthetic table.)
+fn apply_md_query(raw: &str, query: &[(String, String)]) -> Result<String> {
+    use crate::tree::schema::parse_md_table;
+    let (headers, rows) = parse_md_table(raw)?;
+    let mut headers = headers;
+    let mut rows = rows;
+
+    // ── filter: col=value, col!=value, col>value, col<value (numeric for >/<)
+    for (k, v) in query.iter().filter(|(k, _)| k == "filter") {
+        let (col, op, target) = parse_filter_term(v)
+            .ok_or_else(|| anyhow::anyhow!("invalid ?filter term {:?} — expected col=val, col!=val, col>val, or col<val", v))?;
+        if !headers.iter().any(|h| h == col) {
+            anyhow::bail!("?filter references unknown column {:?}", col);
+        }
+        rows.retain(|r| {
+            let cell = r.get(col).cloned().unwrap_or_default();
+            match op {
+                FilterOp::Eq  => cell == target,
+                FilterOp::Neq => cell != target,
+                FilterOp::Gt  => cell.parse::<f64>().ok().zip(target.parse::<f64>().ok())
+                                   .map_or(false, |(a, b)| a > b),
+                FilterOp::Lt  => cell.parse::<f64>().ok().zip(target.parse::<f64>().ok())
+                                   .map_or(false, |(a, b)| a < b),
+            }
+        });
+    }
+
+    // ── skip: drop first N rows
+    if let Some((_, n)) = query.iter().find(|(k, _)| k == "skip") {
+        let n: usize = n.parse().map_err(|_| anyhow::anyhow!("?skip value must be a non-negative integer"))?;
+        if n >= rows.len() { rows.clear(); } else { rows.drain(0..n); }
+    }
+
+    // ── top: keep first N rows
+    if let Some((_, n)) = query.iter().find(|(k, _)| k == "top") {
+        let n: usize = n.parse().map_err(|_| anyhow::anyhow!("?top value must be a non-negative integer"))?;
+        rows.truncate(n);
+    }
+
+    // ── select: project columns
+    if let Some((_, cols_csv)) = query.iter().find(|(k, _)| k == "select") {
+        let want: Vec<String> = cols_csv.split(',').map(|s| s.trim().to_string()).collect();
+        for c in &want {
+            if !headers.iter().any(|h| h == c) {
+                anyhow::bail!("?select references unknown column {:?}", c);
             }
         }
-        // Fall back to reading the whole file directly (for plain data files without selectors)
-        let path_part = src.strip_prefix("md://").unwrap_or(src);
-        let path = root.join(path_part);
-        if path.exists() {
-            return std::fs::read_to_string(&path)
-                .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e));
-        }
-        anyhow::bail!("cannot resolve md:// URI {:?} — file not found and no addressed element", src)
-    } else {
-        let path = root.join(src);
-        std::fs::read_to_string(&path)
-            .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))
+        headers = want;
     }
+
+    // ── count: replace with single-cell "count" table
+    if query.iter().any(|(k, _)| k == "count") {
+        let n = rows.len();
+        return Ok(format!("| count |\n|-------|\n| {} |\n", n));
+    }
+
+    // Re-emit as a markdown table.
+    let mut out = String::new();
+    out.push('|');
+    for h in &headers { out.push_str(&format!(" {} |", h)); }
+    out.push('\n');
+    out.push('|');
+    for _ in &headers { out.push_str("---|"); }
+    out.push('\n');
+    for r in &rows {
+        out.push('|');
+        for h in &headers {
+            let cell = r.get(h).cloned().unwrap_or_default();
+            out.push_str(&format!(" {} |", cell));
+        }
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FilterOp { Eq, Neq, Gt, Lt }
+
+/// Parse a filter term like "Pos=F" or "Goals>30". Returns (col, op, target).
+fn parse_filter_term(term: &str) -> Option<(&str, FilterOp, String)> {
+    // Order matters: check 2-char ops first.
+    if let Some((c, t)) = term.split_once("!=") { return Some((c.trim(), FilterOp::Neq, t.trim().to_string())); }
+    if let Some((c, t)) = term.split_once('>') { return Some((c.trim(), FilterOp::Gt, t.trim().to_string())); }
+    if let Some((c, t)) = term.split_once('<') { return Some((c.trim(), FilterOp::Lt, t.trim().to_string())); }
+    if let Some((c, t)) = term.split_once('=') { return Some((c.trim(), FilterOp::Eq, t.trim().to_string())); }
+    None
 }
 
 // ─────────────────────────────────────────────────────────

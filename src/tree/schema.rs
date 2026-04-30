@@ -147,18 +147,22 @@ pub(crate) struct SourceRow {
 
 /// Parse a GFM markdown table string into (headers, rows) where each row
 /// is a HashMap<header, cell_value>.
+///
+/// Accepts both fully bounded pipe tables (`| a | b |`) and the unbounded
+/// form mdpath returns when extracting an addressed table (`a | b`). A line
+/// is treated as a table row if it contains at least one `|` character; the
+/// separator row (`---|---|---` or `------ | -----`) is identified by being
+/// the second non-prose row and consisting only of dashes/pipes/whitespace.
 pub fn parse_md_table(content: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
-    // Skip preamble (headings, prose) — find the first pipe-table line
     let lines: Vec<&str> = content.lines()
         .map(|l| l.trim())
-        .filter(|l| !l.is_empty() && l.starts_with('|'))
+        .filter(|l| !l.is_empty() && l.contains('|'))
         .collect();
 
     if lines.len() < 2 {
         bail!("source table must have at least a header row and a separator row");
     }
 
-    // Parse header
     let headers: Vec<String> = parse_table_row(lines[0])
         .into_iter()
         .map(|h| h.trim().to_string())
@@ -169,10 +173,13 @@ pub fn parse_md_table(content: &str) -> Result<(Vec<String>, Vec<HashMap<String,
         bail!("source table header row is empty");
     }
 
-    // Skip separator (line 1)
+    // Verify line 1 is a separator row (`---|---|---` or similar). If not,
+    // treat lines[1..] as data rows (some authors omit the separator).
+    let is_separator = lines[1].chars().all(|c| matches!(c, '-' | ':' | '|' | ' '));
+    let body_start = if is_separator { 2 } else { 1 };
+
     let mut rows = Vec::new();
-    for &line in &lines[2..] {
-        if !line.starts_with('|') { break; }
+    for &line in &lines[body_start..] {
         let cells: Vec<String> = parse_table_row(line)
             .into_iter()
             .map(|c| c.trim().to_string())
