@@ -5,8 +5,10 @@ All notable changes to **proof** (formerly **glint**), in [Keep a Changelog](htt
 The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → compile** — with stable figure addressing, invariant pinning, and a math/diagram/slide rendering pipeline on top.
 
 ```
-v0.6  ┌──────────────────────────────────────────────────────────────┐
-      │ xref · chart · reveal · AI CLI · author experience            │
+v0.7  ┌──────────────────────────────────────────────────────────────┐
+      │ spec-honesty · 8 chart kinds · md:// query params · snapshots │
+      ├──────────────────────────────────────────────────────────────┤
+v0.6  │ xref · chart · reveal · AI CLI · author experience            │
       ├──────────────────────────────────────────────────────────────┤
 v0.5  │ math · watch · multi-target compile · guides · source-link    │
       ├──────────────────────────────────────────────────────────────┤
@@ -22,7 +24,7 @@ v0.1  │ check · ASCII box / flow / tree · markdown rules              │
 
 ---
 
-## [Unreleased] — *the spec-honesty release*
+## [0.7.0] — 2026-04-30 — *the spec-honesty release*
 
 A push to close every overpromised "✅ Implemented" status against the actual code. Every item below was either claimed in spec but a placeholder, or labeled deferred. Now they ship.
 
@@ -51,7 +53,7 @@ A push to close every overpromised "✅ Implemented" status against the actual c
 
 ### Tests
 
-90+ new unit and integration tests across the changes. 790 total pass.
+93 new unit and integration tests across the changes. 793 total pass; zero build warnings.
 
 ---
 
