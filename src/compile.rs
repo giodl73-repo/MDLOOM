@@ -1568,9 +1568,18 @@ fn generate_tree_block(
                 }
             } else if !inline_body.is_empty() {
                 let content = inline_body.join("\n");
+                let mut map = FieldMap {
+                    name: attrs.name.clone(),
+                    parent: attrs.parent.clone(),
+                    label: attrs.label.clone(),
+                    ..Default::default()
+                };
                 match kind {
                     "org" | "taxonomy" | "dependency" => render_inline_tree(&content, attrs.indent_width)?,
                     "outline" => render_inline_outline(&content, attrs.indent_width, source_line + 1, violations)?,
+                    // Decision trees never have a free-form inline body shape;
+                    // an inline body for kind=decision is always a markdown table.
+                    "decision" => generate_decision(&content, &attrs.format, &mut map, attrs.indent_width)?,
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else {
@@ -1992,14 +2001,22 @@ fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
 }
 
 /// Split a URI into (uri_without_query, query_pairs). Query starts at the
-/// first `?`. Pairs are `&`-separated `key=value`. Mdpath's own selector
+/// first `?`. Pairs are `&`-separated `key=value`; bare keys without `=`
+/// (e.g. `?count`) carry an empty value string. Mdpath's own selector
 /// syntax uses `#` so query stays distinct.
 fn split_md_query(src: &str) -> (String, Vec<(String, String)>) {
     if let Some((head, tail)) = src.split_once('?') {
         let pairs: Vec<(String, String)> = tail.split('&')
-            .filter_map(|kv| {
-                let (k, v) = kv.split_once('=')?;
-                Some((k.trim().to_string(), v.trim().to_string()))
+            .filter(|kv| !kv.is_empty())
+            .map(|kv| {
+                if let Some((k, v)) = kv.split_once('=') {
+                    (k.trim().to_string(), v.trim().to_string())
+                } else {
+                    // Bare key (e.g. ?count) — value is empty; downstream
+                    // operators that don't need a value (count) work; ones
+                    // that do (filter/select/top/skip) error out cleanly.
+                    (kv.trim().to_string(), String::new())
+                }
             })
             .collect();
         (head.to_string(), pairs)
@@ -2213,41 +2230,29 @@ fn resolve_chart_data(
     }
 }
 
-/// Parse a markdown pipe table and extract `(label_col, value_col)` as a
-/// `ChartData`. Header row determines column order; values must parse as f64.
+/// Parse a markdown table and extract `(label_col, value_col)` as a `ChartData`.
+/// Delegates to `tree::schema::parse_md_table` so the chart consumer accepts
+/// the same lenient table forms (bounded `| a | b |` and inner-pipe `a | b`)
+/// as every other md:// table consumer.
 fn chart_data_from_table(
     content: &str,
     label_col: &str,
     value_col: &str,
 ) -> std::result::Result<crate::chart::ChartData, String> {
-    let mut rows: Vec<Vec<String>> = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('|') { continue; }
-        let cells: Vec<String> = trimmed.trim_matches('|').split('|')
-            .map(|c| c.trim().to_string())
-            .collect();
-        rows.push(cells);
+    let (headers, table_rows) = crate::tree::schema::parse_md_table(content)
+        .map_err(|e| format!("{}", e))?;
+    if !headers.iter().any(|h| h == label_col) {
+        return Err(format!("label column {:?} not found in header", label_col));
     }
-    if rows.len() < 2 {
-        return Err("expected pipe table with header + separator + body rows".to_string());
+    if !headers.iter().any(|h| h == value_col) {
+        return Err(format!("value column {:?} not found in header", value_col));
     }
-    let header = &rows[0];
-    let label_idx = header.iter().position(|h| h == label_col)
-        .ok_or_else(|| format!("label column {:?} not found in header", label_col))?;
-    let value_idx = header.iter().position(|h| h == value_col)
-        .ok_or_else(|| format!("value column {:?} not found in header", value_col))?;
-
-    // Skip header (row 0) and separator (row 1, all dashes).
     let mut points = Vec::new();
-    for (i, row) in rows.iter().enumerate().skip(1) {
-        if row.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
-            continue;
-        }
-        if row.len() <= label_idx.max(value_idx) { continue; }
-        let label = row[label_idx].clone();
-        let value: f64 = row[value_idx].parse()
-            .map_err(|_| format!("row {}: invalid number {:?}", i, row[value_idx]))?;
+    for (i, row) in table_rows.iter().enumerate() {
+        let label = row.get(label_col).cloned().unwrap_or_default();
+        let value_str = row.get(value_col).cloned().unwrap_or_default();
+        let value: f64 = value_str.parse()
+            .map_err(|_| format!("row {}: invalid number {:?}", i + 1, value_str))?;
         points.push(crate::chart::ChartPoint { label, value, extras: Vec::new() });
     }
     Ok(crate::chart::ChartData(points))

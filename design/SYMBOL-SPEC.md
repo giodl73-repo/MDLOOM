@@ -15,7 +15,7 @@ Three tiers:
 | Tier | What | Width | Example |
 |------|------|-------|---------|
 | **Unicode symbol** | Single named character | 1 or 2 cols | `★` `✓` `⚠` `🏆` |
-| **ASCII shape** | Multi-line ASCII art block | N cols × M rows | banner, badge, star, cloud |
+| **ASCII shape** | Multi-line ASCII art block | N cols × M rows | banner, badge, ribbon |
 | **Emoji** | Unicode emoji (width-aware) | 2 cols | `🏒` `🥅` `📊` |
 
 ---
@@ -77,12 +77,15 @@ Sizes:
 
 Multi-line ASCII art block. Shapes are named templates with optional text slots.
 
+Currently supported: `banner`, `badge`, `ribbon`. The geometric image-import
+shapes (circle, heart, star, octagon, hexagon, etc.) listed in FIGURE-SPEC
+are exposed via `proof figure import --shape <name>`, not via `proof:shape`
+in source documents.
+
 ```
 proof:shape name=banner title="Section 2 — Defense" style=double
 proof:shape name=badge label="MVP" style=star
 proof:shape name=ribbon text="WINNER" direction=diagonal
-proof:shape name=callout-cloud text="Did you know?"
-proof:shape name=arrow direction=right size=3
 ```
 
 ---
