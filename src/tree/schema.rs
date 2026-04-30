@@ -249,7 +249,7 @@ pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<Stri
 
 /// Build a list of TreeNodes in depth-first order from a flat list of (name, parent, label).
 /// Handles cycles (nodes whose parent doesn't exist are treated as orphans).
-pub fn build_dfs_tree(
+pub(crate) fn build_dfs_tree(
     rows: &[SourceRow],
     map: &FieldMap,
 ) -> Result<Vec<TreeNode>> {

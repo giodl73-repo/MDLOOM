@@ -1,7 +1,7 @@
 # proof chart — Implementation Plan
 
 > **Spec**: `design/CHART-SPEC.md`  
-> **Status**: ⚡ MVP implemented — `src/chart/` (bar, line kinds). Full wave plan (scatter, heatmap, stacked-bar, waterfall, gantt, area) deferred.  
+> **Status**: ✅ Implemented — `src/chart/`. All ten roster kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. `sankey` is intentionally out of scope (see CHART-SPEC for rationale). The wave plan below is now historical context, not a forward plan.  
 > **Implemented**: `proof:chart` compile directive live. `proof chart check` and `proof chart generate` CLI stubs present.
 
 ---

@@ -349,18 +349,42 @@ fn validate_t2(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
 }
 
 /// T-3: Indentation per level is consistent.
-fn validate_t3(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
-    let diags = Vec::new();
-    // We already detect indent_width at parse time. Here we check for any node
-    // whose leading spaces don't divide evenly by indent_width.
+///
+/// Detects the dominant indent unit from the smallest non-zero leading-space
+/// count across nodes, then flags any non-root node whose leading spaces
+/// aren't an exact multiple of that unit. Continuation lines are checked the
+/// same way — a `│` at irregular column makes the visual hierarchy ambiguous.
+fn validate_t3(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+
+    // Detect the indent unit: smallest non-zero leading-space count seen.
+    // Defaults to 4 when no indented nodes exist (single-level tree → no T-3 to check anyway).
+    let unit = nodes.iter()
+        .map(|n| n.raw.len() - n.raw.trim_start_matches(' ').len())
+        .filter(|w| *w > 0)
+        .min()
+        .unwrap_or(4);
+
+    if unit == 0 { return diags; }
+
     for node in nodes {
-        let leading_spaces = node.raw.len() - node.raw.trim_start_matches(' ').len();
-        if node.indent_level == 0 && leading_spaces == 0 { continue; }
-        // The raw leading spaces should equal indent_level * indent_width
-        // (or indent_level * indent_width + offset for continuation lines).
-        // Only flag if the detected level is fractional (would indicate irregular indentation).
-        // This is a heuristic — real T-3 validation requires knowing the global indent_width.
-        // We skip this for now as it requires cross-node context already captured in parse_tree_block.
+        let leading = node.raw.len() - node.raw.trim_start_matches(' ').len();
+        // Root with no indent is fine.
+        if node.indent_level == 0 && leading == 0 { continue; }
+        // Non-multiple of the detected unit → irregular indent.
+        if leading > 0 && leading % unit != 0 {
+            let label_for_msg = if node.label.is_empty() { "(continuation)".to_string() }
+                                else { format!("{:?}", node.label) };
+            diags.push(Diagnostic::warning(
+                path.to_path_buf(),
+                node.line_no, 1,
+                "tree_indent",
+                format!(
+                    "line {} {}: leading-space count {} is not a multiple of detected indent unit {} (T-3)",
+                    node.line_no, label_for_msg, leading, unit
+                ),
+            ));
+        }
     }
     diags
 }
@@ -770,6 +794,35 @@ mod tests {
         let diags = check_str(content);
         let t4 = diags.iter().filter(|d| d.code == "tree_orphan").count();
         assert_eq!(t4, 0, "leaf without continuation is valid:\n{:?}", diags);
+    }
+
+    // ── T-3 indent-consistency lint ──────────────────────
+
+    #[test]
+    fn t3_consistent_4_space_indent_no_warnings() {
+        let content = "```dirtree\nproject/\n├── src/\n│   └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t3 = diags.iter().filter(|d| d.code == "tree_indent").count();
+        assert_eq!(t3, 0, "consistent 4-space indent should have no T-3 warnings:\n{:?}", diags);
+    }
+
+    #[test]
+    fn t3_consistent_2_space_indent_no_warnings() {
+        let content = "```dirtree\nproject/\n├── src/\n│ └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t3 = diags.iter().filter(|d| d.code == "tree_indent").count();
+        assert_eq!(t3, 0, "consistent 2-space indent should have no T-3 warnings:\n{:?}", diags);
+    }
+
+    #[test]
+    fn t3_irregular_indent_fires_warning() {
+        // Mix of 2-space and 3-space indent — irregular relative to unit=2.
+        let content = "```dirtree\nroot/\n  └── a/\n   └── b\n```";
+        let diags = check_str(content);
+        let t3: Vec<_> = diags.iter().filter(|d| d.code == "tree_indent").collect();
+        assert!(!t3.is_empty(), "irregular indent should fire T-3:\n{:?}", diags);
+        assert!(t3.iter().any(|d| d.message.contains("T-3")),
+            "T-3 message expected: {:?}", t3.iter().map(|d| &d.message).collect::<Vec<_>>());
     }
 
     #[test]

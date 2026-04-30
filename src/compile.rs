@@ -2019,7 +2019,7 @@ fn apply_md_query(raw: &str, query: &[(String, String)]) -> Result<String> {
     let mut rows = rows;
 
     // ── filter: col=value, col!=value, col>value, col<value (numeric for >/<)
-    for (k, v) in query.iter().filter(|(k, _)| k == "filter") {
+    for (_, v) in query.iter().filter(|(k, _)| k == "filter") {
         let (col, op, target) = parse_filter_term(v)
             .ok_or_else(|| anyhow::anyhow!("invalid ?filter term {:?} — expected col=val, col!=val, col>val, or col<val", v))?;
         if !headers.iter().any(|h| h == col) {
