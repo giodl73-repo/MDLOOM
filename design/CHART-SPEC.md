@@ -1,6 +1,6 @@
 # proof chart — ASCII Chart Composer and Validator
 
-> **Status**: ✅ Implemented (MVP) — `src/chart/`. Bar and line chart kinds live. Full kind roster (scatter, heatmap, stacked-bar, waterfall, gantt, area, candlestick, sankey, timeline) deferred to future milestone.
+> **Status**: ✅ Implemented — `src/chart/`. Kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. **Removed from scope:** `sankey` — proportional flow diagrams quantize poorly to fixed-width character cells (flow widths can't be sub-cell, and overlapping/crossing flows are unrepresentable without color). Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or render an SVG via an external tool and embed via `proof:include`.
 
 ---
 

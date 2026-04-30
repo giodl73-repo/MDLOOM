@@ -2248,7 +2248,7 @@ fn chart_data_from_table(
         let label = row[label_idx].clone();
         let value: f64 = row[value_idx].parse()
             .map_err(|_| format!("row {}: invalid number {:?}", i, row[value_idx]))?;
-        points.push(crate::chart::ChartPoint { label, value });
+        points.push(crate::chart::ChartPoint { label, value, extras: Vec::new() });
     }
     Ok(crate::chart::ChartData(points))
 }

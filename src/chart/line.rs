@@ -195,7 +195,7 @@ mod tests {
     }
 
     fn pts(pairs: &[(&str, f64)]) -> ChartData {
-        ChartData(pairs.iter().map(|(l, v)| ChartPoint { label: l.to_string(), value: *v }).collect())
+        ChartData(pairs.iter().map(|(l, v)| ChartPoint { label: l.to_string(), value: *v, extras: Vec::new() }).collect())
     }
 
     #[test]
