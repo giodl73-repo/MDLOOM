@@ -22,6 +22,39 @@ v0.1  │ check · ASCII box / flow / tree · markdown rules              │
 
 ---
 
+## [Unreleased] — *the spec-honesty release*
+
+A push to close every overpromised "✅ Implemented" status against the actual code. Every item below was either claimed in spec but a placeholder, or labeled deferred. Now they ship.
+
+### Added
+
+- **Multi-line directives inside `proof:region` bodies** — `proof:chart`, `proof:tree`, `proof:row`, `proof:element`, `proof:symbol`, `proof:shape`, `proof:math` all render correctly when nested inside a dashboard region (fenceless syntax). Previously the inner directive header was kept but its body lines were dropped, so anything with inline data silently rendered as a placeholder. (Closed issue #6.)
+- **`proof:tree kind=outline` numbered-bullet inline mode** — `1. / 1.1 / 1.1.1` lines auto-indent by dot depth; trailing periods normalize at depth ≥ 1.
+- **Slide layout `content-caption`** — title + body + caption strip from `subtitle:`. Was previously a fallback to `title-content`.
+- **Slide layout `comparison`** — 2×2 quadrant grid via `## q:tl/tr/bl/br` markers, with optional `## axis:x` / `## axis:y` labels. Was previously a fallback.
+- **`proof:tree kind=decision`** — DFS with Yes/No branch labels, leaf labels for unknown targets, cycle guard. Was listed in TREE-SPEC but had no implementation.
+- **DaVinci `regex` invariant rule** — alongside the existing substring `pattern` rule. Powered by the `regex` crate.
+- **Quarter-block dither mode for figure import** — full 16-glyph 2×2 quadrant table; previously fell back to full-block. Also unbroke the `--features figure` build (37 → 0 errors).
+- **ASCII tree T-4 children-shape lint** — detects continuation `│` lines that imply a child but where the next real node sits at the same or shallower depth.
+- **md:// URI query parameters** — `?select=cols`, `?filter=col=val|col!=val|col>val|col<val`, `?count`, `?top=N`, `?skip=N`. Threaded through both URI resolution paths so every directive that reads md:// honors them.
+- **Eight new chart kinds** — `area`, `stacked-bar`, `waterfall`, `scatter`, `heatmap`, `candlestick`, `gantt`, `timeline`. `ChartPoint` extended with `extras: Vec<f64>` for multi-value kinds.
+- **Cache snapshots subsystem** — `proof cache snapshot {save|restore|list|diff|prune|deploy}`. Named compile states with integrity hash; restore is rejected with `COMPILE-004` if the manifest was tampered with.
+
+### Changed
+
+- `parse_md_table` now accepts both bounded (`| a | b |`) and unbounded (`a | b`) pipe-table forms; mdpath returns the unbounded form when extracting an addressed table.
+- DASHBOARD-SPEC, SLIDE-SPEC, TREE-SPEC, FIGURE-IMPL-PLAN, MAPPING-SPEC, CHART-SPEC, CACHE-SNAPSHOTS status lines all updated to match what ships.
+
+### Removed
+
+- **`proof:chart kind=sankey` removed from CHART-SPEC scope.** Proportional flow widths quantize poorly to fixed-width character cells. Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or embed an SVG via `proof:include`.
+
+### Tests
+
+90+ new unit and integration tests across the changes. 790 total pass.
+
+---
+
 ## [0.6.0] — 2026-04-28 — *the author experience release*
 
 The focus shifts from "can proof render this?" to "does proof help you author well?" v0.6 closes the authoring loop: cross-references that update themselves, diagnostics that suggest fixes, AI-assisted invariant generation, and a full corpus-scale toolset. The slide system matures from a renderer into a presentation platform.

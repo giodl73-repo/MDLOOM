@@ -108,6 +108,60 @@ enum TreeAction {
 }
 
 #[derive(Subcommand)]
+enum CacheCommand {
+    /// Snapshot operations
+    Snapshot {
+        #[command(subcommand)]
+        op: SnapshotOp,
+    },
+}
+
+#[derive(Subcommand)]
+enum SnapshotOp {
+    /// Save current cache state as a named snapshot
+    Save {
+        /// Snapshot name
+        name: String,
+        /// Project root (default: current directory)
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Restore a snapshot to the active cache
+    Restore {
+        name: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// List all snapshots, newest first
+    List {
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Compare two snapshots by per-file tier keys
+    Diff {
+        name_a: String,
+        name_b: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Remove all but the N most recent snapshots
+    Prune {
+        #[arg(long, default_value = "3")]
+        keep: usize,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Materialize compiled artifacts to a target directory
+    Deploy {
+        name: String,
+        #[arg(long)]
+        to: PathBuf,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Lint files and report diagnostics (default)
     Check {
@@ -278,6 +332,11 @@ enum Command {
         #[arg(long)]
         ai: bool,
     },
+    /// Manage compile cache snapshots — named states for rollback, diff, deploy
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommand,
+    },
     /// Compose N figures side-by-side into a single ASCII art collage
     Layout {
         /// Source figures: md:// URIs or file paths
@@ -366,6 +425,9 @@ fn main() -> Result<()> {
                 return cmd_compile_watch(paths, output_dir, root, &cli.config);
             }
             return cmd_compile(paths, output, output_dir, check, delete_on_error, progress, root, &cli.config);
+        }
+        Some(Command::Cache { command }) => {
+            return cmd_cache(command);
         }
         Some(Command::Layout {
             sources, gap, align, labels, cols, width, direction, border, output, root,
@@ -1748,6 +1810,69 @@ fn chrono_or_time() -> String {
 // ─────────────────────────────────────────────────────────
 // layout
 // ─────────────────────────────────────────────────────────
+
+fn cmd_cache(command: CacheCommand) -> Result<()> {
+    use proof_lib::cache::{snapshot_save, snapshot_restore, snapshot_list, snapshot_diff, snapshot_prune, snapshot_deploy};
+    let CacheCommand::Snapshot { op } = command;
+    match op {
+        SnapshotOp::Save { name, root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let manifest = snapshot_save(&root, &name)
+                .map_err(|e| anyhow::anyhow!("save failed: {}", e))?;
+            println!("Saved snapshot {:?} ({} files, {} bytes, integrity {})",
+                manifest.name, manifest.files.len(), manifest.total_size,
+                &manifest.integrity_hash[..manifest.integrity_hash.len().min(16)]);
+            Ok(())
+        }
+        SnapshotOp::Restore { name, root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let manifest = snapshot_restore(&root, &name)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("Restored snapshot {:?} ({} files)", manifest.name, manifest.files.len());
+            Ok(())
+        }
+        SnapshotOp::List { root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let snapshots = snapshot_list(&root);
+            if snapshots.is_empty() {
+                println!("(no snapshots)");
+            } else {
+                println!("{:<24} {:>10} {:>10}", "name", "files", "bytes");
+                for m in &snapshots {
+                    println!("{:<24} {:>10} {:>10}", m.name, m.files.len(), m.total_size);
+                }
+            }
+            Ok(())
+        }
+        SnapshotOp::Diff { name_a, name_b, root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let diff = snapshot_diff(&root, &name_a, &name_b)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("Only in {}: {}", name_a, if diff.only_in_a.is_empty() { "(none)".to_string() } else { diff.only_in_a.join(", ") });
+            println!("Only in {}: {}", name_b, if diff.only_in_b.is_empty() { "(none)".to_string() } else { diff.only_in_b.join(", ") });
+            println!("Changed: {}", if diff.changed.is_empty() { "(none)".to_string() } else { diff.changed.join(", ") });
+            println!("Identical: {} files", diff.identical.len());
+            Ok(())
+        }
+        SnapshotOp::Prune { keep, root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let deleted = snapshot_prune(&root, keep);
+            if deleted.is_empty() {
+                println!("Nothing pruned (kept {} most recent).", keep);
+            } else {
+                println!("Removed: {}", deleted.join(", "));
+            }
+            Ok(())
+        }
+        SnapshotOp::Deploy { name, to, root } => {
+            let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
+            let count = snapshot_deploy(&root, &name, &to)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            println!("Deployed {} files from {:?} to {}", count, name, to.display());
+            Ok(())
+        }
+    }
+}
 
 fn cmd_layout(
     sources: Vec<String>,
