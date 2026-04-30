@@ -410,30 +410,47 @@ pub fn render_title_content(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 /// - `## q:bl` (or `## quadrant:bl`) — bottom-left
 /// - `## q:br` (or `## quadrant:br`) — bottom-right
 ///
-/// Lines before the first marker are dropped (use the title for an overall
-/// label). Empty quadrants render blank.
+/// Optional axis labels:
+/// - `## axis:x <label>` — text rendered centered on a single row beneath the grid
+/// - `## axis:y <label>` — text rendered as a 1-column-wide vertical strip on the
+///   left edge of the grid (one character per row, vertically centered)
 ///
-/// Layout: title bar (3 rows) + separator + 2×2 grid filling the remaining
-/// height. The vertical mid-line is a column of single space chars between
-/// the two columns; the horizontal mid-line is a separator() row.
+/// Lines before the first marker are dropped (use the title for an overall
+/// label). Empty quadrants render blank. Axis labels are optional and the
+/// layout always satisfies SL-1 (height × width).
 pub fn render_comparison(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let w = meta.width;
     let h = meta.height;
     let title_height = 3usize;
-    let body_height = h.saturating_sub(title_height + 1); // +1 for separator under title
-    // Split body height into top-row, mid-separator, bottom-row.
+
+    let parsed = parse_comparison_body(&slide.body_content);
+
+    // Reserve 1 row at the bottom for x-axis label if set.
+    let x_axis_rows = if parsed.axis_x.is_some() { 1usize } else { 0 };
+    // Reserve 1 column on the left for y-axis label if set.
+    let y_axis_cols = if parsed.axis_y.is_some() { 1usize } else { 0 };
+
+    let body_height = h.saturating_sub(title_height + 1).saturating_sub(x_axis_rows);
     let mid_sep_height = 1usize;
     let row_height = body_height.saturating_sub(mid_sep_height) / 2;
 
-    // Column widths: equal split, remainder to the left.
-    let col_a_width = (w + 1) / 2;
-    let col_b_width = w.saturating_sub(col_a_width);
+    // Column widths: equal split of remaining grid width (after y-axis column).
+    let grid_w = w.saturating_sub(y_axis_cols);
+    let col_a_width = (grid_w + 1) / 2;
+    let col_b_width = grid_w.saturating_sub(col_a_width);
 
-    let (tl, tr, bl, br) = split_quadrants(&slide.body_content);
-    let tl_lines = lines_to_canvas(&render_body_lines(&tl, col_a_width), col_a_width, row_height);
-    let tr_lines = lines_to_canvas(&render_body_lines(&tr, col_b_width), col_b_width, row_height);
-    let bl_lines = lines_to_canvas(&render_body_lines(&bl, col_a_width), col_a_width, row_height);
-    let br_lines = lines_to_canvas(&render_body_lines(&br, col_b_width), col_b_width, row_height);
+    let tl_lines = lines_to_canvas(&render_body_lines(&parsed.tl, col_a_width), col_a_width, row_height);
+    let tr_lines = lines_to_canvas(&render_body_lines(&parsed.tr, col_b_width), col_b_width, row_height);
+    let bl_lines = lines_to_canvas(&render_body_lines(&parsed.bl, col_a_width), col_a_width, row_height);
+    let br_lines = lines_to_canvas(&render_body_lines(&parsed.br, col_b_width), col_b_width, row_height);
+
+    // Build the y-axis column as `total_grid_rows` chars, centered around the label.
+    let total_grid_rows = row_height * 2 + mid_sep_height;
+    let y_strip = if let Some(ref label) = parsed.axis_y {
+        build_vertical_strip(label, total_grid_rows)
+    } else {
+        Vec::new()
+    };
 
     let mut result: Vec<String> = Vec::with_capacity(h);
     let title_str = slide.title.as_deref().unwrap_or("");
@@ -441,19 +458,31 @@ pub fn render_comparison(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     for _ in 1..title_height { result.push(" ".repeat(w)); }
     result.push(separator(w));
 
+    let mut grid_row_idx = 0usize;
     // Top row: tl | tr
     for i in 0..row_height {
+        let prefix = y_axis_prefix(&y_strip, grid_row_idx);
         let a = tl_lines.get(i).map(|s| s.as_str()).unwrap_or("");
         let b = tr_lines.get(i).map(|s| s.as_str()).unwrap_or("");
-        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        result.push(format!("{}{}{}", prefix, fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        grid_row_idx += 1;
     }
-    // Mid separator
-    result.push(separator(w));
+    // Mid separator (with y-axis prefix character if set)
+    let prefix = y_axis_prefix(&y_strip, grid_row_idx);
+    result.push(format!("{}{}", prefix, separator(grid_w)));
+    grid_row_idx += 1;
     // Bottom row: bl | br
     for i in 0..row_height {
+        let prefix = y_axis_prefix(&y_strip, grid_row_idx);
         let a = bl_lines.get(i).map(|s| s.as_str()).unwrap_or("");
         let b = br_lines.get(i).map(|s| s.as_str()).unwrap_or("");
-        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        result.push(format!("{}{}{}", prefix, fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        grid_row_idx += 1;
+    }
+
+    // X-axis label row beneath the grid.
+    if let Some(ref label) = parsed.axis_x {
+        result.push(center_in_width(label, w));
     }
 
     result.truncate(h);
@@ -461,15 +490,49 @@ pub fn render_comparison(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     result
 }
 
-/// Split body content at `## q:tl|tr|bl|br` (or `## quadrant:*`) markers.
-fn split_quadrants(body: &str) -> (String, String, String, String) {
+struct ComparisonBody {
+    tl: String, tr: String, bl: String, br: String,
+    axis_x: Option<String>,
+    axis_y: Option<String>,
+}
+
+/// Build a vertical strip of single-character rows from `label`, centered
+/// vertically across `total_rows`. Rows outside the label range are spaces.
+fn build_vertical_strip(label: &str, total_rows: usize) -> Vec<char> {
+    let chars: Vec<char> = label.chars().collect();
+    let label_len = chars.len().min(total_rows);
+    let pad = (total_rows.saturating_sub(label_len)) / 2;
+    let mut out = vec![' '; total_rows];
+    for (i, ch) in chars.iter().take(label_len).enumerate() {
+        out[pad + i] = *ch;
+    }
+    out
+}
+
+fn y_axis_prefix(strip: &[char], row: usize) -> String {
+    if strip.is_empty() { String::new() } else { strip.get(row).copied().unwrap_or(' ').to_string() }
+}
+
+/// Parse comparison body for quadrant + axis markers.
+fn parse_comparison_body(body: &str) -> ComparisonBody {
     let mut tl = String::new();
     let mut tr = String::new();
     let mut bl = String::new();
     let mut br = String::new();
+    let mut axis_x: Option<String> = None;
+    let mut axis_y: Option<String> = None;
     let mut current: Option<char> = None;
     for line in body.lines() {
         let trimmed = line.trim();
+        // axis markers consume the rest of the line as label and don't affect `current`.
+        if let Some(rest) = trimmed.strip_prefix("## axis:x") {
+            axis_x = Some(rest.trim().to_string());
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("## axis:y") {
+            axis_y = Some(rest.trim().to_string());
+            continue;
+        }
         let marker = match trimmed {
             "## q:tl" | "## quadrant:tl" => Some('1'),
             "## q:tr" | "## quadrant:tr" => Some('2'),
@@ -486,7 +549,7 @@ fn split_quadrants(body: &str) -> (String, String, String, String) {
             _ => {} // pre-marker content is dropped
         }
     }
-    (tl, tr, bl, br)
+    ComparisonBody { tl, tr, bl, br, axis_x, axis_y }
 }
 
 /// `content-caption` layout — main content area with a caption strip at the bottom.
@@ -1276,6 +1339,57 @@ mod tests {
         let l_pos = row_with_left_one.find("LEFTONE").unwrap();
         let r_pos = row_with_left_one.find("RIGHTONE").expect("TR on same row");
         assert!(l_pos < r_pos, "TL must precede TR on the row: l={}, r={}", l_pos, r_pos);
+    }
+
+    #[test]
+    fn comparison_x_axis_label_renders_below_grid() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.title = Some("Eisenhower".into());
+        s.body_content = "## q:tl\nA\n## q:tr\nB\n## q:bl\nC\n## q:br\nD\n## axis:x Urgency\n".into();
+        let lines = render_comparison(&s, &meta);
+        assert_sl1(&lines, &meta);
+        // X-axis label appears on a row near the bottom (before final padding).
+        assert!(lines.iter().any(|l| l.contains("Urgency")), "x-axis label rendered:\n{:#?}", lines);
+    }
+
+    #[test]
+    fn comparison_y_axis_label_renders_as_left_strip() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.title = Some("BCG".into());
+        // Short y-axis label so it fits the available rows easily.
+        s.body_content = "## q:tl\nStars\n## q:tr\nCash\n## q:bl\nDog\n## q:br\nQM\n## axis:y Growth\n".into();
+        let lines = render_comparison(&s, &meta);
+        assert_sl1(&lines, &meta);
+        // Y-axis chars must appear at column 0 of grid rows (after title+separator: rows 4..end-padding).
+        // The label "Growth" is 6 chars; with grid_rows ≈ 19 and centering, the chars land in mid rows.
+        let strip: String = lines.iter()
+            .skip(4) // skip title + 2 padding + separator
+            .filter_map(|l| l.chars().next())
+            .collect();
+        let label_chars: Vec<char> = "Growth".chars().collect();
+        // The strip contains the label characters somewhere in order.
+        let mut idx = 0;
+        for c in strip.chars() {
+            if idx < label_chars.len() && c == label_chars[idx] { idx += 1; }
+        }
+        assert_eq!(idx, label_chars.len(),
+            "y-axis label characters should appear in order at column 0; strip={:?}", strip);
+    }
+
+    #[test]
+    fn comparison_both_axes_layout_intact() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.body_content = "## q:tl\nA\n## q:tr\nB\n## q:bl\nC\n## q:br\nD\n## axis:x XL\n## axis:y YL\n".into();
+        let lines = render_comparison(&s, &meta);
+        assert_sl1(&lines, &meta);
+        let blob = lines.join("\n");
+        assert!(blob.contains("XL"), "x-axis label present");
+        // y-axis: chars Y and L appear at column 0 (in some row).
+        let col0: String = lines.iter().filter_map(|l| l.chars().next()).collect();
+        assert!(col0.contains('Y') && col0.contains('L'), "y-axis chars in column 0: {:?}", col0);
     }
 
     #[test]

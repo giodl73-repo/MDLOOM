@@ -3,10 +3,13 @@ pub mod shape;
 
 #[cfg(feature = "figure")]
 use image::{DynamicImage, GrayImage, imageops};
-
+#[cfg(feature = "figure")]
+use std::path::Path;
 
 #[cfg(feature = "figure")]
 use crate::figure::dither::{DitherContext, dither};
+#[cfg(feature = "figure")]
+use crate::figure::shape::{ShapeMask, build_mask, enforce_minimum_size, apply_mask};
 
 
 // ─────────────────────────────────────────────────────────

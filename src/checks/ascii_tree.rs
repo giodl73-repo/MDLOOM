@@ -365,28 +365,58 @@ fn validate_t3(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
     diags
 }
 
-/// T-4 + T-12: Every non-leaf non-root has at least one child.
-/// A root with zero children is valid (T-12).
-fn validate_t4_t12(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
-    let diags = Vec::new();
+/// T-4 + T-12: detect nodes whose continuation lines imply a child that
+/// never materializes. A Continuation `│` at depth D appearing after a node
+/// at depth D-1 is the visual claim "this node has a child"; if no actual
+/// child node at depth D follows before the next non-Continuation entry at
+/// depth ≤ D-1, the continuation is dangling and we fire `tree_orphan`.
+///
+/// A node with no continuation under it and no indented children is a valid
+/// leaf — not flagged. Root with zero children is valid (T-12).
+fn validate_t4_t12(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
     let n = nodes.len();
 
     for i in 0..n {
         let node = &nodes[i];
-        // Only check Tee connectors — they declare "I have siblings after me"
-        // and their parent must have children. Root (None connector, level 0) is exempt (T-12).
-        if node.connector != Connector::Tee && node.connector != Connector::Corner {
-            continue;
+        if node.connector == Connector::Continuation { continue; }
+
+        // Walk forward through any continuation lines until the next real node.
+        // Track whether we saw a continuation at depth >= node.indent_level + 1
+        // (which implies "this node has a child"). Then check whether the next
+        // real node actually is that child.
+        let mut saw_implied_child = false;
+        let mut implied_line: usize = node.line_no;
+        let mut next_real: Option<&TreeNode> = None;
+        for next in &nodes[i + 1..] {
+            if next.connector == Connector::Continuation {
+                if next.indent_level >= node.indent_level + 1 && !saw_implied_child {
+                    saw_implied_child = true;
+                    implied_line = next.line_no;
+                }
+                continue;
+            }
+            next_real = Some(next);
+            break;
         }
-        // Check if this node has any children (a node at level+1 follows it)
-        let has_child = nodes[i+1..].iter().any(|next| {
-            next.connector != Connector::Continuation
-                && next.indent_level == node.indent_level + 1
-        });
-        // Not having children is fine for leaf nodes. T-4 only fires if a Continuation
-        // suggests children exist but none do. We skip strict T-4 for Wave 1 — it
-        // requires full structural analysis that's better done in Wave 2.
-        let _ = has_child;
+
+        if !saw_implied_child { continue; }
+
+        let resolves_to_child = match next_real {
+            Some(m) => m.indent_level > node.indent_level,
+            None    => false, // end of tree → continuation didn't resolve
+        };
+        if !resolves_to_child {
+            diags.push(Diagnostic::warning(
+                path.to_path_buf(),
+                implied_line, 1,
+                "tree_orphan",
+                format!(
+                    "continuation │ under {:?} at line {} implies a child but none follows (T-4)",
+                    node.label, node.line_no
+                ),
+            ));
+        }
     }
     diags
 }
@@ -720,5 +750,37 @@ mod tests {
     fn test_detect_indent_width_default() {
         let lines = vec!["project/", "└── src/"];
         assert_eq!(detect_indent_width(&lines), 4); // default
+    }
+
+    // ── T-4 dangling continuation lint ───────────────────
+
+    #[test]
+    fn t4_no_warning_when_continuation_resolves_to_child() {
+        // parent has a continuation under it AND an actual child → OK.
+        let content = "```dirtree\nproject/\n├── src/\n│   └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4 = diags.iter().filter(|d| d.code == "tree_orphan").count();
+        assert_eq!(t4, 0, "no orphan diagnostic when child exists:\n{:?}", diags);
+    }
+
+    #[test]
+    fn t4_no_warning_when_node_is_leaf_no_continuation() {
+        // Leaf node, no continuation under, no child → valid.
+        let content = "```dirtree\nproject/\n├── src/\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4 = diags.iter().filter(|d| d.code == "tree_orphan").count();
+        assert_eq!(t4, 0, "leaf without continuation is valid:\n{:?}", diags);
+    }
+
+    #[test]
+    fn t4_warns_on_dangling_continuation() {
+        // src/ has a deeper continuation (level-1 │ at column 4) implying a child,
+        // but no level-1 child node follows before we return to level 0 → T-4 fires.
+        let content = "```dirtree\nproject/\n├── src/\n│   │\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4: Vec<_> = diags.iter().filter(|d| d.code == "tree_orphan").collect();
+        assert!(!t4.is_empty(), "expected at least one tree_orphan, got: {:?}", diags);
+        assert!(t4.iter().any(|d| d.message.contains("T-4")),
+            "T-4 message expected, got: {:?}", t4.iter().map(|d| &d.message).collect::<Vec<_>>());
     }
 }
