@@ -8,7 +8,7 @@ use crate::element::row::{RowConfig, RowElement, render_row_foreach, validate_r1
 use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use crate::runner::Runner;
 use crate::diagnostic::Severity;
-use crate::tree::schema::{FieldMap, parse_md_table, parse_json_source, generate_org, generate_taxonomy, generate_dependency, generate_outline};
+use crate::tree::schema::{FieldMap, parse_md_table, parse_json_source, generate_org, generate_taxonomy, generate_dependency, generate_outline, generate_decision};
 use crate::tree::dirtree::{DirtreeOptions, generate as dirtree_generate};
 
 // ─────────────────────────────────────────────────────────
@@ -1552,6 +1552,7 @@ fn generate_tree_block(
                     "taxonomy"   => generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?,
                     "dependency" => generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?,
                     "outline"    => generate_outline(&content, attrs.indent_width)?,
+                    "decision"   => generate_decision(&content, &attrs.format, &mut map, attrs.indent_width)?,
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else if !inline_body.is_empty() {
@@ -1788,14 +1789,80 @@ fn render_inline_outline(
         return render_inline_tree(content, indent_width);
     }
 
+    // Numbered-bullet path: parse `1.`, `1.1`, `1.1.1`, ... prefixes.
+    // Depth is the dot count in the number sequence (`1` → 0, `1.1` → 1).
+    // Lines with a parseable number get re-indented based on depth so authors
+    // can type without aligning manually. Unparseable lines emit verbatim at
+    // depth 0 (so "Title:" or freeform headers still pass through).
     let mut out = String::new();
     for line in content.lines() {
-        let trimmed = line.trim_end();
+        let trimmed = line.trim();
         if trimmed.is_empty() { continue; }
-        out.push_str(trimmed);
-        out.push('\n');
+        match parse_outline_number_prefix(trimmed) {
+            Some((depth, number, label)) => {
+                let indent = " ".repeat(depth.saturating_mul(indent_width));
+                if label.is_empty() {
+                    out.push_str(&format!("{}{}\n", indent, number));
+                } else {
+                    out.push_str(&format!("{}{} {}\n", indent, number, label));
+                }
+            }
+            None => {
+                out.push_str(trimmed);
+                out.push('\n');
+            }
+        }
     }
     Ok(out.trim_end().to_string())
+}
+
+/// Parse an outline-style numbered prefix from `s`. Returns
+/// `Some((depth, normalized_number, label))` if the line begins with a number
+/// like `1`, `1.`, `1.1`, `1.1.1.`, optionally followed by whitespace and a
+/// label. The returned number is normalized: a trailing period is kept only
+/// for top-level (depth 0) entries to match the canonical "1. Foo" form.
+fn parse_outline_number_prefix(s: &str) -> Option<(usize, String, String)> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    // Read digits.dot.digits.dot... Must start with a digit.
+    if i >= bytes.len() || !bytes[i].is_ascii_digit() { return None; }
+    let mut had_digit = false;
+    let mut dot_count = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b.is_ascii_digit() { had_digit = true; i += 1; continue; }
+        if b == b'.' {
+            // A dot is a separator only if a digit follows. Otherwise it's
+            // the trailing "1." form and the prefix ends here.
+            if i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
+                dot_count += 1;
+                i += 1;
+                continue;
+            }
+            // Consume the trailing dot too — it's part of the number.
+            i += 1;
+            break;
+        }
+        break;
+    }
+    if !had_digit { return None; }
+    // The next char (if any) must be whitespace, otherwise this is e.g. "1foo"
+    // which we don't treat as a numbered bullet.
+    if i < bytes.len() {
+        let b = bytes[i];
+        if b != b' ' && b != b'\t' { return None; }
+    }
+    let raw_number = &s[..i];
+    let label = s[i..].trim_start().to_string();
+    // Normalize: top-level (depth 0) keeps a trailing period if absent;
+    // sub-levels drop a trailing period to match "1.1 Foo" form.
+    let trimmed_number = raw_number.trim_end_matches('.');
+    let normalized = if dot_count == 0 {
+        format!("{}.", trimmed_number)
+    } else {
+        trimmed_number.to_string()
+    };
+    Some((dot_count, normalized, label))
 }
 
 /// Render a `proof:xref` directive as a formatted cross-reference.
@@ -2887,40 +2954,70 @@ fn render_region_body(
     violations: &mut Vec<CompileViolation>,
     resolved_count: &mut usize,
 ) -> Vec<String> {
-    use crate::dashboard::region::{classify_region_line, RegionLine};
-
     let mut output: Vec<String> = Vec::new();
     let mut i = 0;
     while i < body.len() {
         let line = &body[i];
-        match classify_region_line(line) {
-            RegionLine::Literal(lit) => {
-                output.push(lit.to_string());
-                i += 1;
+        if let Some(header) = top_level_region_directive_header(line) {
+            // Gobble body lines until the next column-0 directive header or end.
+            // Indented proof:* lines stay with the parent (e.g. proof:row + indented
+            // proof:element children). Blank and literal lines are also body.
+            let mut j = i + 1;
+            while j < body.len() && top_level_region_directive_header(&body[j]).is_none() {
+                j += 1;
             }
-            RegionLine::Directive(d) => {
-                // Strategy: build a synthetic ```proof:foo ...``` fenced block,
-                // run collect_directives on it, dispatch the resulting Directive
-                // through render_one_directive_no_chrome.
-                let synth = format!("```{}\n```", d);
-                let nested = collect_directives(&synth);
-                if let Some(directive) = nested.into_iter().next() {
-                    let rendered = render_one_directive_no_chrome(
-                        &directive, root, config, runner, abs_line + i,
-                        violations, resolved_count,
-                    );
-                    for line in rendered.lines() {
-                        output.push(line.to_string());
-                    }
-                } else {
-                    // Unrecognized directive — fall through as literal
-                    output.push(line.clone());
+            let body_slice: Vec<String> = body[i + 1..j].to_vec();
+            let synth = if body_slice.is_empty() {
+                format!("```{}\n```", header)
+            } else {
+                format!("```{}\n{}\n```", header, body_slice.join("\n"))
+            };
+            let nested = collect_directives(&synth);
+            if let Some(directive) = nested.into_iter().next() {
+                let rendered = render_one_directive_no_chrome(
+                    &directive, root, config, runner, abs_line + i,
+                    violations, resolved_count,
+                );
+                for rline in rendered.lines() {
+                    output.push(rline.to_string());
                 }
-                i += 1;
+            } else {
+                // Couldn't synthesize — fall back to literal lines so the user sees something.
+                output.push(line.clone());
+                for b in &body_slice {
+                    output.push(b.clone());
+                }
             }
+            i = j;
+        } else {
+            output.push(line.clone());
+            i += 1;
         }
     }
     output
+}
+
+/// Return the directive header (trimmed of the leading column-0 anchor) if
+/// `line` begins at column 0 with a known proof:* directive name. Returns
+/// None for indented lines (they belong to the enclosing directive body) and
+/// for plain text. The set must match `classify_region_line`.
+fn top_level_region_directive_header(line: &str) -> Option<&str> {
+    if line.starts_with(' ') || line.starts_with('\t') { return None; }
+    const HEADERS: &[&str] = &[
+        "proof:element", "proof:tree", "proof:chart", "proof:row",
+        "proof:symbol", "proof:shape", "proof:bullets", "proof:centered",
+        "proof:stat",
+    ];
+    for h in HEADERS {
+        if line.starts_with(h) {
+            // Require word-boundary so e.g. "proof:rowx" doesn't match "proof:row".
+            let next = line.as_bytes().get(h.len()).copied();
+            if next.is_none() || next == Some(b' ') || next == Some(b'\t') {
+                return Some(line);
+            }
+        }
+    }
+    None
 }
 
 /// Render a single directive with `no-chrome` semantics — strips the
@@ -3050,7 +3147,65 @@ fn render_one_directive_no_chrome(
                 }
             }
         }
-        // Layout, Table, Region not supported inline within a region
+        Directive::Chart { attrs, source, label_field, value_field, inline_body, .. } => {
+            let data_result = resolve_chart_data(
+                source.as_deref(),
+                label_field.as_deref(),
+                value_field.as_deref(),
+                inline_body,
+                root,
+            );
+            match data_result {
+                Ok(data) => match crate::chart::render_chart(&data, attrs) {
+                    Ok(lines) => {
+                        *resolved_count += 1;
+                        lines.join("\n")
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: e.code,
+                            severity: ViolationSeverity::Error,
+                            uri: source.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: e.message,
+                            source_line: abs_line + 1,
+                        });
+                        String::new()
+                    }
+                },
+                Err(msg) => {
+                    violations.push(CompileViolation {
+                        code: "CHART-002",
+                        severity: ViolationSeverity::Error,
+                        uri: source.clone().unwrap_or_default(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: msg,
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        Directive::Math { expr, width, align, .. } => {
+            let (math_lines, math_diags) = crate::math::render_display_math(expr, *width, *align);
+            *resolved_count += 1;
+            for d in &math_diags {
+                violations.push(CompileViolation {
+                    code: d.code,
+                    severity: ViolationSeverity::Warning,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: d.message.clone(),
+                    source_line: abs_line + 1,
+                });
+            }
+            math_lines.join("\n")
+        }
+        // Layout, Table, Region, Toc, Xref, Blockquote not supported inline within a region.
+        // (They produce wrapper chrome / external content unsuited to canvas paste.)
         _ => String::new(),
     }
 }
@@ -4101,11 +4256,56 @@ Some prose.
 
     #[test]
     fn inline_outline_no_bullets_no_warning() {
-        // Numbered/heading content should NOT warn — render verbatim.
+        // Numbered/heading content should NOT warn.
         let body = "1. First\n1.1 Sub\n2. Second";
         let mut violations: Vec<CompileViolation> = Vec::new();
         let out = render_inline_outline(body, 4, 1, &mut violations).unwrap();
         assert!(violations.is_empty(), "no warnings expected for numbered body");
         assert!(out.contains("1. First"));
+    }
+
+    // ── inline outline: numbered-bullet auto-indent (task #2) ────────────
+
+    #[test]
+    fn inline_outline_numbered_bullets_auto_indent() {
+        // Author types unindented numbered bullets — output re-indents by dot depth.
+        let body = "1. Installation\n1.1 From source\n1.2 From crates.io\n2. Configuration\n2.1 Basics";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(violations.is_empty(), "no warnings for numbered input");
+        let expected =
+            "1. Installation\n   1.1 From source\n   1.2 From crates.io\n2. Configuration\n   2.1 Basics";
+        assert_eq!(out, expected, "depth-based indent normalization");
+    }
+
+    #[test]
+    fn inline_outline_numbered_three_levels() {
+        let body = "1. A\n1.1 B\n1.1.1 C\n2. D";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        let expected = "1. A\n   1.1 B\n      1.1.1 C\n2. D";
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn inline_outline_preserves_trailing_period_only_at_depth_zero() {
+        // "1." stays "1.", but "1.1." normalizes to "1.1" (no trailing dot at depth ≥ 1).
+        let body = "1. A\n1.1. B";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(out.contains("1. A"));
+        assert!(out.contains("1.1 B"), "trailing period dropped at depth 1: got\n{}", out);
+        assert!(!out.contains("1.1. B"), "trailing period must not survive: got\n{}", out);
+    }
+
+    #[test]
+    fn inline_outline_unnumbered_line_passes_through() {
+        // Lines without a numeric prefix are emitted verbatim at depth 0.
+        let body = "Project plan:\n1. Phase one\n1.1 Step";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(out.starts_with("Project plan:"), "header preserved at top:\n{}", out);
+        assert!(out.contains("\n1. Phase one"), "depth-0 numbered line at column 0:\n{}", out);
+        assert!(out.contains("\n   1.1 Step"), "depth-1 numbered line indented:\n{}", out);
     }
 }

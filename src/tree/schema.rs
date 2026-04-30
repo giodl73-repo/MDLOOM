@@ -55,9 +55,15 @@ const DEP_NAME_CANDIDATES:   &[&str] = &["package", "name", "module", "crate", "
 const DEP_PARENT_CANDIDATES: &[&str] = &["depends_on", "requires", "dependency", "uses", "parent"];
 const DEP_VER_CANDIDATES:    &[&str] = &["version", "ver", "semver"];
 
-#[allow(dead_code)] const DEC_NODE_CANDIDATES: &[&str] = &["node", "condition", "question", "id", "step"];
-#[allow(dead_code)] const DEC_YES_CANDIDATES:  &[&str] = &["yes", "true", "yes_branch", "then", "if_yes"];
-#[allow(dead_code)] const DEC_NO_CANDIDATES:   &[&str] = &["no", "false", "no_branch", "else", "if_no"];
+// Decision tree column candidates. A decision row has four roles:
+// * a node identity (used as a target reference from yes/no branches),
+// * a condition/question (rendered as the label above the two branches),
+// * a yes-branch target (another node name or a leaf label),
+// * a no-branch target (another node name or a leaf label).
+const DEC_NODE_CANDIDATES:      &[&str] = &["node", "id", "step", "name"];
+const DEC_CONDITION_CANDIDATES: &[&str] = &["condition", "question", "label"];
+const DEC_YES_CANDIDATES:       &[&str] = &["yes", "yes →", "true", "yes_branch", "then", "if_yes"];
+const DEC_NO_CANDIDATES:        &[&str] = &["no", "no →", "false", "no_branch", "else", "if_no"];
 
 fn find_column<'a>(headers: &'a [String], candidates: &[&str]) -> Option<&'a str> {
     for candidate in candidates {
@@ -104,10 +110,12 @@ fn auto_detect_dependency(headers: &[String], map: &mut FieldMap) {
     }
 }
 
-#[allow(dead_code)]
 fn auto_detect_decision(headers: &[String], map: &mut FieldMap) {
     if map.name.is_none() {
         map.name = find_column(headers, DEC_NODE_CANDIDATES).map(|s| s.to_string());
+    }
+    if map.label.is_none() {
+        map.label = find_column(headers, DEC_CONDITION_CANDIDATES).map(|s| s.to_string());
     }
     if map.yes_branch.is_none() {
         map.yes_branch = find_column(headers, DEC_YES_CANDIDATES).map(|s| s.to_string());
@@ -570,6 +578,183 @@ pub fn generate_outline(content: &str, indent_width: usize) -> Result<String> {
     Ok(render_nodes(&nodes, indent_width))
 }
 
+/// Generate a decision tree from source data.
+///
+/// Each row defines a decision node with:
+/// - **name** — the node's identity (referenced from yes/no columns)
+/// - **condition** (label column) — the question text rendered above the branches
+/// - **yes** — the branch target if the condition is true (another node name or a leaf label)
+/// - **no** — the branch target if the condition is false
+///
+/// The tree's root is the row whose name equals "root" (case-insensitive)
+/// when present, otherwise the first row. Targets that resolve to another
+/// declared node recurse; targets that don't are rendered as leaf labels
+/// prefixed with "Yes → " / "No  → ".
+///
+/// Cycles are detected and broken (a re-entry to a visited node renders as a
+/// "(cycle ↑)" leaf marker so the tree is bounded and the issue visible).
+pub fn generate_decision(
+    content: &str,
+    format: &str,
+    map: &mut FieldMap,
+    indent_width: usize,
+) -> Result<String> {
+    let (headers, table_rows) = parse_source(content, format)?;
+    auto_detect_decision(&headers, map);
+
+    let name_col = map.name.as_deref()
+        .ok_or_else(|| anyhow::anyhow!("cannot detect node column — specify with name=\"ColName\""))?;
+    let cond_col = map.label.as_deref()
+        .ok_or_else(|| anyhow::anyhow!("cannot detect condition column — specify with label=\"ColName\""))?;
+    let yes_col = map.yes_branch.as_deref()
+        .ok_or_else(|| anyhow::anyhow!("cannot detect yes-branch column — specify with yes_branch=\"ColName\""))?;
+    let no_col = map.no_branch.as_deref()
+        .ok_or_else(|| anyhow::anyhow!("cannot detect no-branch column — specify with no_branch=\"ColName\""))?;
+
+    // Index rows by node name for O(1) lookup during traversal.
+    let mut by_name: HashMap<String, usize> = HashMap::new();
+    for (i, row) in table_rows.iter().enumerate() {
+        let name = row.get(name_col).cloned().unwrap_or_default();
+        if !name.is_empty() { by_name.insert(name, i); }
+    }
+
+    // Pick the root: prefer a row literally named "root", else the first row.
+    let root_idx = by_name.iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("root"))
+        .map(|(_, v)| *v)
+        .unwrap_or(0);
+
+    if table_rows.is_empty() {
+        bail!("decision tree source has no rows");
+    }
+
+    // DFS-build TreeNodes with branch labels and cycle guard.
+    let mut nodes: Vec<TreeNode> = Vec::new();
+    let mut line_no = 1usize;
+    let mut visiting: HashSet<String> = HashSet::new();
+    decision_walk(
+        root_idx,
+        &table_rows, &by_name,
+        name_col, cond_col, yes_col, no_col,
+        0, /* root has no branch label */ None,
+        &mut nodes, &mut line_no, &mut visiting,
+        /* is_last_sibling */ true,
+    );
+
+    if nodes.is_empty() {
+        bail!("decision tree generation produced no output — check the source table");
+    }
+    Ok(render_nodes(&nodes, indent_width))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn decision_walk(
+    idx: usize,
+    rows: &[HashMap<String, String>],
+    by_name: &HashMap<String, usize>,
+    name_col: &str, cond_col: &str, yes_col: &str, no_col: &str,
+    level: usize,
+    branch_prefix: Option<&str>, // "Yes → " or "No  → ", or None for root
+    nodes: &mut Vec<TreeNode>,
+    line_no: &mut usize,
+    visiting: &mut HashSet<String>,
+    is_last_sibling: bool,
+) {
+    let row = &rows[idx];
+    let name = row.get(name_col).cloned().unwrap_or_default();
+
+    // Cycle guard: a re-entry to a node we're already expanding becomes a leaf.
+    if visiting.contains(&name) {
+        let label = format!("{}(cycle ↑ {})", branch_prefix.unwrap_or(""), name);
+        nodes.push(TreeNode {
+            line_no: *line_no, indent_level: level,
+            connector: if is_last_sibling { Connector::Corner } else { Connector::Tee },
+            label, raw: String::new(),
+        });
+        *line_no += 1;
+        return;
+    }
+    visiting.insert(name.clone());
+
+    let condition = row.get(cond_col).cloned().unwrap_or_default();
+    let yes_target = row.get(yes_col).cloned().unwrap_or_default();
+    let no_target  = row.get(no_col).cloned().unwrap_or_default();
+
+    // Emit this node's condition. Root has no branch prefix; children prepend "Yes → " / "No  → ".
+    let node_label = match branch_prefix {
+        Some(p) => format!("{}{}", p, condition),
+        None    => condition.clone(),
+    };
+    let connector = if level == 0 {
+        Connector::None
+    } else if is_last_sibling {
+        Connector::Corner
+    } else {
+        Connector::Tee
+    };
+    nodes.push(TreeNode {
+        line_no: *line_no, indent_level: level, connector,
+        label: node_label, raw: String::new(),
+    });
+    *line_no += 1;
+
+    // Yes branch (sibling-1 of two): not last.
+    emit_branch(
+        &yes_target, "Yes → ", rows, by_name,
+        name_col, cond_col, yes_col, no_col,
+        level + 1, nodes, line_no, visiting,
+        /* is_last_sibling */ false,
+    );
+    // No branch (sibling-2 of two): last.
+    emit_branch(
+        &no_target, "No  → ", rows, by_name,
+        name_col, cond_col, yes_col, no_col,
+        level + 1, nodes, line_no, visiting,
+        /* is_last_sibling */ true,
+    );
+
+    visiting.remove(&name);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_branch(
+    target: &str, prefix: &str,
+    rows: &[HashMap<String, String>],
+    by_name: &HashMap<String, usize>,
+    name_col: &str, cond_col: &str, yes_col: &str, no_col: &str,
+    level: usize,
+    nodes: &mut Vec<TreeNode>,
+    line_no: &mut usize,
+    visiting: &mut HashSet<String>,
+    is_last_sibling: bool,
+) {
+    if target.is_empty() {
+        // Empty branch — emit a placeholder leaf so the tree shape stays balanced.
+        nodes.push(TreeNode {
+            line_no: *line_no, indent_level: level,
+            connector: if is_last_sibling { Connector::Corner } else { Connector::Tee },
+            label: format!("{}—", prefix), raw: String::new(),
+        });
+        *line_no += 1;
+        return;
+    }
+    if let Some(&child_idx) = by_name.get(target) {
+        decision_walk(
+            child_idx, rows, by_name,
+            name_col, cond_col, yes_col, no_col,
+            level, Some(prefix), nodes, line_no, visiting, is_last_sibling,
+        );
+    } else {
+        // Leaf label.
+        nodes.push(TreeNode {
+            line_no: *line_no, indent_level: level,
+            connector: if is_last_sibling { Connector::Corner } else { Connector::Tee },
+            label: format!("{}{}", prefix, target), raw: String::new(),
+        });
+        *line_no += 1;
+    }
+}
+
 // ─────────────────────────────────────────────────────────
 // Rendering
 // ─────────────────────────────────────────────────────────
@@ -723,6 +908,44 @@ mod tests {
         // core is the root, so it appears once. lib and tool both depend on it
         // but core is the root so all dependencies flow from it
         assert!(deduped_count >= 0); // dedup only applies for repeated subtrees
+    }
+
+    const DECISION_TABLE: &str = "| Node | Condition | Yes | No |\n\
+        |------|-----------|-----|-----|\n\
+        | root | Is the file .md? | parse | skip |\n\
+        | parse | Has proof: directive? | compile | check-only |\n\
+        | compile | DaVinci pin exists? | validate | embed |\n";
+
+    #[test]
+    fn test_decision_basic_renders() {
+        let out = generate_decision(DECISION_TABLE, "table", &mut FieldMap::default(), 4).unwrap();
+        // Root condition appears unprefixed.
+        assert!(out.starts_with("Is the file .md?"), "root condition first:\n{}", out);
+        // Yes/No prefixes appear on branches.
+        assert!(out.contains("Yes → Has proof: directive?"), "Yes branch into nested node:\n{}", out);
+        assert!(out.contains("No  → skip"), "No leaf:\n{}", out);
+        assert!(out.contains("Yes → validate"), "deeper Yes leaf:\n{}", out);
+        assert!(out.contains("No  → embed"), "deeper No leaf:\n{}", out);
+    }
+
+    #[test]
+    fn test_decision_uses_first_row_when_no_root_named() {
+        let table = "| node | condition | yes | no |\n\
+            |------|-----------|-----|-----|\n\
+            | start | Begin? | a | b |\n";
+        let out = generate_decision(table, "table", &mut FieldMap::default(), 4).unwrap();
+        assert!(out.starts_with("Begin?"), "first row treated as root:\n{}", out);
+    }
+
+    #[test]
+    fn test_decision_cycle_guarded() {
+        // Cycle: a → yes:b, b → yes:a. The walker breaks on re-entry.
+        let table = "| node | condition | yes | no |\n\
+            |------|-----------|-----|-----|\n\
+            | a | Q1? | b | leaf-a |\n\
+            | b | Q2? | a | leaf-b |\n";
+        let out = generate_decision(table, "table", &mut FieldMap::default(), 4).unwrap();
+        assert!(out.contains("cycle ↑"), "cycle marker present:\n{}", out);
     }
 
     #[test]

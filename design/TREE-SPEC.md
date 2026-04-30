@@ -1,6 +1,6 @@
 # proof tree — ASCII Tree Composer and Validator
 
-> **Status**: ✅ Implemented — `src/tree/`. Kinds: dirtree, org, taxonomy, dependency, outline. Schema-driven from md:// table or JSON sources. Inline body support. `proof tree generate` and `proof tree verify` CLI commands live.
+> **Status**: ✅ Implemented — `src/tree/`. Kinds: dirtree, org, taxonomy, dependency, outline, decision. Schema-driven from md:// table or JSON sources. Inline body support: numbered bullets for `outline` (auto-indented by dot depth); dash bullets for `org`/`taxonomy`/`dependency` (auto-detected indent unit, proper `│` continuation). `proof tree generate` and `proof tree verify` CLI commands live.
 
 ---
 

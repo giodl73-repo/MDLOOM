@@ -401,6 +401,142 @@ pub fn render_title_content(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     result
 }
 
+/// `comparison` layout — 2×2 quadrant grid for strategic matrices (e.g., SWOT,
+/// urgent/important, BCG matrix).
+///
+/// Body content uses quadrant markers to assign text to each cell:
+/// - `## q:tl` (or `## quadrant:tl`) — top-left
+/// - `## q:tr` (or `## quadrant:tr`) — top-right
+/// - `## q:bl` (or `## quadrant:bl`) — bottom-left
+/// - `## q:br` (or `## quadrant:br`) — bottom-right
+///
+/// Lines before the first marker are dropped (use the title for an overall
+/// label). Empty quadrants render blank.
+///
+/// Layout: title bar (3 rows) + separator + 2×2 grid filling the remaining
+/// height. The vertical mid-line is a column of single space chars between
+/// the two columns; the horizontal mid-line is a separator() row.
+pub fn render_comparison(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = 3usize;
+    let body_height = h.saturating_sub(title_height + 1); // +1 for separator under title
+    // Split body height into top-row, mid-separator, bottom-row.
+    let mid_sep_height = 1usize;
+    let row_height = body_height.saturating_sub(mid_sep_height) / 2;
+
+    // Column widths: equal split, remainder to the left.
+    let col_a_width = (w + 1) / 2;
+    let col_b_width = w.saturating_sub(col_a_width);
+
+    let (tl, tr, bl, br) = split_quadrants(&slide.body_content);
+    let tl_lines = lines_to_canvas(&render_body_lines(&tl, col_a_width), col_a_width, row_height);
+    let tr_lines = lines_to_canvas(&render_body_lines(&tr, col_b_width), col_b_width, row_height);
+    let bl_lines = lines_to_canvas(&render_body_lines(&bl, col_a_width), col_a_width, row_height);
+    let br_lines = lines_to_canvas(&render_body_lines(&br, col_b_width), col_b_width, row_height);
+
+    let mut result: Vec<String> = Vec::with_capacity(h);
+    let title_str = slide.title.as_deref().unwrap_or("");
+    result.push(fit_to_width(title_str, w));
+    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    result.push(separator(w));
+
+    // Top row: tl | tr
+    for i in 0..row_height {
+        let a = tl_lines.get(i).map(|s| s.as_str()).unwrap_or("");
+        let b = tr_lines.get(i).map(|s| s.as_str()).unwrap_or("");
+        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+    }
+    // Mid separator
+    result.push(separator(w));
+    // Bottom row: bl | br
+    for i in 0..row_height {
+        let a = bl_lines.get(i).map(|s| s.as_str()).unwrap_or("");
+        let b = br_lines.get(i).map(|s| s.as_str()).unwrap_or("");
+        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+    }
+
+    result.truncate(h);
+    while result.len() < h { result.push(" ".repeat(w)); }
+    result
+}
+
+/// Split body content at `## q:tl|tr|bl|br` (or `## quadrant:*`) markers.
+fn split_quadrants(body: &str) -> (String, String, String, String) {
+    let mut tl = String::new();
+    let mut tr = String::new();
+    let mut bl = String::new();
+    let mut br = String::new();
+    let mut current: Option<char> = None;
+    for line in body.lines() {
+        let trimmed = line.trim();
+        let marker = match trimmed {
+            "## q:tl" | "## quadrant:tl" => Some('1'),
+            "## q:tr" | "## quadrant:tr" => Some('2'),
+            "## q:bl" | "## quadrant:bl" => Some('3'),
+            "## q:br" | "## quadrant:br" => Some('4'),
+            _ => None,
+        };
+        if let Some(m) = marker { current = Some(m); continue; }
+        match current {
+            Some('1') => { tl.push_str(line); tl.push('\n'); }
+            Some('2') => { tr.push_str(line); tr.push('\n'); }
+            Some('3') => { bl.push_str(line); bl.push('\n'); }
+            Some('4') => { br.push_str(line); br.push('\n'); }
+            _ => {} // pre-marker content is dropped
+        }
+    }
+    (tl, tr, bl, br)
+}
+
+/// `content-caption` layout — main content area with a caption strip at the bottom.
+///
+/// Layout rows:
+/// - 1 row: title (left-aligned, fitted)
+/// - 2 rows: top padding
+/// - 1 row: separator
+/// - body_height - 4 rows: body content (`render_body_lines` over `body_content`)
+/// - 1 row: separator
+/// - 2 rows: caption (italic in box theme; left-aligned plain otherwise; comes from `slide.subtitle`)
+///
+/// Caption text is read from the slide's `subtitle` field. Authors set it via
+/// the slide front-matter `subtitle: "..."` attribute or via the inline form
+/// (`proof:slide layout=content-caption title="..." subtitle="..."`).
+/// If no subtitle is given the caption strip stays present but blank — keeping
+/// vertical alignment consistent across slides in a deck.
+pub fn render_content_caption(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
+    let w = meta.width;
+    let h = meta.height;
+    let title_height = 3usize;
+    // Reserve 3 rows at the bottom for the caption strip: separator + caption + padding.
+    let caption_strip_height = 3usize;
+    let body_height = h
+        .saturating_sub(title_height + 1) // +1 for separator under title
+        .saturating_sub(caption_strip_height);
+
+    let title_str = slide.title.as_deref().unwrap_or("");
+    let mut result: Vec<String> = Vec::with_capacity(h);
+
+    // Title area
+    result.push(fit_to_width(title_str, w));
+    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    result.push(separator(w));
+
+    // Body
+    let body_lines = render_body_lines(&slide.body_content, w);
+    result.extend(lines_to_canvas(&body_lines, w, body_height));
+
+    // Caption strip: separator + caption + padding
+    result.push(separator(w));
+    let caption = slide.subtitle.as_deref().unwrap_or("");
+    result.push(fit_to_width(caption, w));
+    result.push(" ".repeat(w));
+
+    result.truncate(h);
+    while result.len() < h { result.push(" ".repeat(w)); }
+    result
+}
+
 /// `two-column` layout — columns split by ratio, optional divider.
 /// Column delimiters in body: `## col:left` and `## col:right` (H2 level).
 pub fn render_two_column(
@@ -626,10 +762,8 @@ pub fn render_slide_with_warnings_in_deck(
         }
         SlideLayout::Stats => (render_stats(slide, meta), Vec::new()),
         SlideLayout::Blank => render_blank_with_warnings(slide, meta, &bullet_cfg),
-        SlideLayout::ContentCaption | SlideLayout::Comparison => {
-            // Fallback to title-content for unimplemented layouts
-            render_title_content_with_warnings(slide, meta, &bullet_cfg)
-        }
+        SlideLayout::ContentCaption => (render_content_caption(slide, meta), Vec::new()),
+        SlideLayout::Comparison => (render_comparison(slide, meta), Vec::new()),
     };
     let mut themed = apply_theme(&raw, meta);
     apply_footer(&mut themed, meta);
@@ -1072,6 +1206,102 @@ mod tests {
         let mut s = blank_slide(SlideLayout::Section);
         s.title = Some("Part 2".into());
         assert_sl1(&render_section(&s, &meta), &meta);
+    }
+
+    #[test]
+    fn content_caption_layout_sl1() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::ContentCaption);
+        s.title = Some("Diagram".into());
+        s.subtitle = Some("Figure 1: System overview".into());
+        s.body_content = "Main content paragraph.\n".into();
+        assert_sl1(&render_content_caption(&s, &meta), &meta);
+    }
+
+    #[test]
+    fn content_caption_renders_caption_at_bottom() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::ContentCaption);
+        s.title = Some("Diagram".into());
+        s.subtitle = Some("Figure 1: System overview".into());
+        s.body_content = "Main content paragraph.\n".into();
+        let lines = render_content_caption(&s, &meta);
+        // Title at top.
+        assert!(lines[0].starts_with("Diagram"), "title at row 0: {:?}", lines[0]);
+        // Caption text appears in the bottom strip — at row height-2 by construction.
+        let caption_row = &lines[meta.height - 2];
+        assert!(caption_row.starts_with("Figure 1:"),
+            "caption expected at row {}: {:?}", meta.height - 2, caption_row);
+        // Body content somewhere in the middle.
+        assert!(lines.iter().any(|l| l.starts_with("Main content")),
+            "body content somewhere in slide");
+    }
+
+    #[test]
+    fn comparison_layout_sl1() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.title = Some("SWOT".into());
+        s.body_content = "## q:tl\nStrengths\n## q:tr\nWeaknesses\n## q:bl\nOpportunities\n## q:br\nThreats\n".into();
+        assert_sl1(&render_comparison(&s, &meta), &meta);
+    }
+
+    #[test]
+    fn comparison_renders_all_four_quadrants() {
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.title = Some("Matrix".into());
+        s.body_content = "## q:tl\nTL marker\n## q:tr\nTR marker\n## q:bl\nBL marker\n## q:br\nBR marker\n".into();
+        let lines = render_comparison(&s, &meta);
+        let blob = lines.join("\n");
+        for marker in ["TL marker", "TR marker", "BL marker", "BR marker"] {
+            assert!(blob.contains(marker), "{} must appear in canvas:\n{}", marker, blob);
+        }
+        // Title at top.
+        assert!(lines[0].starts_with("Matrix"));
+        // TL appears in the upper half (above the mid-separator); BL in lower.
+        let mid = meta.height / 2;
+        assert!(lines[..mid].iter().any(|l| l.contains("TL marker")), "TL in upper half");
+        assert!(lines[mid..].iter().any(|l| l.contains("BL marker")), "BL in lower half");
+    }
+
+    #[test]
+    fn comparison_left_right_in_correct_columns() {
+        // TL must appear left of TR on the same row; BL left of BR.
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.body_content = "## q:tl\nLEFTONE\n## q:tr\nRIGHTONE\n## q:bl\nLEFTTWO\n## q:br\nRIGHTTWO\n".into();
+        let lines = render_comparison(&s, &meta);
+        let row_with_left_one = lines.iter().find(|l| l.contains("LEFTONE")).expect("TL row");
+        let l_pos = row_with_left_one.find("LEFTONE").unwrap();
+        let r_pos = row_with_left_one.find("RIGHTONE").expect("TR on same row");
+        assert!(l_pos < r_pos, "TL must precede TR on the row: l={}, r={}", l_pos, r_pos);
+    }
+
+    #[test]
+    fn comparison_quadrant_alias_works() {
+        // Long form `## quadrant:tl` is also accepted.
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::Comparison);
+        s.body_content = "## quadrant:tl\nLONG\n## q:br\nSHORT\n".into();
+        let lines = render_comparison(&s, &meta);
+        let blob = lines.join("\n");
+        assert!(blob.contains("LONG"));
+        assert!(blob.contains("SHORT"));
+    }
+
+    #[test]
+    fn content_caption_blank_caption_keeps_layout() {
+        // No subtitle → caption row is blank but the layout still has caption_strip_height rows.
+        let meta = meta_80x24();
+        let mut s = blank_slide(SlideLayout::ContentCaption);
+        s.title = Some("Diagram".into());
+        s.body_content = "Body.\n".into();
+        let lines = render_content_caption(&s, &meta);
+        assert_sl1(&lines, &meta);
+        let caption_row = &lines[meta.height - 2];
+        assert!(caption_row.chars().all(|c| c == ' '),
+            "blank caption row at row {}: {:?}", meta.height - 2, caption_row);
     }
 
     #[test]

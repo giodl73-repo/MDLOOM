@@ -1,6 +1,6 @@
 # proof figure — Implementation Plan
 
-> **Status**: Pre-implementation. All four waves are unstarted.
+> **Status**: Substantially implemented — see FIGURE-SPEC.md for the authoritative status. `src/figure/` contains the dither modes, shape clipping, and image→ASCII pipeline. DaVinci pinning lives in `src/davinci.rs`. Wave numbering below is now historical context, not a forward plan.
 > **Spec**: FIGURE-SPEC.md
 > **Exit criterion (full)**: `proof figure import logos/EDM.png --shape shield --label "EDM" --width 20`
 > produces a valid figure file; `proof:include kind=figure` embeds it with FIGURE-005 if unpinned.

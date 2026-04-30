@@ -1,6 +1,6 @@
 # proof dashboard — Fixed-Width ASCII Canvas Compositor
 
-> **Status**: ✅ Implemented — `src/dashboard/`. Canvas, region parser, compositor, proof:region compile directive all live. DASHBOARD-001 through DASHBOARD-006 diagnostics wired.
+> **Status**: ✅ Implemented — `src/dashboard/`. Canvas, region parser, compositor, proof:region compile directive all live. Inner directives inside `proof:region` bodies (proof:chart, proof:tree, proof:row, proof:element, proof:symbol, proof:shape, proof:math) are recursively rendered and pasted into the canvas with `no-chrome` semantics. **Author syntax**: directive lines inside a region are *fenceless* (`proof:chart kind=bar` on its own line followed by data lines), not nested triple-backtick fences — markdown's outer fence would close at the inner backticks. DASHBOARD-001 through DASHBOARD-006 diagnostics wired.
 
 ---
 

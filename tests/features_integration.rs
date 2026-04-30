@@ -453,6 +453,110 @@ fn tree_directive_counted_in_resolved_directives() {
         "expected 1 resolved directive for a single proof:tree, got {}", result.directives_resolved);
 }
 
+// ─────────────────────────────────────────────────────────
+// Regression: multi-line directives inside proof:region (issue #6)
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn region_renders_proof_chart_with_inline_body() {
+    // Reproduces the icelines bug from issue #6: a proof:chart with inline
+    // data inside a proof:region body must render to a sparkline, not be
+    // dropped silently. Uses fenceless directive syntax per DASHBOARD-SPEC.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 30\n  height: 4\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 4 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        proof:chart kind=sparkline width=20 no-chrome\n\
+        - 21-22: 44\n\
+        - 22-23: 64\n\
+        - 23-24: 32\n\
+        - 24-25: 26\n\
+        - 25-26: 48\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error)).collect();
+    assert!(errs.is_empty(), "no errors expected, got: {:?}",
+        errs.iter().map(|v| (v.code, &v.message)).collect::<Vec<_>>());
+    assert!(result.directives_resolved >= 1,
+        "chart inside region must count as a resolved directive, got {}", result.directives_resolved);
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    // Sparkline glyphs from the chart renderer.
+    assert!(
+        out.chars().any(|c| matches!(c, '▁' | '▂' | '▃' | '▄' | '▅' | '▆' | '▇' | '█')),
+        "expected sparkline glyphs in output:\n{}", out,
+    );
+    // The literal directive header text must NOT appear in canvas output.
+    assert!(
+        !out.contains("proof:chart kind=sparkline"),
+        "directive header should be replaced by rendered chart, got:\n{}", out,
+    );
+}
+
+#[test]
+fn region_renders_proof_tree_with_inline_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 40\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 40, height: 6 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        proof:tree kind=taxonomy\n\
+        root: R\n\
+        - A\n\
+          - A1\n\
+        - B\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error)).collect();
+    assert!(errs.is_empty(), "no errors: {:?}",
+        errs.iter().map(|v| (v.code, &v.message)).collect::<Vec<_>>());
+    assert!(result.directives_resolved >= 1, "tree must count");
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    assert!(out.contains("├──") || out.contains("└──"), "expected tree connectors:\n{}", out);
+    assert!(out.contains("A1"), "nested child must render:\n{}", out);
+}
+
+#[test]
+fn region_mixes_literals_and_directives() {
+    // Literal heading line + directive — both must appear in correct order.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 30\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 6 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        Trend:\n\
+        proof:chart kind=sparkline width=20 no-chrome\n\
+        a: 1\n\
+        b: 2\n\
+        c: 3\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result.violations.iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error)).collect();
+    assert!(errs.is_empty(), "no errors: {:?}",
+        errs.iter().map(|v| (v.code, &v.message)).collect::<Vec<_>>());
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    assert!(out.contains("Trend:"), "literal preserved:\n{}", out);
+    assert!(
+        out.chars().any(|c| matches!(c, '▁' | '▂' | '▃' | '▄' | '▅' | '▆' | '▇' | '█')),
+        "sparkline rendered:\n{}", out,
+    );
+}
+
 #[test]
 fn directives_resolved_persists_through_cache_hit() {
     // Regression for issue #5: the [[compile]] / repeated-compile flow returned
