@@ -495,6 +495,54 @@ fn write_fake_crop_bin(dir: &Path, args_file: &Path, exit_code: i32) -> PathBuf 
     bin
 }
 
+fn sibling_crop_manifest() -> Option<PathBuf> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = manifest_dir.parent().unwrap_or(manifest_dir);
+    for name in ["crop", "CROP"] {
+        let manifest = workspace.join(name).join("Cargo.toml");
+        if manifest.exists() {
+            return Some(manifest);
+        }
+    }
+    None
+}
+
+fn sibling_crop_fixture_root(crop_manifest: &Path) -> PathBuf {
+    crop_manifest
+        .parent()
+        .unwrap()
+        .join("examples")
+        .join("proof-fixture")
+}
+
+fn write_real_crop_bin(dir: &Path, crop_manifest: &Path) -> PathBuf {
+    let bin = if cfg!(windows) {
+        dir.join("crop-real.cmd")
+    } else {
+        dir.join("crop-real")
+    };
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\ncargo run --quiet --manifest-path \"{}\" -- %*\r\n",
+            crop_manifest.display()
+        )
+    } else {
+        format!(
+            "#!/bin/sh\ncargo run --quiet --manifest-path '{}' -- \"$@\"\n",
+            crop_manifest.display()
+        )
+    };
+    std::fs::write(&bin, script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&bin, perms).unwrap();
+    }
+    bin
+}
+
 // ─────────────────────────────────────────────────────────
 // L2: E2E — check that the binary produces correct exit codes
 // ─────────────────────────────────────────────────────────
@@ -2017,6 +2065,96 @@ fn binary_catalog_delegates_to_crop_catalog() {
         "got: {}",
         args
     );
+}
+
+#[test]
+fn binary_real_crop_index_generates_fixture_markdown() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+    let Some(crop_manifest) = sibling_crop_manifest() else {
+        return;
+    };
+    let fixture_root = sibling_crop_fixture_root(&crop_manifest);
+    let view_file = fixture_root.join("proof-ready-view.json");
+    if !view_file.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let crop_bin = write_real_crop_bin(dir.path(), &crop_manifest);
+    let output_path = dir.path().join("INDEX.md");
+
+    let output = std::process::Command::new(&bin)
+        .arg("index")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--view")
+        .arg(&view_file)
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof index with real CROP");
+
+    assert!(
+        output.status.success(),
+        "proof index real CROP failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let index = std::fs::read_to_string(&output_path).expect("real CROP index output");
+    assert!(index.contains("# proof-fixture-ready"), "got:\n{}", index);
+    assert!(index.contains("guide.source.md"), "got:\n{}", index);
+    assert!(index.contains("reference.source.md"), "got:\n{}", index);
+}
+
+#[test]
+fn binary_real_crop_frontmatter_generates_fixture_json() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+    let Some(crop_manifest) = sibling_crop_manifest() else {
+        return;
+    };
+    let fixture_root = sibling_crop_fixture_root(&crop_manifest);
+    let view_file = fixture_root.join("proof-ready-view.json");
+    if !view_file.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let crop_bin = write_real_crop_bin(dir.path(), &crop_manifest);
+    let output_path = dir.path().join("frontmatter.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("frontmatter")
+        .arg("--view")
+        .arg(&view_file)
+        .arg("--format")
+        .arg("json")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop frontmatter with real CROP");
+
+    assert!(
+        output.status.success(),
+        "proof crop frontmatter real CROP failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+    assert_eq!(json["schema_version"], "crop.markdown-frontmatter.v1");
+    assert_eq!(json["source_count"], 2);
+    assert!(json["key_counts"]["tags"].as_u64().unwrap_or(0) >= 2);
 }
 
 #[test]
