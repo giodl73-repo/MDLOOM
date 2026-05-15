@@ -1761,6 +1761,114 @@ fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
 }
 
 #[test]
+fn binary_crop_side_info_delegates_to_named_crop_report() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join("ready-guides.json");
+    let output_path = dir.path().join("frontmatter.json");
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("frontmatter")
+        .arg("--view")
+        .arg(&view_file)
+        .arg("--format")
+        .arg("json")
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--extension")
+        .arg("md")
+        .arg("--exclude-dir")
+        .arg("target")
+        .output()
+        .expect("failed to run proof crop frontmatter");
+
+    assert!(
+        output.status.success(),
+        "proof crop frontmatter failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("frontmatter"), "got: {}", args);
+    assert!(args.contains("--view"), "got: {}", args);
+    assert!(
+        args.contains(&view_file.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--format json"), "got: {}", args);
+    assert!(args.contains("--output"), "got: {}", args);
+    assert!(
+        args.contains(&output_path.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--extension md"), "got: {}", args);
+    assert!(args.contains("--exclude-dir target"), "got: {}", args);
+}
+
+#[test]
+fn binary_crop_artifacts_delegates_to_crop_artifacts() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let manifest_path = dir.path().join("artifacts.json");
+    let output_path = dir.path().join("ARTIFACTS.md");
+    std::fs::write(&manifest_path, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("artifacts")
+        .arg("--manifest")
+        .arg(&manifest_path)
+        .arg("--format")
+        .arg("markdown")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop artifacts");
+
+    assert!(
+        output.status.success(),
+        "proof crop artifacts failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("artifacts"), "got: {}", args);
+    assert!(args.contains("--manifest"), "got: {}", args);
+    assert!(
+        args.contains(&manifest_path.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--format markdown"), "got: {}", args);
+    assert!(args.contains("--output"), "got: {}", args);
+    assert!(
+        args.contains(&output_path.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
 fn binary_crop_relays_crop_exit_code() {
     let bin = debug_bin();
     if !bin.exists() {

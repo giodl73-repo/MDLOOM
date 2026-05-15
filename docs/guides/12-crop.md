@@ -67,6 +67,39 @@ proof crop inspect-views --dir .crop/views --strict
 
 ---
 
+## Generate side-info reports
+
+For machine-readable corpus side-info, use the report wrappers. They default to
+JSON and also support Markdown when a human-readable table is useful:
+
+```text
+proof crop links --view .crop/views/ready-guides.json --output .proof/side-info/links.json
+proof crop backlinks --view .crop/views/ready-guides.json --output .proof/side-info/backlinks.json
+proof crop frontmatter --view .crop/views/ready-guides.json --output .proof/side-info/frontmatter.json
+proof crop headings --view .crop/views/ready-guides.json --output .proof/side-info/headings.json
+```
+
+Each report also accepts `--root`, `--extension`, `--exclude-dir`, `--format
+json`, and `--format markdown`. PROOF relays CROP's exit code so CI can fail on
+CROP-side report errors without PROOF reimplementing those checks.
+
+---
+
+## Check generated artifact health
+
+After `proof compile` writes `.proof/artifacts.json`, CROP can report generated
+artifact health through its PROOF manifest adapter:
+
+```text
+proof crop artifacts --manifest .proof/artifacts.json --format markdown --output ARTIFACTS.md
+```
+
+Use this for missing, stale, cached, or diagnostic artifact rows. Generic corpus
+status pages should still use `proof crop status`; artifact health is a
+PROOF-manifest adapter over generated outputs.
+
+---
+
 ## Choosing PROOF vs. CROP
 
 Use PROOF when the task is about compiling `.source.md`, rendering charts,

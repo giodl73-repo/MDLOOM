@@ -53,7 +53,7 @@ impl DispatchContext {
             Some(Command::Init) => cmd_init::run(),
             Some(Command::Status(args)) => cmd_status::run_with_globals(args, &globals),
             Some(Command::Config(args)) => cmd_config::run_with_globals(args, &globals),
-            Some(Command::Crop(args)) => cmd_crop::run(args),
+            Some(Command::Crop(args)) => cmd_crop::run_with_globals(args, &globals),
             Some(Command::Stats(args)) => cmd_stats::run_with_globals(args, &globals),
             Some(Command::Tree(args)) => cmd_tree::run(args),
             Some(Command::SpecGenerate(args)) => {

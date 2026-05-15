@@ -1,3 +1,4 @@
+use crate::cmd_context::GlobalOptions;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -19,6 +20,16 @@ enum CropCommand {
     Status(StatusArgs),
     /// Validate CROP view recipes in a view store
     InspectViews(InspectViewsArgs),
+    /// Generate local link side-info
+    Links(SideInfoArgs),
+    /// Generate backlink and orphan side-info
+    Backlinks(SideInfoArgs),
+    /// Generate frontmatter inventory side-info
+    Frontmatter(SideInfoArgs),
+    /// Generate heading inventory side-info
+    Headings(SideInfoArgs),
+    /// Report PROOF generated artifact manifest health through CROP
+    Artifacts(ArtifactsArgs),
 }
 
 #[derive(clap::Args)]
@@ -56,10 +67,53 @@ struct InspectViewsArgs {
     strict: bool,
 }
 
-pub(crate) fn run(args: Args) -> Result<()> {
+#[derive(clap::Args)]
+struct SideInfoArgs {
+    /// Root directory or file to analyze
+    #[arg(long)]
+    root: Option<PathBuf>,
+    /// crop.view.v1 recipe to analyze
+    #[arg(long)]
+    view: Option<PathBuf>,
+    /// Restrict analyzed files to one or more extensions, e.g. --extension md
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename while analyzing
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
+    /// Optional output path. Defaults to CROP stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+struct ArtifactsArgs {
+    /// PROOF repository root. CROP reads .proof\artifacts.json under this root
+    #[arg(long)]
+    root: Option<PathBuf>,
+    /// Explicit PROOF artifact manifest path
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+    /// Optional output path. Defaults to CROP stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect),
+        CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
+        CropCommand::Backlinks(side_info) => {
+            run_side_info(args.crop_bin, "backlinks", side_info, globals)
+        }
+        CropCommand::Frontmatter(side_info) => {
+            run_side_info(args.crop_bin, "frontmatter", side_info, globals)
+        }
+        CropCommand::Headings(side_info) => {
+            run_side_info(args.crop_bin, "headings", side_info, globals)
+        }
+        CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
     }
 }
 
@@ -112,6 +166,81 @@ fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
     }
 
     run_crop(crop_bin, crop_args)
+}
+
+fn run_side_info(
+    crop_bin: PathBuf,
+    command: &str,
+    args: SideInfoArgs,
+    globals: &GlobalOptions,
+) -> Result<()> {
+    if args.root.is_some() && args.view.is_some() {
+        bail!(
+            "proof crop {} accepts either --root or --view, not both",
+            command
+        );
+    }
+
+    let mut crop_args = vec![command.to_string()];
+    if let Some(root) = args.root {
+        crop_args.push("--root".to_string());
+        crop_args.push(root.display().to_string());
+    }
+    if let Some(view) = args.view {
+        crop_args.push("--view".to_string());
+        crop_args.push(view.display().to_string());
+    }
+    for extension in args.extensions {
+        crop_args.push("--extension".to_string());
+        crop_args.push(extension);
+    }
+    for exclude_dir in args.exclude_dirs {
+        crop_args.push("--exclude-dir".to_string());
+        crop_args.push(exclude_dir);
+    }
+    crop_args.push("--format".to_string());
+    crop_args.push(crop_report_format(globals)?);
+    if let Some(output) = args.output {
+        crop_args.push("--output".to_string());
+        crop_args.push(output.display().to_string());
+    }
+
+    run_crop(crop_bin, crop_args)
+}
+
+fn run_artifacts(crop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions) -> Result<()> {
+    if args.root.is_some() && args.manifest.is_some() {
+        bail!("proof crop artifacts accepts either --root or --manifest, not both");
+    }
+
+    let mut crop_args = vec!["artifacts".to_string()];
+    if let Some(root) = args.root {
+        crop_args.push("--root".to_string());
+        crop_args.push(root.display().to_string());
+    }
+    if let Some(manifest) = args.manifest {
+        crop_args.push("--manifest".to_string());
+        crop_args.push(manifest.display().to_string());
+    }
+    crop_args.push("--format".to_string());
+    crop_args.push(crop_report_format(globals)?);
+    if let Some(output) = args.output {
+        crop_args.push("--output".to_string());
+        crop_args.push(output.display().to_string());
+    }
+
+    run_crop(crop_bin, crop_args)
+}
+
+fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
+    match globals.format() {
+        "text" => Ok("json".to_string()),
+        "json" | "markdown" => Ok(globals.format().to_string()),
+        other => bail!(
+            "proof crop report format must be json or markdown, got {:?}",
+            other
+        ),
+    }
 }
 
 fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
