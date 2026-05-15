@@ -1,6 +1,6 @@
 # proof field mapping — Shared Data Binding System
 
-> **Status**: ⚡ Partially implemented. `FieldMap`, `parse_md_table`, `parse_json_source` live in `src/tree/schema.rs`. Full query parameter support (`?select`, `?filter`, `?count`, `?top`, `?skip`) is deferred.
+> **Status**: ✅ Implemented. `FieldMap`, `parse_md_table`, `parse_json_source` live in `src/tree/schema.rs`. URI query parameters all live: `?select=cols`, `?filter=col=val|col!=val|col>val|col<val` (compose with AND when repeated), `?count` (single-cell row-count synthetic table), `?top=N` and `?skip=N` (compose for paging — skip then top).
 
 ---
 

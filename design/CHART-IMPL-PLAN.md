@@ -1,7 +1,7 @@
 # proof chart — Implementation Plan
 
-> **Spec**: `design/CHART-SPEC.md`  
-> **Status**: ⚡ MVP implemented — `src/chart/` (bar, line kinds). Full wave plan (scatter, heatmap, stacked-bar, waterfall, gantt, area) deferred.  
+> **Spec**: `design/CHART-SPEC.md`
+> **Status**: ✅ Implemented — `src/chart/`. All ten roster kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. `sankey` is intentionally out of scope (see CHART-SPEC for rationale). The wave plan below is now historical context, not a forward plan.
 > **Implemented**: `proof:chart` compile directive live. `proof chart check` and `proof chart generate` CLI stubs present.
 
 ---
@@ -37,15 +37,15 @@ src/
     chart.rs          — CLI surface (check + generate subcommands)
 ```
 
-`src/checks/mod.rs` gains `pub mod ascii_chart;`.  
+`src/checks/mod.rs` gains `pub mod ascii_chart;`.
 `src/commands/chart.rs` is registered in `main.rs`.
 
 ---
 
 ## Wave 1 — Table charts
 
-**Target file**: `src/chart/table.rs`  
-**Estimated LOC**: ~650  
+**Target file**: `src/chart/table.rs`
+**Estimated LOC**: ~650
 **Depends on**: nothing (self-contained)
 
 ### What to build
@@ -61,47 +61,47 @@ Validate and generate the eight Category 1 kinds. All share a common render mode
 
 #### New kinds
 
-**`stacked-bar`**  
-Schema: `item | v1 | v2 | v3 [| ...]`  
-Fill char order: `█ ░ ▒ ▓ ·` cycling.  
-Validation: for each row, `round(vN / sum * max_bar_width)` segments must sum to bar width ±1.  
-Diagnostic: `ascii_chart_stacked_sum`.  
+**`stacked-bar`**
+Schema: `item | v1 | v2 | v3 [| ...]`
+Fill char order: `█ ░ ▒ ▓ ·` cycling.
+Validation: for each row, `round(vN / sum * max_bar_width)` segments must sum to bar width ±1.
+Diagnostic: `ascii_chart_stacked_sum`.
 Generation: render each row as concatenated fill-char runs, append legend line.
 
-**`bullet`**  
-Schema: `metric | actual | target | max`  
-Validation: bar width = `round(actual / max * chart_width)`; target marker `|` at `round(target / max * chart_width)`.  
-Diagnostic: `ascii_chart_scale` (bar off) — no separate bullet code needed.  
+**`bullet`**
+Schema: `metric | actual | target | max`
+Validation: bar width = `round(actual / max * chart_width)`; target marker `|` at `round(target / max * chart_width)`.
+Diagnostic: `ascii_chart_scale` (bar off) — no separate bullet code needed.
 Generation: render fill bar, insert `|` at target column.
 
-**`lollipop`**  
-Schema: `item | value [| max]`  
-Same auto-scale logic as `bar`. Render as `─────●` where stem length = scaled value.  
+**`lollipop`**
+Schema: `item | value [| max]`
+Same auto-scale logic as `bar`. Render as `─────●` where stem length = scaled value.
 Configurable `marker` attribute (default `●`).
 
-**`sparkline`**  
-Schema: `period | value`  
-8-level block chars: `▁▂▃▄▅▆▇█` (min → max, with equal-width buckets).  
-Invariant C-8: `min(values)` maps to `▁`, `max(values)` maps to `█`.  
-Validation: scan each char in the sparkline string; verify it's a block char; verify relative ordering is monotone-consistent with values.  
-Generation: `(v - min) / (max - min) * 7` rounded → index into `['▁','▂','▃','▄','▅','▆','▇','█']`.  
+**`sparkline`**
+Schema: `period | value`
+8-level block chars: `▁▂▃▄▅▆▇█` (min → max, with equal-width buckets).
+Invariant C-8: `min(values)` maps to `▁`, `max(values)` maps to `█`.
+Validation: scan each char in the sparkline string; verify it's a block char; verify relative ordering is monotone-consistent with values.
+Generation: `(v - min) / (max - min) * 7` rounded → index into `['▁','▂','▃','▄','▅','▆','▇','█']`.
 Output: single line, no axes.
 
-**`gantt`**  
-Schema: `task | start | end | status`  
-Fill chars: `█` done, `▒` in-progress, `░` planned, `·` optional.  
-Allowed status values: `done`, `in-progress`, `planned`, `optional`/`deferred`.  
-Invariant C-5: no overlapping bars within a row (start < end; no row duplicates at same task).  
-Validation: check fill chars match declared status; check bar proportionality against time axis.  
-Diagnostic: `ascii_chart_scale` (proportionality), `ascii_chart_kind` (unknown status value as warning).  
+**`gantt`**
+Schema: `task | start | end | status`
+Fill chars: `█` done, `▒` in-progress, `░` planned, `·` optional.
+Allowed status values: `done`, `in-progress`, `planned`, `optional`/`deferred`.
+Invariant C-5: no overlapping bars within a row (start < end; no row duplicates at same task).
+Validation: check fill chars match declared status; check bar proportionality against time axis.
+Diagnostic: `ascii_chart_scale` (proportionality), `ascii_chart_kind` (unknown status value as warning).
 Generation: compute time axis range = `[min(start), max(end)]`; scale each task bar to chart_width.
 
-**`heatmap`**  
-Schema: matrix table (first column = row labels, header row = column labels, cells = numeric values).  
-Invariant C-4: cells must use only chars from the declared 4-char shading scale.  
-Default scale: `░▒▓█` (low → high).  
-Validation: parse each cell; look up its shading char; verify it maps to the correct bucket given the declared min/max.  
-Diagnostic: `ascii_chart_shading`.  
+**`heatmap`**
+Schema: matrix table (first column = row labels, header row = column labels, cells = numeric values).
+Invariant C-4: cells must use only chars from the declared 4-char shading scale.
+Default scale: `░▒▓█` (low → high).
+Validation: parse each cell; look up its shading char; verify it maps to the correct bucket given the declared min/max.
+Diagnostic: `ascii_chart_shading`.
 Generation: compute min/max across all cells; map each value to `floor((v - min) / (max - min) * 3)` → shading char index.
 
 ### Key structs
@@ -196,8 +196,8 @@ Target: 30+ unit tests. Cover:
 
 ## Wave 2 — Graph charts
 
-**Target file**: `src/chart/graph.rs`  
-**Estimated LOC**: ~900  
+**Target file**: `src/chart/graph.rs`
+**Estimated LOC**: ~900
 **Depends on**: `chart/ticks.rs` (build first in this wave)
 
 ### Build `src/chart/ticks.rs` first (~120 LOC)
@@ -307,32 +307,32 @@ fn data_to_row(y: f64, y_min: f64, y_max: f64, chart_height: usize) -> usize
 
 ### Kinds
 
-**`line` / `scatter`**  
-Place each point at `(data_to_col(x), data_to_row(y))` with series marker.  
-Line: after placing points, scan adjacent pairs; connect with `─` (dy=0), `│` (dx=0), `/` or `\` (diagonal). Multi-step diagonals use bresenham.  
-Tie-break for overlapping markers: later series wins; both appear in legend.  
-Diagnostic `ascii_chart_origin`: in 4-quadrant mode, verify `┼` is at the grid cell for (0,0).  
+**`line` / `scatter`**
+Place each point at `(data_to_col(x), data_to_row(y))` with series marker.
+Line: after placing points, scan adjacent pairs; connect with `─` (dy=0), `│` (dx=0), `/` or `\` (diagonal). Multi-step diagonals use bresenham.
+Tie-break for overlapping markers: later series wins; both appear in legend.
+Diagnostic `ascii_chart_origin`: in 4-quadrant mode, verify `┼` is at the grid cell for (0,0).
 Diagnostic `ascii_chart_sort`: (not applicable to scatter/line — used for timeline).
 
-**`area`**  
+**`area`**
 Same as `line` but after drawing the line, fill every cell between the line and the x-axis with `fill_char`. Multi-series: each series uses its own fill char in marker order.
 
-**`histogram`**  
+**`histogram`**
 Two input modes:
 - Pre-binned (`bin_start | bin_end | count`): use directly.
 - Raw (`value`): apply Sturges rule `bins = ceil(log2(n) + 1)` (or `config.bins` override); compute equal-width bins from min to max; count values per bin.
 
-Invariant C-12: all bins equal width, no gaps. Validate by checking `bin_end[i] == bin_start[i+1]`.  
-Render as vertical bars on a 2D grid (y = count, x = bin position). No gap between adjacent bars.  
+Invariant C-12: all bins equal width, no gaps. Validate by checking `bin_end[i] == bin_start[i+1]`.
+Render as vertical bars on a 2D grid (y = count, x = bin position). No gap between adjacent bars.
 Diagnostic: `ascii_chart_scale` if rendered bar height doesn't match count proportion.
 
-**`candlestick`**  
-Schema: `date | open | high | low | close`.  
-Render vertically (time on x-axis, price on y-axis).  
+**`candlestick`**
+Schema: `date | open | high | low | close`.
+Render vertically (time on x-axis, price on y-axis).
 For each date column:
 - `│` from `data_to_row(high)` to `data_to_row(low)` — the wick.
 - `▓` from `data_to_row(min(open,close))` to `data_to_row(max(open,close))` — the body.
-Validation: verify `low ≤ open ≤ high` and `low ≤ close ≤ high` (OHLC ordering invariant).  
+Validation: verify `low ≤ open ≤ high` and `low ≤ close ≤ high` (OHLC ordering invariant).
 Diagnostic: `ascii_chart_scale` for body/wick mis-rendering.
 
 ### Axis rendering
@@ -375,14 +375,14 @@ Target: 40+ unit tests total across ticks and graph.
 
 ## Wave 3 — Flow charts
 
-**Target file**: `src/chart/flow.rs`  
-**Estimated LOC**: ~480  
+**Target file**: `src/chart/flow.rs`
+**Estimated LOC**: ~480
 **Depends on**: Wave 1 (shares `code_block_mask`), Wave 2 `ticks.rs` (timeline date axis)
 
 ### `waterfall`
 
-Schema: `step | delta | label`.  
-First row and last row are totals (full bars from 0); middle rows are deltas.  
+Schema: `step | delta | label`.
+First row and last row are totals (full bars from 0); middle rows are deltas.
 Running offset tracks cumulative position.
 
 ```rust
@@ -397,16 +397,16 @@ pub fn validate_waterfall(rows: &[WaterfallRow], path: &Path, chart_width: usize
 pub fn generate_waterfall(rows: &[WaterfallRow], chart_width: usize) -> String
 ```
 
-Invariant C-11: `final_total_bar_width == round(start + sum(deltas) / max_abs_val * chart_width)` ±1.  
+Invariant C-11: `final_total_bar_width == round(start + sum(deltas) / max_abs_val * chart_width)` ±1.
 Diagnostic: `ascii_chart_waterfall_balance`.
 
 Rendering: for each row, compute bar start column (`offset`) and bar width (`delta_scaled`). Positive delta extends right from offset; negative delta retracts left. Label placed after bar.
 
 ### `timeline`
 
-Schema: `date | event [| label]`.  
-Date parsing: integer year or ISO `YYYY-MM-DD`. Convert to comparable f64 (year + fractional day).  
-Invariant C-3: events sorted left-to-right by date.  
+Schema: `date | event [| label]`.
+Date parsing: integer year or ISO `YYYY-MM-DD`. Convert to comparable f64 (year + fractional day).
+Invariant C-3: events sorted left-to-right by date.
 Diagnostic: `ascii_chart_sort` (emitted per out-of-order pair).
 
 ```rust
@@ -432,13 +432,13 @@ pub fn validate_sankey(flows: &[SankeyFlow], path: &Path) -> Vec<Diagnostic>
 pub fn generate_sankey(flows: &[SankeyFlow], chart_width: usize) -> String
 ```
 
-Flow width: `round(value / total * chart_width / 2)` (half for each side).  
-Node balance: for intermediate nodes, `total_in` must equal `total_out` ±1 char.  
-Diagnostic: `ascii_chart_sankey_balance`.  
-Rendering: sources on left, sinks on right. Each flow rendered as `═` bar scaled to value. Box-drawing connectors `╗ ╠ ╣ ╚` join flow lines to node columns.  
+Flow width: `round(value / total * chart_width / 2)` (half for each side).
+Node balance: for intermediate nodes, `total_in` must equal `total_out` ±1 char.
+Diagnostic: `ascii_chart_sankey_balance`.
+Rendering: sources on left, sinks on right. Each flow rendered as `═` bar scaled to value. Box-drawing connectors `╗ ╠ ╣ ╚` join flow lines to node columns.
 
-Source nodes: labeled on left, sorted by descending `total_out`.  
-Sink nodes: labeled on right, sorted by descending `total_in`.  
+Source nodes: labeled on left, sorted by descending `total_out`.
+Sink nodes: labeled on right, sorted by descending `total_in`.
 Multi-hop flows: intermediate nodes laid out in center column(s).
 
 ### Tests (`src/chart/flow.rs`)
@@ -461,8 +461,8 @@ Target: 10+ tests per kind (30+ total).
 
 ## Wave 4 — Generation from `md://` source schemas
 
-**Target file**: `src/chart/schema.rs`  
-**Estimated LOC**: ~420  
+**Target file**: `src/chart/schema.rs`
+**Estimated LOC**: ~420
 **Depends on**: Waves 1–3 (consumes all `generate_*` functions)
 
 ### Source table parser
@@ -574,8 +574,8 @@ Target: 15+ unit tests.
 
 ## Wave 5 — `proof:chart` compile directive
 
-**Target file**: additions to `src/compile.rs`  
-**Estimated LOC**: ~180 (incremental — new enum variant + arm + format function)  
+**Target file**: additions to `src/compile.rs`
+**Estimated LOC**: ~180 (incremental — new enum variant + arm + format function)
 **Depends on**: Waves 1–4
 
 ### Directive syntax (from spec)

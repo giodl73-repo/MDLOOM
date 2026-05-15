@@ -147,6 +147,12 @@ pub struct CompileCacheEntry {
     pub resolved_uris: Vec<String>,
     pub proof_version: String,
     pub created_at: u64,
+    /// Number of proof:* directives resolved during the compile that produced
+    /// this entry. Restored on cache hit so the "(N directives)" output stays
+    /// truthful across recompiles. `#[serde(default)]` keeps old entries
+    /// loadable (they restore as 0 — acceptable; they'll be re-cached on miss).
+    #[serde(default)]
+    pub directives_resolved: usize,
 }
 
 /// Compute the Tier 3 compile key.
@@ -239,6 +245,7 @@ pub fn store_compile_cache(
         resolved_uris,
         proof_version: proof_version().to_string(),
         created_at: epoch_ms(),
+        directives_resolved: 0,
     };
     save_compile_cache(root, &entry);
 }
@@ -331,6 +338,368 @@ pub fn store_resolve_cache(
 // ─────────────────────────────────────────────────────────
 
 /// Remove cache entries older than `max_age_days`. Returns count removed.
+// ─────────────────────────────────────────────────────────
+// Cache snapshots — named compile states
+// (per design/CACHE-SNAPSHOTS.md)
+// ─────────────────────────────────────────────────────────
+
+fn snapshots_dir(root: &Path) -> PathBuf {
+    cache_dir(root).join("snapshots")
+}
+
+fn snapshot_dir(root: &Path, name: &str) -> PathBuf {
+    snapshots_dir(root).join(name)
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SnapshotManifest {
+    pub name: String,
+    pub created_at: u64,
+    pub proof_version: String,
+    /// Source file paths covered by this snapshot, in compile-cache enumeration order.
+    pub files: Vec<String>,
+    /// Per-file three-tier keys. For each file: parse key, resolve keys (one per
+    /// referenced URI), compile key (None if no compile entry).
+    pub tiers: std::collections::HashMap<String, TieredCacheKeys>,
+    pub total_size: u64,
+    /// SHA-256 over the manifest body (without this hash) plus all cache keys.
+    pub integrity_hash: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TieredCacheKeys {
+    pub parse: String,
+    pub resolve: Vec<String>,
+    pub compile: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotDiff {
+    pub only_in_a: Vec<String>,
+    pub only_in_b: Vec<String>,
+    pub changed: Vec<String>,
+    pub identical: Vec<String>,
+}
+
+/// Save the current cache state to a named snapshot. Atomic temp-then-rename.
+/// Returns the manifest on success.
+pub fn snapshot_save(root: &Path, name: &str) -> std::io::Result<SnapshotManifest> {
+    let snap_root = snapshot_dir(root, name);
+    if snap_root.exists() {
+        std::fs::remove_dir_all(&snap_root)?;
+    }
+    let tmp = snapshots_dir(root).join(format!(".{}.tmp", name));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp)?;
+    let dirs = [
+        ("parse", parse_dir(root)),
+        ("resolve", resolve_dir(root)),
+        ("compile", compile_dir(root)),
+    ];
+    let mut total_size: u64 = 0;
+    for (label, src) in &dirs {
+        let dest = tmp.join(label);
+        std::fs::create_dir_all(&dest)?;
+        if let Ok(entries) = std::fs::read_dir(src) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) != Some("json") {
+                    continue;
+                }
+                let bytes = std::fs::read(&p)?;
+                total_size += bytes.len() as u64;
+                let target = dest.join(p.file_name().unwrap_or_default());
+                std::fs::write(&target, &bytes)?;
+            }
+        }
+    }
+
+    // Build the per-file TieredCacheKeys map by reading every compile entry's source_path.
+    let mut tiers: std::collections::HashMap<String, TieredCacheKeys> =
+        std::collections::HashMap::new();
+    let mut files: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(tmp.join("compile")) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            let Ok(ce) = serde_json::from_str::<CompileCacheEntry>(&text) else {
+                continue;
+            };
+            let compile_key_str = p
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_string();
+            let path_index = load_path_index(root);
+            let parse_key = path_index
+                .get(&ce.source_path)
+                .map(|e| e.parse_key.clone())
+                .unwrap_or_default();
+            let resolve_keys = ce.resolved_uris.clone();
+            files.push(ce.source_path.clone());
+            tiers.insert(
+                ce.source_path.clone(),
+                TieredCacheKeys {
+                    parse: parse_key,
+                    resolve: resolve_keys,
+                    compile: Some(compile_key_str),
+                },
+            );
+        }
+    }
+    files.sort();
+
+    // Manifest with placeholder hash, then compute.
+    let mut manifest = SnapshotManifest {
+        name: name.to_string(),
+        created_at: epoch_ms(),
+        proof_version: proof_version().to_string(),
+        files: files.clone(),
+        tiers: tiers.clone(),
+        total_size,
+        integrity_hash: String::new(),
+    };
+    manifest.integrity_hash = compute_integrity_hash(&manifest);
+    let manifest_path = tmp.join("manifest.json");
+    let manifest_json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(&manifest_path, manifest_json)?;
+
+    // Atomic rename: tmp → snap_root
+    if let Some(parent) = snap_root.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&tmp, &snap_root)?;
+    Ok(manifest)
+}
+
+/// Restore a named snapshot to active cache directories. Verifies integrity
+/// before applying. Returns the manifest on success, or an error if the
+/// snapshot is missing or corrupted.
+pub fn snapshot_restore(root: &Path, name: &str) -> Result<SnapshotManifest, SnapshotError> {
+    let snap_root = snapshot_dir(root, name);
+    if !snap_root.exists() {
+        return Err(SnapshotError::NotFound(name.to_string()));
+    }
+    let manifest = load_snapshot_manifest(&snap_root)
+        .ok_or_else(|| SnapshotError::Corrupted("manifest.json missing or unparseable".into()))?;
+    verify_integrity(&manifest)?;
+
+    // Copy each tier dir back to active cache.
+    for (label, dest) in [
+        ("parse", parse_dir(root)),
+        ("resolve", resolve_dir(root)),
+        ("compile", compile_dir(root)),
+    ] {
+        std::fs::create_dir_all(&dest).map_err(SnapshotError::Io)?;
+        let src = snap_root.join(label);
+        let Ok(entries) = std::fs::read_dir(&src) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let target = dest.join(p.file_name().unwrap_or_default());
+            std::fs::copy(&p, &target).map_err(SnapshotError::Io)?;
+        }
+    }
+    Ok(manifest)
+}
+
+/// List all named snapshots with their manifests, ordered by created_at descending.
+pub fn snapshot_list(root: &Path) -> Vec<SnapshotManifest> {
+    let dir = snapshots_dir(root);
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_dir() {
+            continue;
+        }
+        if let Some(m) = load_snapshot_manifest(&p) {
+            out.push(m);
+        }
+    }
+    out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    out
+}
+
+/// Compare two named snapshots by per-file tier keys.
+pub fn snapshot_diff(
+    root: &Path,
+    name_a: &str,
+    name_b: &str,
+) -> Result<SnapshotDiff, SnapshotError> {
+    let a = load_snapshot_manifest(&snapshot_dir(root, name_a))
+        .ok_or_else(|| SnapshotError::NotFound(name_a.to_string()))?;
+    let b = load_snapshot_manifest(&snapshot_dir(root, name_b))
+        .ok_or_else(|| SnapshotError::NotFound(name_b.to_string()))?;
+    let mut diff = SnapshotDiff {
+        only_in_a: Vec::new(),
+        only_in_b: Vec::new(),
+        changed: Vec::new(),
+        identical: Vec::new(),
+    };
+    for f in &a.files {
+        if !b.tiers.contains_key(f) {
+            diff.only_in_a.push(f.clone());
+        } else if a.tiers.get(f).map(tiered_signature) != b.tiers.get(f).map(tiered_signature) {
+            diff.changed.push(f.clone());
+        } else {
+            diff.identical.push(f.clone());
+        }
+    }
+    for f in &b.files {
+        if !a.tiers.contains_key(f) {
+            diff.only_in_b.push(f.clone());
+        }
+    }
+    diff.only_in_a.sort();
+    diff.only_in_b.sort();
+    diff.changed.sort();
+    diff.identical.sort();
+    Ok(diff)
+}
+
+/// Remove all but the N most recent snapshots. Returns deleted snapshot names.
+pub fn snapshot_prune(root: &Path, keep: usize) -> Vec<String> {
+    let snapshots = snapshot_list(root);
+    let mut deleted = Vec::new();
+    for old in snapshots.into_iter().skip(keep) {
+        let p = snapshot_dir(root, &old.name);
+        if std::fs::remove_dir_all(&p).is_ok() {
+            deleted.push(old.name);
+        }
+    }
+    deleted
+}
+
+/// Materialize compiled output from a snapshot to a target directory without
+/// recompiling. Each file's compiled_text is written under target_dir/{relative_path}.
+pub fn snapshot_deploy(root: &Path, name: &str, target_dir: &Path) -> Result<usize, SnapshotError> {
+    let snap_root = snapshot_dir(root, name);
+    if !snap_root.exists() {
+        return Err(SnapshotError::NotFound(name.to_string()));
+    }
+    let manifest = load_snapshot_manifest(&snap_root)
+        .ok_or_else(|| SnapshotError::Corrupted("manifest.json missing".into()))?;
+    verify_integrity(&manifest)?;
+
+    let mut count = 0usize;
+    let compile_dir_in_snap = snap_root.join("compile");
+    let Ok(entries) = std::fs::read_dir(&compile_dir_in_snap) else {
+        return Ok(0);
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        let Ok(ce) = serde_json::from_str::<CompileCacheEntry>(&text) else {
+            continue;
+        };
+        let rel = std::path::Path::new(&ce.output_path);
+        let final_path = if rel.is_absolute() {
+            target_dir.join(rel.file_name().unwrap_or_default())
+        } else {
+            target_dir.join(rel)
+        };
+        if let Some(parent) = final_path.parent() {
+            std::fs::create_dir_all(parent).map_err(SnapshotError::Io)?;
+        }
+        std::fs::write(&final_path, ce.compiled_text).map_err(SnapshotError::Io)?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+#[derive(Debug)]
+pub enum SnapshotError {
+    NotFound(String),
+    Corrupted(String),
+    IntegrityMismatch,
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for SnapshotError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound(n) => write!(f, "snapshot {:?} not found", n),
+            Self::Corrupted(m) => write!(f, "snapshot corrupted: {}", m),
+            Self::IntegrityMismatch => write!(f, "snapshot integrity hash mismatch (COMPILE-004)"),
+            Self::Io(e) => write!(f, "io error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotError {}
+
+fn load_snapshot_manifest(snap_root: &Path) -> Option<SnapshotManifest> {
+    let text = std::fs::read_to_string(snap_root.join("manifest.json")).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn compute_integrity_hash(manifest: &SnapshotManifest) -> String {
+    // Canonicalize: name + created_at + proof_version + sorted files + sorted tier keys.
+    let mut parts: Vec<String> = vec![
+        manifest.name.clone(),
+        manifest.created_at.to_string(),
+        manifest.proof_version.clone(),
+        manifest.total_size.to_string(),
+    ];
+    let mut files = manifest.files.clone();
+    files.sort();
+    parts.extend(files);
+    let mut keys: Vec<&String> = manifest.tiers.keys().collect();
+    keys.sort();
+    for k in keys {
+        if let Some(t) = manifest.tiers.get(k) {
+            parts.push(format!(
+                "{}|{}|{}|{}",
+                k,
+                t.parse,
+                t.resolve.join(","),
+                t.compile.as_deref().unwrap_or("")
+            ));
+        }
+    }
+    let part_refs: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
+    compute_key(&part_refs)
+}
+
+fn verify_integrity(manifest: &SnapshotManifest) -> Result<(), SnapshotError> {
+    let stored = manifest.integrity_hash.clone();
+    let mut m = manifest.clone();
+    m.integrity_hash = String::new();
+    let computed = compute_integrity_hash(&m);
+    if stored != computed {
+        Err(SnapshotError::IntegrityMismatch)
+    } else {
+        Ok(())
+    }
+}
+
+fn tiered_signature(t: &TieredCacheKeys) -> String {
+    format!(
+        "{}|{}|{}",
+        t.parse,
+        t.resolve.join(","),
+        t.compile.as_deref().unwrap_or("")
+    )
+}
+
 pub fn prune_cache(root: &Path, max_age_days: u64) -> usize {
     let cutoff = epoch_ms().saturating_sub(max_age_days * 24 * 3600 * 1000);
     let mut removed = 0;
@@ -420,10 +789,182 @@ mod tests {
             resolved_uris: vec!["md://data.md".to_string()],
             proof_version: proof_version().to_string(),
             created_at: epoch_ms(),
+            directives_resolved: 3,
         };
         save_compile_cache(root, &entry);
         let loaded = load_compile_cache(root, "testkey").unwrap();
         assert_eq!(loaded.compiled_text, "# Hello\n");
+        assert_eq!(
+            loaded.directives_resolved, 3,
+            "directives_resolved must round-trip through cache"
+        );
+    }
+
+    fn seed_compile_entry(
+        root: &Path,
+        key: &str,
+        source_path: &str,
+        output_path: &str,
+        text: &str,
+    ) {
+        let _ = std::fs::create_dir_all(compile_dir(root));
+        let entry = CompileCacheEntry {
+            compile_key: key.to_string(),
+            source_path: source_path.to_string(),
+            output_path: output_path.to_string(),
+            compiled_text: text.to_string(),
+            resolved_uris: vec![],
+            proof_version: proof_version().to_string(),
+            created_at: epoch_ms(),
+            directives_resolved: 1,
+        };
+        save_compile_cache(root, &entry);
+    }
+
+    #[test]
+    fn snapshot_save_creates_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k1", "src/a.source.md", "docs/a.md", "<a/>");
+        let manifest = snapshot_save(root, "v1").unwrap();
+        assert_eq!(manifest.name, "v1");
+        assert!(snapshot_dir(root, "v1").join("manifest.json").exists());
+        assert!(!manifest.integrity_hash.is_empty());
+        assert!(manifest.files.iter().any(|f| f == "src/a.source.md"));
+    }
+
+    #[test]
+    fn snapshot_restore_returns_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k1", "src/a.source.md", "docs/a.md", "<a/>");
+        let saved = snapshot_save(root, "prod").unwrap();
+        // Wipe active cache, then restore.
+        let _ = std::fs::remove_dir_all(compile_dir(root));
+        let restored = snapshot_restore(root, "prod").unwrap();
+        assert_eq!(restored.name, saved.name);
+        // Compile entry should be back.
+        assert!(
+            load_compile_cache(root, "k1").is_some(),
+            "restored cache entry should reload"
+        );
+    }
+
+    #[test]
+    fn snapshot_restore_rejects_corrupted_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k1", "src/a.source.md", "docs/a.md", "<a/>");
+        let _ = snapshot_save(root, "v1").unwrap();
+        // Tamper with the manifest.
+        let mp = snapshot_dir(root, "v1").join("manifest.json");
+        let raw = std::fs::read_to_string(&mp).unwrap();
+        let mut m: SnapshotManifest = serde_json::from_str(&raw).unwrap();
+        m.total_size = m.total_size + 999_999; // change a covered field, leave hash stale
+        std::fs::write(&mp, serde_json::to_string(&m).unwrap()).unwrap();
+        let result = snapshot_restore(root, "v1");
+        assert!(
+            matches!(result, Err(SnapshotError::IntegrityMismatch)),
+            "tampered snapshot must reject restore: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn snapshot_list_orders_newest_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k1", "a.source.md", "a.md", "1");
+        let _ = snapshot_save(root, "old").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        seed_compile_entry(root, "k2", "b.source.md", "b.md", "2");
+        let _ = snapshot_save(root, "new").unwrap();
+        let list = snapshot_list(root);
+        assert!(list.len() >= 2);
+        assert_eq!(
+            list[0].name,
+            "new",
+            "newest first: {:?}",
+            list.iter().map(|m| &m.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn snapshot_diff_reports_changed_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Snapshot A has file a with key k1.
+        seed_compile_entry(root, "k1", "shared.source.md", "shared.md", "v1");
+        let _ = snapshot_save(root, "a").unwrap();
+        // Reset and seed file with different key for snapshot B.
+        let _ = std::fs::remove_dir_all(compile_dir(root));
+        seed_compile_entry(root, "k2", "shared.source.md", "shared.md", "v2");
+        let _ = snapshot_save(root, "b").unwrap();
+        let diff = snapshot_diff(root, "a", "b").unwrap();
+        assert!(
+            diff.changed.iter().any(|f| f == "shared.source.md"),
+            "shared file with different keys should appear as changed: {:?}",
+            diff
+        );
+    }
+
+    #[test]
+    fn snapshot_prune_keeps_n_most_recent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k", "x.source.md", "x.md", "x");
+        for n in ["a", "b", "c", "d"] {
+            let _ = snapshot_save(root, n).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let deleted = snapshot_prune(root, 2);
+        assert_eq!(deleted.len(), 2, "should delete 2 of 4 with keep=2");
+        let remaining = snapshot_list(root);
+        assert_eq!(remaining.len(), 2, "2 most recent remain");
+        // The most recent ("d") must still be there.
+        assert!(
+            remaining.iter().any(|m| m.name == "d"),
+            "newest snapshot kept"
+        );
+    }
+
+    #[test]
+    fn snapshot_deploy_writes_compiled_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_compile_entry(root, "k", "a.source.md", "out/a.md", "compiled body");
+        let _ = snapshot_save(root, "v").unwrap();
+        let target = root.join("dist");
+        let count = snapshot_deploy(root, "v", &target).unwrap();
+        assert_eq!(count, 1, "one entry deployed");
+        let written = std::fs::read_to_string(target.join("out/a.md")).unwrap();
+        assert!(
+            written.contains("compiled body"),
+            "deployed file content: {:?}",
+            written
+        );
+    }
+
+    #[test]
+    fn compile_cache_old_entry_loads_with_zero_directives() {
+        // Older entries on disk lack the directives_resolved field. Verify the
+        // serde(default) annotation lets them load (as 0) instead of failing.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let _ = std::fs::create_dir_all(compile_dir(root));
+        let raw = r#"{
+            "compile_key": "oldkey",
+            "source_path": "src/x.source.md",
+            "output_path": "docs/x.md",
+            "compiled_text": "old",
+            "resolved_uris": [],
+            "proof_version": "0.5.0",
+            "created_at": 0
+        }"#;
+        std::fs::write(compile_dir(root).join("oldkey.json"), raw).unwrap();
+        let loaded = load_compile_cache(root, "oldkey").expect("must load old entry");
+        assert_eq!(loaded.compiled_text, "old");
+        assert_eq!(loaded.directives_resolved, 0);
     }
 
     #[test]

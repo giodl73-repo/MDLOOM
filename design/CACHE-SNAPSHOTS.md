@@ -1,6 +1,6 @@
 # Cache Snapshots — Named Compile States for Safe Experimentation
 
-> **Status**: 🔲 Not yet implemented. Deferred — Tier 3 compile cache landed first. Snapshot API (named states, restore, diff) is the next cache milestone after Tiers 1/2.
+> **Status**: ✅ Implemented — `src/cache.rs` (snapshot_save / restore / list / diff / prune / deploy). CLI surface lives at `proof cache snapshot {save|restore|list|diff|prune|deploy}`. Integrity hash covers manifest + per-file tier keys; tampered snapshots are rejected with `COMPILE-004`. Snapshots live under `.proof/cache/snapshots/<name>/` and capture parse + resolve + compile tiers.
 
 ## When you need this
 

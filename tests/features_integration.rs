@@ -615,3 +615,427 @@ fn cli_toc_compiles_correctly() {
         "TOC should contain Usage heading"
     );
 }
+
+// ─────────────────────────────────────────────────────────
+// Regression: proof:tree directive counted in directives_resolved (issue #3)
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn tree_directive_counted_in_resolved_directives() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    assert_eq!(
+        result.directives_resolved, 1,
+        "expected 1 resolved directive for a single proof:tree, got {}",
+        result.directives_resolved
+    );
+}
+
+// ─────────────────────────────────────────────────────────
+// md:// query parameters (?select, ?filter, ?count, ?top, ?skip)
+// ─────────────────────────────────────────────────────────
+
+fn write_table_fixture(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("data.md");
+    // 5-column, 6-row reference table.
+    let body = "\
+# Data\n\n\
+| name | pos | goals | assists | season |\n\
+|------|-----|-------|---------|--------|\n\
+| McDavid | F | 50 | 100 | 2024 |\n\
+| Draisaitl | F | 40 | 80 | 2024 |\n\
+| Bouchard | D | 15 | 60 | 2024 |\n\
+| Skinner | G | 0 | 1 | 2024 |\n\
+| Gretzky | F | 92 | 120 | 1981 |\n\
+| Lemieux | F | 85 | 114 | 1988 |\n";
+    std::fs::write(&path, body).unwrap();
+    path
+}
+
+fn compile_with_chart_using_uri(
+    dir: &Path,
+    uri: &str,
+) -> (String, Vec<proof_lib::compile::CompileViolation>, usize) {
+    // Build a proof:table directive — it just emits the resolved table verbatim,
+    // so query-param transforms surface directly in the compiled output (we can
+    // grep for row labels). proof:chart would render visual bars and lose the names.
+    let src = format!("# Doc\n\n```proof:table\n{}\n```\n", uri);
+    let src_path = dir.join("doc.source.md");
+    std::fs::write(&src_path, &src).unwrap();
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out.path(), dir, &cfg).unwrap();
+    let content = std::fs::read_to_string(out.path()).unwrap_or_default();
+    (content, result.violations, result.directives_resolved)
+}
+
+#[test]
+fn query_select_projects_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // ?select=name,goals — chart should still find both columns it needs.
+    let (out, violations, count) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?select=name,goals");
+    let errs: Vec<_> = violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(count, 1, "chart resolved");
+    assert!(out.contains("McDavid"), "name column kept:\n{}", out);
+}
+
+#[test]
+fn query_select_unknown_column_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    let (_, violations, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?select=name,bogus");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.message.contains("?select") && v.message.contains("bogus")),
+        "expected ?select error mentioning 'bogus': {:?}",
+        violations.iter().map(|v| &v.message).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn query_filter_eq_drops_non_matching_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // pos=F keeps McDavid, Draisaitl, Gretzky, Lemieux (4 rows).
+    let (out, violations, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?filter=pos=F");
+    let errs: Vec<_> = violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    assert!(out.contains("McDavid"), "F-pos kept");
+    assert!(!out.contains("Bouchard"), "D-pos dropped:\n{}", out);
+    assert!(!out.contains("Skinner"), "G-pos dropped:\n{}", out);
+}
+
+#[test]
+fn query_filter_gt_numeric() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // goals>50 keeps Gretzky (92), Lemieux (85).
+    let (out, _, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?filter=goals>50");
+    assert!(out.contains("Gretzky"));
+    assert!(out.contains("Lemieux"));
+    assert!(!out.contains("McDavid"), "50 isn't > 50:\n{}", out);
+}
+
+#[test]
+fn query_filter_neq() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    let (out, _, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?filter=pos!=F");
+    assert!(out.contains("Bouchard"));
+    assert!(out.contains("Skinner"));
+    assert!(!out.contains("McDavid"), "F filtered out:\n{}", out);
+}
+
+#[test]
+fn query_top_takes_first_n() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // top=2 → only McDavid + Draisaitl.
+    let (out, _, _) = compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?top=2");
+    assert!(out.contains("McDavid"));
+    assert!(out.contains("Draisaitl"));
+    assert!(
+        !out.contains("Bouchard"),
+        "row 3 dropped by top=2:\n{}",
+        out
+    );
+}
+
+#[test]
+fn query_skip_drops_first_n() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // skip=4 → drops first 4, keeps Gretzky + Lemieux.
+    let (out, _, _) = compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?skip=4");
+    assert!(!out.contains("McDavid"), "row 1 dropped:\n{}", out);
+    assert!(out.contains("Gretzky"));
+    assert!(out.contains("Lemieux"));
+}
+
+#[test]
+fn query_skip_then_top() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // skip=2&top=2 → drops first 2, keeps next 2 = Bouchard + Skinner.
+    let (out, _, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?skip=2&top=2");
+    assert!(out.contains("Bouchard"));
+    assert!(out.contains("Skinner"));
+    assert!(!out.contains("McDavid"));
+    assert!(!out.contains("Gretzky"), "skipped past Gretzky:\n{}", out);
+}
+
+#[test]
+fn query_count_returns_single_cell() {
+    use proof_lib::compile::compile_file;
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // ?count needs a directive that just embeds the table — proof:table fits.
+    let src = "# Doc\n\n```proof:table\nmd://data.md#:table:0?count\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out.path(), dir.path(), &cfg).unwrap();
+    let content = std::fs::read_to_string(out.path()).unwrap_or_default();
+    let errs: Vec<_> = result
+        .violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    // The table has 6 data rows.
+    assert!(
+        content.contains("count"),
+        "synthetic count column present:\n{}",
+        content
+    );
+    assert!(
+        content.contains("6"),
+        "row count value present:\n{}",
+        content
+    );
+}
+
+#[test]
+fn query_combined_filter_top() {
+    let dir = tempfile::tempdir().unwrap();
+    write_table_fixture(dir.path());
+    // pos=F, then top=2 → McDavid, Draisaitl (the first two F-pos rows).
+    let (out, _, _) =
+        compile_with_chart_using_uri(dir.path(), "md://data.md#:table:0?filter=pos=F&top=2");
+    assert!(out.contains("McDavid"));
+    assert!(out.contains("Draisaitl"));
+    assert!(
+        !out.contains("Gretzky"),
+        "top=2 cuts before Gretzky:\n{}",
+        out
+    );
+}
+
+// ─────────────────────────────────────────────────────────
+// Regression: multi-line directives inside proof:region (issue #6)
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn region_renders_proof_chart_with_inline_body() {
+    // Reproduces the icelines bug from issue #6: a proof:chart with inline
+    // data inside a proof:region body must render to a sparkline, not be
+    // dropped silently. Uses fenceless directive syntax per DASHBOARD-SPEC.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 30\n  height: 4\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 4 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        proof:chart kind=sparkline width=20 no-chrome\n\
+        - 21-22: 44\n\
+        - 22-23: 64\n\
+        - 23-24: 32\n\
+        - 24-25: 26\n\
+        - 25-26: 48\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result
+        .violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors expected, got: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.directives_resolved >= 1,
+        "chart inside region must count as a resolved directive, got {}",
+        result.directives_resolved
+    );
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    // Sparkline glyphs from the chart renderer.
+    assert!(
+        out.chars()
+            .any(|c| matches!(c, '▁' | '▂' | '▃' | '▄' | '▅' | '▆' | '▇' | '█')),
+        "expected sparkline glyphs in output:\n{}",
+        out,
+    );
+    // The literal directive header text must NOT appear in canvas output.
+    assert!(
+        !out.contains("proof:chart kind=sparkline"),
+        "directive header should be replaced by rendered chart, got:\n{}",
+        out,
+    );
+}
+
+#[test]
+fn region_renders_proof_tree_with_inline_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 40\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 40, height: 6 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        proof:tree kind=taxonomy\n\
+        root: R\n\
+        - A\n\
+          - A1\n\
+        - B\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result
+        .violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    assert!(result.directives_resolved >= 1, "tree must count");
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    assert!(
+        out.contains("├──") || out.contains("└──"),
+        "expected tree connectors:\n{}",
+        out
+    );
+    assert!(out.contains("A1"), "nested child must render:\n{}", out);
+}
+
+#[test]
+fn region_mixes_literals_and_directives() {
+    // Literal heading line + directive — both must appear in correct order.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "---\n\
+        dashboard:\n  width: 30\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 6 }\n\
+        ---\n\n\
+        ```proof:region name=main\n\
+        Trend:\n\
+        proof:chart kind=sparkline width=20 no-chrome\n\
+        a: 1\n\
+        b: 2\n\
+        c: 3\n\
+        ```\n";
+    let src_path = dir.path().join("d.dashboard.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    let errs: Vec<_> = result
+        .violations
+        .iter()
+        .filter(|v| matches!(v.severity, ViolationSeverity::Error))
+        .collect();
+    assert!(
+        errs.is_empty(),
+        "no errors: {:?}",
+        errs.iter()
+            .map(|v| (v.code, &v.message))
+            .collect::<Vec<_>>()
+    );
+    let out = std::fs::read_to_string(out_file.path()).unwrap();
+    assert!(out.contains("Trend:"), "literal preserved:\n{}", out);
+    assert!(
+        out.chars()
+            .any(|c| matches!(c, '▁' | '▂' | '▃' | '▄' | '▅' | '▆' | '▇' | '█')),
+        "sparkline rendered:\n{}",
+        out,
+    );
+}
+
+#[test]
+fn directives_resolved_persists_through_cache_hit() {
+    // Regression for issue #5: the [[compile]] / repeated-compile flow returned
+    // directives_resolved=0 from the Tier-3 compile cache, even though the
+    // cached output contained correctly-rendered directives. The count must
+    // round-trip through the cache.
+    let dir = tempfile::tempdir().unwrap();
+    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n\n```proof:blockquote\nQ.\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_path = dir.path().join("doc.md");
+    let cfg = GlintConfig::default();
+
+    // First compile: cold cache → real count.
+    let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert_eq!(
+        first.directives_resolved, 2,
+        "first compile must count both directives"
+    );
+    assert!(!first.from_cache, "first compile is a cache miss");
+
+    // Second compile: warm cache → must report the same count, not 0.
+    let second = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(second.from_cache, "second compile must hit the cache");
+    assert_eq!(
+        second.directives_resolved, 2,
+        "cached compile must restore the directive count, not return 0"
+    );
+}
+
+#[test]
+fn mixed_tree_and_other_directives_counted() {
+    let dir = tempfile::tempdir().unwrap();
+    // Two trees + one blockquote = 3 resolved
+    let src = "# Doc\n\n\
+        ```proof:tree kind=taxonomy\nroot: R1\n- a\n```\n\n\
+        ```proof:blockquote\nQuote text.\n```\n\n\
+        ```proof:tree kind=org\nroot: R2\n- b\n```\n";
+    let src_path = dir.path().join("doc.source.md");
+    std::fs::write(&src_path, src).unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+    assert_eq!(
+        result.directives_resolved, 3,
+        "expected 3 resolved directives (2 tree + 1 blockquote), got {}",
+        result.directives_resolved
+    );
+}

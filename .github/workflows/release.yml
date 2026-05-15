@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Cut release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Clone mdpath sibling
+        run: git clone https://github.com/giodl73-repo/MDPATH ../mdpath
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke-test release binary
+        run: ./target/release/proof --version
+
+      - name: Extract release notes for this tag
+        id: notes
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          VERSION="${TAG#v}"
+          # Pull the section between "## [VERSION]" and the next "## [" header.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { capture = 1; print; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+          # Fall back to a placeholder if the section is empty.
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "Release ${TAG}. See CHANGELOG.md for details." > /tmp/release-notes.md
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.notes.outputs.tag }}" \
+            --title "${{ steps.notes.outputs.tag }}" \
+            --notes-file /tmp/release-notes.md \
+            ./target/release/proof

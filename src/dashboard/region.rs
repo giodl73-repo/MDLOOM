@@ -166,8 +166,12 @@ pub fn classify_region_line(line: &str) -> RegionLine<'_> {
 }
 
 /// Render region content lines into a Canvas.
-/// Directives are expanded (currently as placeholders — full compile integration in Wave 4).
-/// Literal lines are rendered verbatim, clipped to region width.
+///
+/// By the time content reaches this function, `compile.rs::render_region_body`
+/// has already resolved every embedded `proof:*` directive and written the
+/// rendered glyph rows back into `content_lines`. So at this stage every line
+/// is treated as literal: clipped to region width, padded, and pasted.
+///
 /// Content overflowing the region height emits DASHBOARD-005.
 pub fn render_region_into_canvas(
     canvas: &mut Canvas,
@@ -178,18 +182,9 @@ pub fn render_region_into_canvas(
     let mut output_lines: Vec<String> = Vec::new();
 
     for &line in content_lines {
-        match classify_region_line(line) {
-            RegionLine::Directive(d) => {
-                // Directives are rendered as placeholder — full compile in Wave 4
-                // For now, emit the directive text itself (for integration testing)
-                output_lines.push(format!("[{}]", d.split_whitespace().next().unwrap_or(d)));
-            }
-            RegionLine::Literal(lit) => {
-                // Clip to region width
-                let clipped = clip_to_width(lit, region.width);
-                output_lines.push(clipped);
-            }
-        }
+        // Directives have been pre-resolved upstream — paste literal output.
+        let clipped = clip_to_width(line, region.width);
+        output_lines.push(clipped);
     }
 
     // Check for overflow

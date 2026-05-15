@@ -1,3 +1,5 @@
+#[cfg(feature = "figure")]
+use crate::figure::{DitherMode, ImportOptions};
 #[allow(dead_code)]
 #[cfg(feature = "figure")]
 use image::GrayImage;
@@ -36,7 +38,7 @@ pub fn dither(ctx: &DitherContext) -> Vec<String> {
         DitherMode::Density => dither_density(ctx),
         DitherMode::Block => dither_block(ctx),
         DitherMode::HalfBlock => dither_half_block(ctx),
-        DitherMode::QuarterBlock => dither_block(ctx), // fallback to block for now
+        DitherMode::QuarterBlock => dither_quarter_block(ctx),
         DitherMode::Braille => dither_braille(ctx),
         DitherMode::Binary => dither_binary(ctx),
         DitherMode::Edge => dither_edge(ctx),
@@ -131,6 +133,55 @@ pub fn dither_half_block(ctx: &DitherContext) -> Vec<String> {
                         (false, true) => '▄',
                         (true, true) => '█',
                     }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+// ─────────────────────────────────────────────────────────
+// Quarter-block dither — 2×2 image pixels per output char
+//
+// Each output cell carries one of the 16 block-quadrant glyphs in the 2×2
+// pattern space (' '▘▝▀▖▌▞▛▗▚▐▜▄▙▟█). Bit assignment:
+//   bit 0 = top-left quadrant, bit 1 = top-right,
+//   bit 2 = bottom-left,        bit 3 = bottom-right
+// A quadrant is "on" iff its source pixel's luma ≥ threshold. Doubling
+// effective resolution in BOTH axes vs full-block at the cost of contrast
+// (each quadrant is binary).
+// ─────────────────────────────────────────────────────────
+
+#[allow(dead_code)]
+const QUARTER_BLOCK_CHARS: [char; 16] = [
+    ' ', '▘', '▝', '▀', '▖', '▌', '▞', '▛', '▗', '▚', '▐', '▜', '▄', '▙', '▟', '█',
+];
+
+#[cfg(feature = "figure")]
+pub fn dither_quarter_block(ctx: &DitherContext) -> Vec<String> {
+    let out_w = (ctx.width + 1) / 2;
+    let out_h = (ctx.height + 1) / 2;
+    let threshold = ctx.opts.threshold;
+
+    (0..out_h)
+        .map(|row| {
+            (0..out_w)
+                .map(|col| {
+                    let px = col * 2;
+                    let py = row * 2;
+                    let q = |dx: u32, dy: u32| -> u8 {
+                        let x = px + dx;
+                        let y = py + dy;
+                        if x < ctx.width && y < ctx.height && luma(ctx, x, y) >= threshold {
+                            1
+                        } else {
+                            0
+                        }
+                    };
+                    let bits = q(0, 0)         // bit 0 = TL
+                     | (q(1, 0) << 1)  // bit 1 = TR
+                     | (q(0, 1) << 2)  // bit 2 = BL
+                     | (q(1, 1) << 3); // bit 3 = BR
+                    QUARTER_BLOCK_CHARS[bits as usize]
                 })
                 .collect()
         })
@@ -272,6 +323,7 @@ pub fn dither_edge(ctx: &DitherContext) -> Vec<String> {
 #[cfg(all(test, feature = "figure"))]
 mod tests {
     use super::*;
+    use crate::figure::{DitherMode, ImportOptions};
     use image::{GrayImage, Luma};
 
     fn opts_with_dither(mode: DitherMode) -> ImportOptions {
@@ -401,6 +453,92 @@ mod tests {
         let ctx = DitherContext::new(&img, &opts);
         let rows = dither_half_block(&ctx);
         assert_eq!(rows.len(), 4, "7 image rows → 4 output rows (ceiling)");
+    }
+
+    // ── quarter-block ────────────────────────────────────
+
+    #[test]
+    fn test_quarter_block_output_dimensions() {
+        // 8×6 input → 4×3 output (ceil halves on both axes).
+        let img = solid_gray(8, 6, 200);
+        let opts = ImportOptions {
+            dither: DitherMode::QuarterBlock,
+            threshold: 128,
+            ..Default::default()
+        };
+        let ctx = DitherContext::new(&img, &opts);
+        let rows = dither_quarter_block(&ctx);
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].chars().count(), 4);
+    }
+
+    #[test]
+    fn test_quarter_block_white_is_full() {
+        let img = solid_gray(4, 4, 255);
+        let opts = ImportOptions {
+            dither: DitherMode::QuarterBlock,
+            threshold: 128,
+            ..Default::default()
+        };
+        let ctx = DitherContext::new(&img, &opts);
+        let rows = dither_quarter_block(&ctx);
+        for row in &rows {
+            assert!(
+                row.chars().all(|c| c == '█'),
+                "all white → full block: {:?}",
+                row
+            );
+        }
+    }
+
+    #[test]
+    fn test_quarter_block_black_is_space() {
+        let img = solid_gray(4, 4, 0);
+        let opts = ImportOptions {
+            dither: DitherMode::QuarterBlock,
+            threshold: 128,
+            ..Default::default()
+        };
+        let ctx = DitherContext::new(&img, &opts);
+        let rows = dither_quarter_block(&ctx);
+        for row in &rows {
+            assert!(
+                row.chars().all(|c| c == ' '),
+                "all black → space: {:?}",
+                row
+            );
+        }
+    }
+
+    #[test]
+    fn test_quarter_block_each_quadrant_distinct() {
+        // 2×2 image with each pixel a different on/off pattern → each output cell
+        // carries the matching glyph. Use 4 separate 2×2 images to test individual
+        // quadrants rather than tiling.
+        // TL only: pixel (0,0) bright, others dark.
+        for &(pos, expected, name) in &[
+            ((0u32, 0u32), '▘', "TL"),
+            ((1, 0), '▝', "TR"),
+            ((0, 1), '▖', "BL"),
+            ((1, 1), '▗', "BR"),
+        ] {
+            let mut img = GrayImage::new(2, 2);
+            for y in 0..2 {
+                for x in 0..2 {
+                    img.put_pixel(x, y, Luma([0u8]));
+                }
+            }
+            img.put_pixel(pos.0, pos.1, Luma([255u8]));
+            let opts = ImportOptions {
+                dither: DitherMode::QuarterBlock,
+                threshold: 128,
+                ..Default::default()
+            };
+            let ctx = DitherContext::new(&img, &opts);
+            let rows = dither_quarter_block(&ctx);
+            let got = rows[0].chars().next().unwrap();
+            assert_eq!(got, expected, "{} → {:?}, got {:?}", name, expected, got);
+        }
     }
 
     // ── braille ─────────────────────────────────────────

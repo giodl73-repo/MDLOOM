@@ -1,11 +1,21 @@
-//! Top-level chart renderer — parses attributes and dispatches to bar/line.
+//! Top-level chart renderer — parses attributes and dispatches by kind.
 
-use super::{bar, line};
+use super::{
+    area, bar, candlestick, gantt, heatmap, line, scatter, stacked_bar, timeline, waterfall,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChartKind {
     Bar,
     Line,
+    Area,
+    StackedBar,
+    Waterfall,
+    Scatter,
+    Heatmap,
+    Candlestick,
+    Gantt,
+    Timeline,
 }
 
 impl ChartKind {
@@ -13,16 +23,28 @@ impl ChartKind {
         match s {
             "bar" => Some(Self::Bar),
             "line" => Some(Self::Line),
+            "area" => Some(Self::Area),
+            "stacked-bar" => Some(Self::StackedBar),
+            "waterfall" => Some(Self::Waterfall),
+            "scatter" => Some(Self::Scatter),
+            "heatmap" => Some(Self::Heatmap),
+            "candlestick" => Some(Self::Candlestick),
+            "gantt" => Some(Self::Gantt),
+            "timeline" => Some(Self::Timeline),
             _ => None,
         }
     }
 }
 
 /// One labeled data point. `label` is the category (bar) or x-label (line).
+/// Multi-value chart kinds (candlestick OHLC, gantt start/end, scatter x/y)
+/// pack extras after the primary value: the value-side of `label: a, b, c, d`
+/// stores `a` in `value` and `[b, c, d]` in `extras`.
 #[derive(Debug, Clone)]
 pub struct ChartPoint {
     pub label: String,
     pub value: f64,
+    pub extras: Vec<f64>,
 }
 
 /// Parsed attributes for a proof:chart directive.
@@ -74,14 +96,26 @@ pub fn render_chart(data: &ChartData, attrs: &ChartAttrs) -> Result<Vec<String>,
     let lines = match attrs.kind {
         ChartKind::Bar => bar::render_bar_chart(data, attrs),
         ChartKind::Line => line::render_line_chart(data, attrs),
+        ChartKind::Area => area::render_area_chart(data, attrs),
+        ChartKind::StackedBar => stacked_bar::render_stacked_bar_chart(data, attrs),
+        ChartKind::Waterfall => waterfall::render_waterfall_chart(data, attrs),
+        ChartKind::Scatter => scatter::render_scatter_chart(data, attrs),
+        ChartKind::Heatmap => heatmap::render_heatmap_chart(data, attrs),
+        ChartKind::Candlestick => candlestick::render_candlestick_chart(data, attrs),
+        ChartKind::Gantt => gantt::render_gantt_chart(data, attrs),
+        ChartKind::Timeline => timeline::render_timeline_chart(data, attrs),
     };
     Ok(lines)
 }
 
 /// Parse the body of a proof:chart directive: lines of `label: value` pairs.
-/// Blank lines and lines starting with `#` are ignored.
-/// Returns Err with line index (0-based, within body) on the first malformed
-/// data line — callers can map this back to source lines for diagnostics.
+/// The value side may be a single number (`label: 42`) or a comma-separated
+/// list (`label: 1, 2, 3, 4`) for multi-value kinds (candlestick, gantt,
+/// scatter, heatmap). The first number becomes `value`; the rest go to
+/// `extras` in order.
+///
+/// Blank lines and lines starting with `#` are ignored. Returns Err with
+/// line index (0-based, within body) on the first malformed line.
 pub fn parse_inline_body(body: &str) -> Result<ChartData, (usize, String)> {
     let mut points = Vec::new();
     for (i, raw) in body.lines().enumerate() {
@@ -93,13 +127,26 @@ pub fn parse_inline_body(body: &str) -> Result<ChartData, (usize, String)> {
             Some(idx) => (line[..idx].trim().to_string(), line[idx + 1..].trim()),
             None => return Err((i, format!("expected `label: value`, got {:?}", line))),
         };
-        let value: f64 = val_str.parse().map_err(|_| {
+        let nums: Result<Vec<f64>, _> = val_str
+            .split(',')
+            .map(|s| s.trim().parse::<f64>())
+            .collect();
+        let nums = nums.map_err(|_| {
             (
                 i,
-                format!("invalid number {:?} for label {:?}", val_str, label),
+                format!("invalid number(s) {:?} for label {:?}", val_str, label),
             )
         })?;
-        points.push(ChartPoint { label, value });
+        if nums.is_empty() {
+            return Err((i, format!("no numeric value(s) for label {:?}", label)));
+        }
+        let value = nums[0];
+        let extras = nums[1..].to_vec();
+        points.push(ChartPoint {
+            label,
+            value,
+            extras,
+        });
     }
     Ok(ChartData(points))
 }
@@ -158,6 +205,17 @@ mod tests {
     fn chart_kind_parse() {
         assert_eq!(ChartKind::parse("bar"), Some(ChartKind::Bar));
         assert_eq!(ChartKind::parse("line"), Some(ChartKind::Line));
-        assert_eq!(ChartKind::parse("scatter"), None);
+        assert_eq!(ChartKind::parse("area"), Some(ChartKind::Area));
+        assert_eq!(ChartKind::parse("stacked-bar"), Some(ChartKind::StackedBar));
+        assert_eq!(ChartKind::parse("waterfall"), Some(ChartKind::Waterfall));
+        assert_eq!(ChartKind::parse("scatter"), Some(ChartKind::Scatter));
+        assert_eq!(ChartKind::parse("heatmap"), Some(ChartKind::Heatmap));
+        assert_eq!(
+            ChartKind::parse("candlestick"),
+            Some(ChartKind::Candlestick)
+        );
+        assert_eq!(ChartKind::parse("gantt"), Some(ChartKind::Gantt));
+        assert_eq!(ChartKind::parse("timeline"), Some(ChartKind::Timeline));
+        assert_eq!(ChartKind::parse("nope"), None);
     }
 }

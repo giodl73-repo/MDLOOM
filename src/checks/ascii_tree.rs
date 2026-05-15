@@ -410,45 +410,111 @@ fn validate_t2(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
 }
 
 /// T-3: Indentation per level is consistent.
-fn validate_t3(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
-    let diags = Vec::new();
-    // We already detect indent_width at parse time. Here we check for any node
-    // whose leading spaces don't divide evenly by indent_width.
+///
+/// Detects the dominant indent unit from the smallest non-zero leading-space
+/// count across nodes, then flags any non-root node whose leading spaces
+/// aren't an exact multiple of that unit. Continuation lines are checked the
+/// same way — a `│` at irregular column makes the visual hierarchy ambiguous.
+fn validate_t3(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+
+    // Detect the indent unit: smallest non-zero leading-space count seen.
+    // Defaults to 4 when no indented nodes exist (single-level tree → no T-3 to check anyway).
+    let unit = nodes
+        .iter()
+        .map(|n| n.raw.len() - n.raw.trim_start_matches(' ').len())
+        .filter(|w| *w > 0)
+        .min()
+        .unwrap_or(4);
+
+    if unit == 0 {
+        return diags;
+    }
+
     for node in nodes {
-        let leading_spaces = node.raw.len() - node.raw.trim_start_matches(' ').len();
-        if node.indent_level == 0 && leading_spaces == 0 {
+        let leading = node.raw.len() - node.raw.trim_start_matches(' ').len();
+        // Root with no indent is fine.
+        if node.indent_level == 0 && leading == 0 {
             continue;
         }
-        // The raw leading spaces should equal indent_level * indent_width
-        // (or indent_level * indent_width + offset for continuation lines).
-        // Only flag if the detected level is fractional (would indicate irregular indentation).
-        // This is a heuristic — real T-3 validation requires knowing the global indent_width.
-        // We skip this for now as it requires cross-node context already captured in parse_tree_block.
+        // Non-multiple of the detected unit → irregular indent.
+        if leading > 0 && leading % unit != 0 {
+            let label_for_msg = if node.label.is_empty() {
+                "(continuation)".to_string()
+            } else {
+                format!("{:?}", node.label)
+            };
+            diags.push(Diagnostic::warning(
+                path.to_path_buf(),
+                node.line_no, 1,
+                "tree_indent",
+                format!(
+                    "line {} {}: leading-space count {} is not a multiple of detected indent unit {} (T-3)",
+                    node.line_no, label_for_msg, leading, unit
+                ),
+            ));
+        }
     }
     diags
 }
 
-/// T-4 + T-12: Every non-leaf non-root has at least one child.
-/// A root with zero children is valid (T-12).
-fn validate_t4_t12(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
-    let diags = Vec::new();
+/// T-4 + T-12: detect nodes whose continuation lines imply a child that
+/// never materializes. A Continuation `│` at depth D appearing after a node
+/// at depth D-1 is the visual claim "this node has a child"; if no actual
+/// child node at depth D follows before the next non-Continuation entry at
+/// depth ≤ D-1, the continuation is dangling and we fire `tree_orphan`.
+///
+/// A node with no continuation under it and no indented children is a valid
+/// leaf — not flagged. Root with zero children is valid (T-12).
+fn validate_t4_t12(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
     let n = nodes.len();
 
     for i in 0..n {
         let node = &nodes[i];
-        // Only check Tee connectors — they declare "I have siblings after me"
-        // and their parent must have children. Root (None connector, level 0) is exempt (T-12).
-        if node.connector != Connector::Tee && node.connector != Connector::Corner {
+        if node.connector == Connector::Continuation {
             continue;
         }
-        // Check if this node has any children (a node at level+1 follows it)
-        let has_child = nodes[i + 1..].iter().any(|next| {
-            next.connector != Connector::Continuation && next.indent_level == node.indent_level + 1
-        });
-        // Not having children is fine for leaf nodes. T-4 only fires if a Continuation
-        // suggests children exist but none do. We skip strict T-4 for Wave 1 — it
-        // requires full structural analysis that's better done in Wave 2.
-        let _ = has_child;
+
+        // Walk forward through any continuation lines until the next real node.
+        // Track whether we saw a continuation at depth >= node.indent_level + 1
+        // (which implies "this node has a child"). Then check whether the next
+        // real node actually is that child.
+        let mut saw_implied_child = false;
+        let mut implied_line: usize = node.line_no;
+        let mut next_real: Option<&TreeNode> = None;
+        for next in &nodes[i + 1..] {
+            if next.connector == Connector::Continuation {
+                if next.indent_level >= node.indent_level + 1 && !saw_implied_child {
+                    saw_implied_child = true;
+                    implied_line = next.line_no;
+                }
+                continue;
+            }
+            next_real = Some(next);
+            break;
+        }
+
+        if !saw_implied_child {
+            continue;
+        }
+
+        let resolves_to_child = match next_real {
+            Some(m) => m.indent_level > node.indent_level,
+            None => false, // end of tree → continuation didn't resolve
+        };
+        if !resolves_to_child {
+            diags.push(Diagnostic::warning(
+                path.to_path_buf(),
+                implied_line,
+                1,
+                "tree_orphan",
+                format!(
+                    "continuation │ under {:?} at line {} implies a child but none follows (T-4)",
+                    node.label, node.line_no
+                ),
+            ));
+        }
     }
     diags
 }
@@ -680,7 +746,7 @@ mod tests {
 
     #[test]
     fn test_classify_continuation() {
-        let (_level, conn, _) = classify_line("│   ", 4);
+        let (level, conn, _) = classify_line("│   ", 4);
         assert_eq!(conn, Connector::Continuation);
     }
 
@@ -799,5 +865,92 @@ mod tests {
     fn test_detect_indent_width_default() {
         let lines = vec!["project/", "└── src/"];
         assert_eq!(detect_indent_width(&lines), 4); // default
+    }
+
+    // ── T-4 dangling continuation lint ───────────────────
+
+    #[test]
+    fn t4_no_warning_when_continuation_resolves_to_child() {
+        // parent has a continuation under it AND an actual child → OK.
+        let content = "```dirtree\nproject/\n├── src/\n│   └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4 = diags.iter().filter(|d| d.code == "tree_orphan").count();
+        assert_eq!(
+            t4, 0,
+            "no orphan diagnostic when child exists:\n{:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn t4_no_warning_when_node_is_leaf_no_continuation() {
+        // Leaf node, no continuation under, no child → valid.
+        let content = "```dirtree\nproject/\n├── src/\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4 = diags.iter().filter(|d| d.code == "tree_orphan").count();
+        assert_eq!(t4, 0, "leaf without continuation is valid:\n{:?}", diags);
+    }
+
+    // ── T-3 indent-consistency lint ──────────────────────
+
+    #[test]
+    fn t3_consistent_4_space_indent_no_warnings() {
+        let content = "```dirtree\nproject/\n├── src/\n│   └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t3 = diags.iter().filter(|d| d.code == "tree_indent").count();
+        assert_eq!(
+            t3, 0,
+            "consistent 4-space indent should have no T-3 warnings:\n{:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn t3_consistent_2_space_indent_no_warnings() {
+        let content = "```dirtree\nproject/\n├── src/\n│ └── main.rs\n└── README.md\n```";
+        let diags = check_str(content);
+        let t3 = diags.iter().filter(|d| d.code == "tree_indent").count();
+        assert_eq!(
+            t3, 0,
+            "consistent 2-space indent should have no T-3 warnings:\n{:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn t3_irregular_indent_fires_warning() {
+        // Mix of 2-space and 3-space indent — irregular relative to unit=2.
+        let content = "```dirtree\nroot/\n  └── a/\n   └── b\n```";
+        let diags = check_str(content);
+        let t3: Vec<_> = diags.iter().filter(|d| d.code == "tree_indent").collect();
+        assert!(
+            !t3.is_empty(),
+            "irregular indent should fire T-3:\n{:?}",
+            diags
+        );
+        assert!(
+            t3.iter().any(|d| d.message.contains("T-3")),
+            "T-3 message expected: {:?}",
+            t3.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn t4_warns_on_dangling_continuation() {
+        // src/ has a deeper continuation (level-1 │ at column 4) implying a child,
+        // but no level-1 child node follows before we return to level 0 → T-4 fires.
+        let content = "```dirtree\nproject/\n├── src/\n│   │\n└── README.md\n```";
+        let diags = check_str(content);
+        let t4: Vec<_> = diags.iter().filter(|d| d.code == "tree_orphan").collect();
+        assert!(
+            !t4.is_empty(),
+            "expected at least one tree_orphan, got: {:?}",
+            diags
+        );
+        assert!(
+            t4.iter().any(|d| d.message.contains("T-4")),
+            "T-4 message expected, got: {:?}",
+            t4.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 }

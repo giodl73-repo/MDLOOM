@@ -1,6 +1,6 @@
 # proof figure — Named ASCII Art Figures with Image Import
 
-> **Status**: ⚡ Partially implemented. DaVinci pinning fully live (`proof pin`, `proof check --daVinci`, `[[davinci]]` in proof.toml, inline `pin=` on `proof:include`). Image→ASCII engine built (`src/figure/`). Full figure validation pipeline (FIGURE-001 through FIGURE-006 diagnostics) implemented.
+> **Status**: ✅ Implemented. DaVinci pinning lives end-to-end (`proof pin`, `proof check --daVinci`, `[[davinci]]` in proof.toml, inline `pin=` on `proof:include`, plus `regex` match alongside `pattern`/`contains-text`/`equals` invariants). Image→ASCII engine built (`src/figure/`) — all seven dither modes (density, block, half-block, quarter-block, braille, binary, edge) + ten shape masks. Full figure validation pipeline (FIGURE-001 through FIGURE-006 diagnostics) wired. Build via `--features figure` for image-import support.
 
 ---
 

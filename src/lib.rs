@@ -5,11 +5,17 @@ pub mod cache;
 pub mod chart;
 pub mod checks;
 pub mod compile;
+#[allow(dead_code)]
 pub mod compile_chart;
+#[allow(dead_code)]
 pub mod compile_directive;
+#[allow(dead_code)]
 pub mod compile_prose;
+#[allow(dead_code)]
 pub mod compile_source;
+#[allow(dead_code)]
 pub mod compile_toc;
+#[allow(dead_code)]
 pub mod compile_tree;
 pub mod config;
 pub mod dashboard;

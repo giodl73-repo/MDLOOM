@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(./target/release/proof.exe compile *)",
+      "Bash(gh issue *)",
+      "Bash(gh auth *)"
+    ]
+  }
+}

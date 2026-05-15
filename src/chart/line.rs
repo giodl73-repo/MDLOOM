@@ -242,6 +242,7 @@ mod tests {
                 .map(|(l, v)| ChartPoint {
                     label: l.to_string(),
                     value: *v,
+                    extras: Vec::new(),
                 })
                 .collect(),
         )

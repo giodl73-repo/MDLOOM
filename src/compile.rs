@@ -1,14 +1,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use crate::compile_chart::resolve_chart_data;
-use crate::compile_directive::{collect_directives, Directive, ElementAttrs, TreeAttrs};
-#[cfg(test)]
-use crate::compile_prose::heading_slug;
-use crate::compile_prose::{render_blockquote, render_xref};
-use crate::compile_source::resolve_source_for_compile;
-use crate::compile_toc::generate_toc;
-use crate::compile_tree::{render_inline_outline, render_inline_tree};
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
 use crate::diagnostic::Severity;
@@ -16,12 +8,12 @@ use crate::element::row::{render_row_foreach, validate_r1, RowConfig, RowElement
 use crate::element::{
     render_element, ElementAlign, ElementConfig, ElementData, ElementError, ElementKind,
 };
-use crate::layout::{self, extract_content_lines};
+use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use crate::runner::Runner;
 use crate::tree::dirtree::{generate as dirtree_generate, DirtreeOptions};
 use crate::tree::schema::{
-    generate_dependency, generate_org, generate_outline, generate_taxonomy, parse_json_source,
-    parse_md_table, FieldMap,
+    generate_decision, generate_dependency, generate_org, generate_outline, generate_taxonomy,
+    parse_json_source, parse_md_table, FieldMap,
 };
 
 // ─────────────────────────────────────────────────────────
@@ -55,11 +47,926 @@ pub enum ViolationSeverity {
 }
 
 // ─────────────────────────────────────────────────────────
+// Directive types
+// ─────────────────────────────────────────────────────────
+
+#[derive(Debug)]
+enum Directive {
+    Include {
+        uri: String,
+        /// Optional DaVinci pin ID declared inline. Compile warns if no matching
+        /// [[davinci]] entry with this ID exists in proof.toml.
+        pin: Option<String>,
+        line_start: usize,
+        line_end: usize,
+    },
+    Layout {
+        uris: Vec<String>,
+        attrs: LayoutAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+    Table {
+        uri: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Tree {
+        kind: String,             // dirtree | org | taxonomy | dependency | outline
+        source: Option<String>,   // md:// URI for schema-driven kinds
+        inline_body: Vec<String>, // inline indented tree body (when no source)
+        attrs: TreeAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+    Element {
+        kind: String,                 // value | delta | sparkline | mini-bar | label | badge
+        source: Option<String>,       // md:// URI (absent if inline_value is set)
+        field: Option<String>,        // column name in source table
+        inline_value: Option<String>, // from value="..." attribute
+        attrs: ElementAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+    Row {
+        source_uri: String,
+        #[allow(dead_code)]
+        var_name: String,
+        separator: String,
+        declared_width: Option<usize>,
+        elements: Vec<RowElement>,
+        no_chrome: bool,
+        line_start: usize,
+        line_end: usize,
+    },
+    Symbol {
+        name: String,
+        size: usize,
+        #[allow(dead_code)]
+        align: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Shape {
+        attrs: crate::symbol::shape::ShapeAttrs,
+        line_start: usize,
+        line_end: usize,
+    },
+    Region {
+        name: String,
+        body: Vec<String>,
+        line_start: usize,
+        line_end: usize,
+    },
+    Math {
+        expr: String,
+        width: usize,
+        align: crate::math::MathAlign,
+        no_chrome: bool,
+        line_start: usize,
+        line_end: usize,
+    },
+    Toc {
+        source: Option<String>,
+        max_depth: usize,
+        style: String,
+        /// Restrict TOC to headings nested under the heading with this text.
+        /// `None` lists every heading in the document.
+        section: Option<String>,
+        line_start: usize,
+        line_end: usize,
+    },
+    /// proof:xref — cross-reference to a heading in another document.
+    /// Renders as "See: [Heading Text](relative-path.md#slug)".
+    Xref {
+        /// Target URI: `md://path.md#heading-slug` or `md://path.md`
+        uri: String,
+        /// Optional override label; defaults to the resolved heading text
+        label: Option<String>,
+        /// Render format: "inline" | "note" | "callout"
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    /// proof:blockquote — prose-document block quote.
+    ///
+    /// Distinct from `proof:quote`, which is slide-only (centered, curly-quoted).
+    /// `proof:blockquote` is for prose documents: left-aligned, indented, with
+    /// optional attribution on its own trailing line.
+    Blockquote {
+        /// Body text — multi-line. Blank lines separate paragraphs within the quote.
+        text: String,
+        /// Optional attribution (rendered as `— Name` on a trailing line).
+        attribution: Option<String>,
+        /// Render style: "indent" (markdown `> ` lines, default) or "boxed" (ASCII frame).
+        style: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    /// proof:chart — full bar or line chart (distinct from sparkline elements).
+    Chart {
+        attrs: crate::chart::ChartAttrs,
+        /// md:// URI of a data table when source-driven; None for inline body data.
+        source: Option<String>,
+        /// Column name for category labels when source is set.
+        label_field: Option<String>,
+        /// Column name for numeric values when source is set.
+        value_field: Option<String>,
+        /// Inline body text (used when `source` is None). Lines are `label: value` pairs.
+        inline_body: String,
+        line_start: usize,
+        line_end: usize,
+    },
+}
+
+/// Parsed attributes from a proof:tree directive.
+#[derive(Debug, Default)]
+pub struct TreeAttrs {
+    pub name: Option<String>,
+    pub parent: Option<String>,
+    pub label: Option<String>,
+    pub format: String,       // "table" (default) or "json"
+    pub indent_width: usize,  // default: 4
+    pub root: Option<String>, // for dirtree: filesystem root
+    pub max_depth: Option<usize>,
+    pub exclude: Vec<String>,
+    pub stub: bool, // stub=true: compile errors become warnings (for WIP docs)
+}
+
+impl TreeAttrs {
+    fn parse(attrs_str: &str) -> Self {
+        let mut out = TreeAttrs {
+            format: "table".to_string(),
+            indent_width: 4,
+            ..Default::default()
+        };
+        let mut rest = attrs_str.trim();
+        while !rest.is_empty() {
+            if let Some(eq) = rest.find('=') {
+                let key = rest[..eq].trim();
+                rest = &rest[eq + 1..];
+                let (val, next) = if rest.starts_with('"') {
+                    if let Some(close) = rest[1..].find('"') {
+                        (&rest[1..close + 1], &rest[close + 2..])
+                    } else {
+                        ("", "")
+                    }
+                } else {
+                    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                    (&rest[..end], &rest[end..])
+                };
+                match key {
+                    "name" => out.name = Some(val.to_string()),
+                    "parent" => out.parent = Some(val.to_string()),
+                    "label" => out.label = Some(val.to_string()),
+                    "format" => out.format = val.to_string(),
+                    "indent-width" => out.indent_width = val.parse().unwrap_or(4),
+                    "root" => out.root = Some(val.to_string()),
+                    "max-depth" => out.max_depth = val.parse().ok(),
+                    "exclude" => {
+                        out.exclude = val.split(',').map(|s| s.trim().to_string()).collect()
+                    }
+                    "stub" => out.stub = val == "true" || val == "1",
+                    _ => {}
+                }
+                rest = next.trim_start();
+            } else {
+                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                rest = &rest[end..].trim_start();
+            }
+        }
+        out
+    }
+}
+
+/// Parsed attributes from a proof:element directive.
+#[derive(Debug, Default)]
+pub struct ElementAttrs {
+    pub width: Option<usize>,
+    pub align: String,  // "left" | "right" | "center" — default "left"
+    pub format: String, // "{:.1}" etc. — default "{}"
+    pub no_chrome: bool,
+    pub max: Option<f64>,
+    pub fill: char,  // default '█'
+    pub empty: char, // default '░'
+}
+
+impl ElementAttrs {
+    fn parse(attrs_str: &str) -> Self {
+        let mut out = ElementAttrs {
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            fill: '█',
+            empty: '░',
+            ..Default::default()
+        };
+        let mut rest = attrs_str.trim();
+        while !rest.is_empty() {
+            // Find the next whitespace-delimited token
+            let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            let tok = &rest[..tok_end];
+
+            if let Some(eq) = tok.find('=') {
+                // key=value token
+                let key = tok[..eq].trim();
+                let after_eq = &tok[eq + 1..];
+                // Value may span into quoted region — re-parse from rest after key=
+                let val_start = &rest[eq + 1..];
+                let (val, consumed) = if val_start.starts_with('"') {
+                    if let Some(close) = val_start[1..].find('"') {
+                        (&val_start[1..close + 1], eq + 1 + close + 2)
+                    } else {
+                        (after_eq, tok_end)
+                    }
+                } else {
+                    (after_eq, tok_end)
+                };
+                match key {
+                    "width" => out.width = val.parse().ok(),
+                    "align" => out.align = val.to_string(),
+                    "format" => out.format = val.to_string(),
+                    "max" => out.max = val.parse().ok(),
+                    "fill" => out.fill = val.chars().next().unwrap_or('█'),
+                    "empty" => out.empty = val.chars().next().unwrap_or('░'),
+                    "no-chrome" => out.no_chrome = matches!(val, "true" | "1" | ""),
+                    _ => {}
+                }
+                rest = rest[consumed..].trim_start();
+            } else {
+                // Bare flag (no '=' in token)
+                if tok == "no-chrome" {
+                    out.no_chrome = true;
+                }
+                rest = rest[tok_end..].trim_start();
+            }
+        }
+        out
+    }
+}
+
+impl Directive {
+    fn line_start(&self) -> usize {
+        match self {
+            Directive::Include { line_start, .. } => *line_start,
+            Directive::Layout { line_start, .. } => *line_start,
+            Directive::Table { line_start, .. } => *line_start,
+            Directive::Tree { line_start, .. } => *line_start,
+            Directive::Element { line_start, .. } => *line_start,
+            Directive::Row { line_start, .. } => *line_start,
+            Directive::Symbol { line_start, .. } => *line_start,
+            Directive::Shape { line_start, .. } => *line_start,
+            Directive::Region { line_start, .. } => *line_start,
+            Directive::Math { line_start, .. } => *line_start,
+            Directive::Toc { line_start, .. } => *line_start,
+            Directive::Xref { line_start, .. } => *line_start,
+            Directive::Blockquote { line_start, .. } => *line_start,
+            Directive::Chart { line_start, .. } => *line_start,
+        }
+    }
+    fn line_end(&self) -> usize {
+        match self {
+            Directive::Include { line_end, .. } => *line_end,
+            Directive::Layout { line_end, .. } => *line_end,
+            Directive::Table { line_end, .. } => *line_end,
+            Directive::Tree { line_end, .. } => *line_end,
+            Directive::Element { line_end, .. } => *line_end,
+            Directive::Row { line_end, .. } => *line_end,
+            Directive::Symbol { line_end, .. } => *line_end,
+            Directive::Shape { line_end, .. } => *line_end,
+            Directive::Region { line_end, .. } => *line_end,
+            Directive::Math { line_end, .. } => *line_end,
+            Directive::Toc { line_end, .. } => *line_end,
+            Directive::Xref { line_end, .. } => *line_end,
+            Directive::Blockquote { line_end, .. } => *line_end,
+            Directive::Chart { line_end, .. } => *line_end,
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// Layout attribute parsing
+// ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Default)]
+struct LayoutAttrs {
+    gap: usize,
+    align: String,
+    labels: Vec<String>,
+    cols: Option<usize>,
+    width: usize,
+    direction: String,
+    border: bool,
+}
+
+impl LayoutAttrs {
+    fn parse(attrs_str: &str) -> Self {
+        let mut out = LayoutAttrs {
+            gap: 3,
+            align: "top".to_string(),
+            labels: Vec::new(),
+            cols: None,
+            width: 120,
+            direction: "horizontal".to_string(),
+            border: false,
+        };
+        let mut rest = attrs_str.trim();
+        while !rest.is_empty() {
+            if let Some(eq_pos) = rest.find('=') {
+                let key = rest[..eq_pos].trim();
+                rest = &rest[eq_pos + 1..];
+                let (val, next) = if rest.starts_with('"') {
+                    if let Some(close) = rest[1..].find('"') {
+                        (&rest[1..close + 1], &rest[close + 2..])
+                    } else {
+                        ("", "")
+                    }
+                } else {
+                    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                    (&rest[..end], &rest[end..])
+                };
+                match key {
+                    "gap" => out.gap = val.parse().unwrap_or(3),
+                    "align" => out.align = val.to_string(),
+                    "labels" => out.labels = val.split(',').map(|s| s.to_string()).collect(),
+                    "cols" => out.cols = val.parse().ok(),
+                    "width" => out.width = val.parse().unwrap_or(120),
+                    "direction" => out.direction = val.to_string(),
+                    "border" => out.border = matches!(val, "true" | "1" | ""),
+                    _ => {}
+                }
+                rest = next.trim_start();
+            } else {
+                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                let key = rest[..end].trim();
+                if key == "border" {
+                    out.border = true;
+                }
+                rest = &rest[end..].trim_start();
+            }
+        }
+        out
+    }
+
+    #[allow(dead_code)]
+    fn to_layout_config(self) -> LayoutConfig {
+        LayoutConfig {
+            gap: self.gap,
+            align: Align::parse(&self.align).unwrap_or(Align::Top),
+            labels: self.labels,
+            cols: self.cols,
+            width: self.width,
+            direction: Direction::parse(&self.direction).unwrap_or(Direction::Horizontal),
+            border: self.border,
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────
 // Directive parsing
 // ─────────────────────────────────────────────────────────
 
 pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
-    crate::compile_directive::parse_directives(source)
+    // Returns (line_start, line_end, kind, body) for quick inspection — used by tests
+    let lines: Vec<&str> = source.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim_start();
+        if let Some(kind) = proof_directive_kind(trimmed) {
+            let start = i;
+            let _info = trimmed[3..].to_string(); // after ```
+            let mut body = Vec::new();
+            i += 1;
+            while i < lines.len() {
+                let l = lines[i].trim();
+                if l == "```" || l == "~~~" {
+                    break;
+                }
+                body.push(lines[i]);
+                i += 1;
+            }
+            out.push((start, i, kind.to_string(), body.join("\n")));
+        }
+        i += 1;
+    }
+    out
+}
+
+fn collect_directives(source: &str) -> Vec<Directive> {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut directives = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim_start();
+        if let Some(kind) = proof_directive_kind(trimmed) {
+            let line_start = i;
+            let info_after_backticks = trimmed[3..].to_string(); // "proof:layout gap=4 ..."
+            let mut body: Vec<&str> = Vec::new();
+            i += 1;
+            while i < lines.len() {
+                let l = lines[i].trim();
+                if l == "```" || l == "~~~" {
+                    break;
+                }
+                body.push(lines[i]);
+                i += 1;
+            }
+            let line_end = i;
+            match kind {
+                "include" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:include")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let pin = extract_attr_value(&info_after, "pin");
+                    if let Some(uri) = body.iter().find_map(|l| {
+                        let t = l.trim();
+                        if !t.is_empty() && !t.starts_with("pin=") {
+                            Some(t.to_string())
+                        } else {
+                            None
+                        }
+                    }) {
+                        directives.push(Directive::Include {
+                            uri,
+                            pin,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
+                "layout" => {
+                    let attrs_str = info_after_backticks
+                        .strip_prefix("proof:layout")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let attrs = LayoutAttrs::parse(&attrs_str);
+                    let uris: Vec<String> = body
+                        .iter()
+                        .map(|l| l.trim())
+                        .filter(|l| !l.is_empty())
+                        .map(|l| l.to_string())
+                        .collect();
+                    directives.push(Directive::Layout {
+                        uris,
+                        attrs,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "table" => {
+                    let uri = body
+                        .iter()
+                        .find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") {
+                                Some(t.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default();
+                    if !uri.is_empty() {
+                        directives.push(Directive::Table {
+                            uri,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
+                "tree" => {
+                    // Info string: "proof:tree kind=org name="Employee" parent="Manager""
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:tree")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Extract kind from attrs (first key=value or standalone word)
+                    let kind = info_after
+                        .split_whitespace()
+                        .find_map(|tok| {
+                            if tok.starts_with("kind=") {
+                                Some(
+                                    tok.strip_prefix("kind=")
+                                        .unwrap_or("dirtree")
+                                        .trim_matches('"')
+                                        .to_string(),
+                                )
+                            } else if !tok.contains('=') {
+                                Some(tok.to_string()) // bare kind name
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| "dirtree".to_string());
+
+                    let attrs = TreeAttrs::parse(&info_after);
+
+                    // Source URI: from info string attr OR first md:// body line
+                    let source_from_attrs = extract_attr_value(&info_after, "source")
+                        .filter(|s| s.starts_with("md://") || s.contains('/'));
+                    let source = source_from_attrs.or_else(|| {
+                        body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") {
+                                Some(t.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+
+                    // Inline body: non-md:// lines for inline tree content
+                    let inline_body: Vec<String> = body
+                        .iter()
+                        .filter(|l| !l.trim().starts_with("md://") && !l.trim().is_empty())
+                        .map(|l| l.to_string())
+                        .collect();
+
+                    directives.push(Directive::Tree {
+                        kind,
+                        source,
+                        inline_body,
+                        attrs,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "element" => {
+                    // Info string: "proof:element kind=value field=pts_82 width=8 align=right"
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:element")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Extract kind= from attrs
+                    let kind = extract_attr_value(&info_after, "kind")
+                        .unwrap_or_else(|| "value".to_string());
+
+                    // Extract field= and value= (inline literal)
+                    let field = extract_attr_value(&info_after, "field");
+                    let inline_value = extract_attr_value(&info_after, "value");
+
+                    let attrs = ElementAttrs::parse(&info_after);
+
+                    // Source URI is the first md:// line in the body
+                    let source = body.iter().find_map(|l| {
+                        let t = l.trim();
+                        if t.starts_with("md://") {
+                            Some(t.to_string())
+                        } else {
+                            None
+                        }
+                    });
+
+                    directives.push(Directive::Element {
+                        kind,
+                        source,
+                        field,
+                        inline_value,
+                        attrs,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "row" => {
+                    // Info string: "proof:row foreach=player in md://stats.md#edm:table:0 separator=" " width=120"
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:row")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+
+                    // Parse foreach=VAR in URI
+                    let (var_name, source_uri) = parse_foreach(&info_after);
+                    let separator = extract_attr_value(&info_after, "separator")
+                        .unwrap_or_else(|| " ".to_string());
+                    let declared_width =
+                        extract_attr_value(&info_after, "width").and_then(|v| v.parse().ok());
+                    let no_chrome = info_after
+                        .split_whitespace()
+                        .any(|t| t == "no-chrome" || t == "no-chrome=true" || t == "no-chrome=1");
+
+                    // Body lines: each "proof:element ..." line becomes a RowElement
+                    let elements: Vec<RowElement> = body
+                        .iter()
+                        .filter_map(|l| parse_row_element_line(l.trim()))
+                        .collect();
+
+                    if !source_uri.is_empty() {
+                        directives.push(Directive::Row {
+                            source_uri,
+                            var_name,
+                            separator,
+                            declared_width,
+                            elements,
+                            no_chrome,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
+                "symbol" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:symbol")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let name = extract_attr_value(&info_after, "name").unwrap_or_default();
+                    let size = extract_attr_value(&info_after, "size")
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(1);
+                    let align = extract_attr_value(&info_after, "align")
+                        .unwrap_or_else(|| "left".to_string());
+                    if !name.is_empty() {
+                        directives.push(Directive::Symbol {
+                            name,
+                            size,
+                            align,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
+                "shape" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:shape")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let attrs = crate::symbol::shape::ShapeAttrs::parse(&info_after);
+                    if !attrs.name.is_empty() {
+                        directives.push(Directive::Shape {
+                            attrs,
+                            line_start,
+                            line_end,
+                        });
+                    }
+                }
+                "region" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:region")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let name = extract_attr_value(&info_after, "name").unwrap_or_default();
+                    let body_owned: Vec<String> = body.iter().map(|s| s.to_string()).collect();
+                    directives.push(Directive::Region {
+                        name,
+                        body: body_owned,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "math" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:math")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let width: usize = extract_attr_value(&info_after, "width")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let align = match extract_attr_value(&info_after, "align").as_deref() {
+                        Some("left") => crate::math::MathAlign::Left,
+                        Some("right") => crate::math::MathAlign::Right,
+                        _ => crate::math::MathAlign::Center,
+                    };
+                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let expr = body.join("\n");
+                    directives.push(Directive::Math {
+                        expr,
+                        width,
+                        align,
+                        no_chrome,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "toc" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:toc")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let source = extract_attr_value(&info_after, "source").or_else(|| {
+                        body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if t.starts_with("md://") {
+                                Some(t.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                    let max_depth = extract_attr_value(&info_after, "max-depth")
+                        .or_else(|| extract_attr_value(&info_after, "max_depth"))
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(3);
+                    let style = extract_attr_value(&info_after, "style")
+                        .unwrap_or_else(|| "list".to_string());
+                    let section = extract_attr_value(&info_after, "section");
+                    directives.push(Directive::Toc {
+                        source,
+                        max_depth,
+                        style,
+                        section,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "xref" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:xref")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let uri = extract_attr_value(&info_after, "uri")
+                        .or_else(|| extract_attr_value(&info_after, "source"))
+                        .or_else(|| {
+                            body.iter().find_map(|l| {
+                                let t = l.trim();
+                                if t.starts_with("md://") {
+                                    Some(t.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .unwrap_or_default();
+                    let label = extract_attr_value(&info_after, "label");
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "inline".to_string());
+                    directives.push(Directive::Xref {
+                        uri,
+                        label,
+                        format,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "blockquote" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:blockquote")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let attribution = extract_attr_value(&info_after, "attribution")
+                        .or_else(|| extract_attr_value(&info_after, "by"));
+                    let style = extract_attr_value(&info_after, "style")
+                        .unwrap_or_else(|| "indent".to_string());
+                    let text = body.join("\n");
+                    directives.push(Directive::Blockquote {
+                        text,
+                        attribution,
+                        style,
+                        line_start,
+                        line_end,
+                    });
+                }
+                "chart" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:chart")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let kind = extract_attr_value(&info_after, "kind")
+                        .as_deref()
+                        .and_then(crate::chart::ChartKind::parse)
+                        .unwrap_or(crate::chart::ChartKind::Bar);
+                    let width = extract_attr_value(&info_after, "width")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(60);
+                    let height = extract_attr_value(&info_after, "height")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(8);
+                    let title = extract_attr_value(&info_after, "title");
+                    let x_label = extract_attr_value(&info_after, "x-label")
+                        .or_else(|| extract_attr_value(&info_after, "xlabel"));
+                    let y_label = extract_attr_value(&info_after, "y-label")
+                        .or_else(|| extract_attr_value(&info_after, "ylabel"));
+                    let max = extract_attr_value(&info_after, "max").and_then(|s| s.parse().ok());
+                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
+                        .map(|s| s == "true")
+                        .unwrap_or(false);
+                    let attrs = crate::chart::ChartAttrs {
+                        kind,
+                        width,
+                        height,
+                        title,
+                        x_label,
+                        y_label,
+                        max,
+                        no_chrome,
+                    };
+                    let source = extract_attr_value(&info_after, "source");
+                    let label_field = extract_attr_value(&info_after, "label-field")
+                        .or_else(|| extract_attr_value(&info_after, "label_field"));
+                    let value_field = extract_attr_value(&info_after, "value-field")
+                        .or_else(|| extract_attr_value(&info_after, "value_field"));
+                    let inline_body = body.join("\n");
+                    directives.push(Directive::Chart {
+                        attrs,
+                        source,
+                        label_field,
+                        value_field,
+                        inline_body,
+                        line_start,
+                        line_end,
+                    });
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    directives
+}
+
+/// Extract a quoted or unquoted value for `key=` from an attribute string.
+fn extract_attr_value(attrs: &str, key: &str) -> Option<String> {
+    let prefix = format!("{}=", key);
+    let mut rest = attrs;
+    while !rest.is_empty() {
+        if let Some(pos) = rest.find(&prefix) {
+            // Ensure it's a word boundary (not mid-identifier)
+            if pos > 0 {
+                let prev = rest.as_bytes()[pos - 1] as char;
+                if prev.is_alphanumeric() || prev == '-' || prev == '_' {
+                    rest = &rest[pos + 1..];
+                    continue;
+                }
+            }
+            let after = &rest[pos + prefix.len()..];
+            let val = if after.starts_with('"') {
+                after[1..].find('"').map(|e| after[1..e + 1].to_string())
+            } else {
+                let end = after.find(char::is_whitespace).unwrap_or(after.len());
+                if end > 0 {
+                    Some(after[..end].to_string())
+                } else {
+                    None
+                }
+            };
+            return val;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+fn proof_directive_kind(line: &str) -> Option<&'static str> {
+    let line = line.trim_start();
+    if !line.starts_with("```proof:") {
+        return None;
+    }
+    let rest = &line[9..]; // after "```proof:"
+    if rest.starts_with("include") {
+        Some("include")
+    } else if rest.starts_with("layout") {
+        Some("layout")
+    } else if rest.starts_with("table") {
+        Some("table")
+    } else if rest.starts_with("tree") {
+        Some("tree")
+    } else if rest.starts_with("element") {
+        Some("element")
+    } else if rest.starts_with("row") {
+        Some("row")
+    } else if rest.starts_with("symbol") {
+        Some("symbol")
+    } else if rest.starts_with("shape") {
+        Some("shape")
+    } else if rest.starts_with("region") {
+        Some("region")
+    } else if rest.starts_with("math") {
+        Some("math")
+    } else if rest.starts_with("toc") {
+        Some("toc")
+    } else if rest.starts_with("xref") {
+        Some("xref")
+    } else if rest.starts_with("blockquote") {
+        Some("blockquote")
+    } else if rest.starts_with("chart") {
+        Some("chart")
+    } else if rest.starts_with("numbered-list") {
+        Some("ol")
+    }
+    // primary name
+    else if rest.starts_with("ol") {
+        Some("ol")
+    }
+    // short-form alias
+    else {
+        None
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -94,9 +1001,8 @@ pub fn compile_file(
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
-    let source_body = crate::frontmatter::parse(&source_text)
-        .map(|parsed| parsed.body)
-        .unwrap_or(&source_text);
+    let (_, source_body, source_line_offset) = split_frontmatter(&source_text);
+    let compile_attrs = format!(r#"{{"frontmatter_offset":{}}}"#, source_line_offset);
 
     // ── Tier 3 cache check ──────────────────────────────────────────────
     // Build a minimal directive-attrs JSON for cache keying, then check Tier 3.
@@ -107,7 +1013,7 @@ pub fn compile_file(
             crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
         // Collect resolved file deps from resolved_files for key computation
         // (empty on first compile; populated on cache store below)
-        let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
+        let cache_key = crate::cache::compile_key(&source_parse_key, &[], &compile_attrs);
         if let Some(entry) = crate::cache::load_compile_cache(root, &cache_key) {
             let current = std::fs::read_to_string(output_path).unwrap_or_default();
             let written = current != entry.compiled_text;
@@ -119,7 +1025,7 @@ pub fn compile_file(
             crate::cache::save_path_index(root, &path_index);
             return Ok(CompileResult {
                 output_path: output_path.to_path_buf(),
-                directives_resolved: 0,
+                directives_resolved: entry.directives_resolved,
                 violations: vec![],
                 from_cache: true,
                 resolved_files: vec![],
@@ -162,7 +1068,7 @@ pub fn compile_file(
                                 "Figure '{}' declares pin={:?} but no [[davinci]] entry with that ID exists — run `proof pin {} --id {}`",
                                 uri, pin_id, uri, pin_id
                             ),
-                            source_line: line_start + 1,
+                            source_line: line_start + 1 + source_line_offset,
                         });
                     }
                 }
@@ -172,11 +1078,17 @@ pub fn compile_file(
                             uri,
                             &content,
                             &fig_file,
-                            line_start + 1,
+                            line_start + 1 + source_line_offset,
                             &runner,
                             &mut violations,
                         );
-                        validate_davinci(uri, &content, config, line_start, &mut violations);
+                        validate_davinci(
+                            uri,
+                            &content,
+                            config,
+                            line_start + source_line_offset,
+                            &mut violations,
+                        );
                         resolved_count += 1;
                         format_include_block(uri, &content)
                     }
@@ -188,7 +1100,7 @@ pub fn compile_file(
                             figure_id: None,
                             invariant: String::new(),
                             message: format!("{}", e),
-                            source_line: line_start + 1,
+                            source_line: line_start + 1 + source_line_offset,
                         });
                         source_lines[line_start..=line_end].join("\n")
                     }
@@ -205,11 +1117,17 @@ pub fn compile_file(
                                 uri,
                                 &content,
                                 &fig_file,
-                                line_start + 1,
+                                line_start + 1 + source_line_offset,
                                 &runner,
                                 &mut violations,
                             );
-                            validate_davinci(uri, &content, config, line_start, &mut violations);
+                            validate_davinci(
+                                uri,
+                                &content,
+                                config,
+                                line_start + source_line_offset,
+                                &mut violations,
+                            );
                             figures.push(extract_content_lines(&content));
                             resolved_count += 1;
                         }
@@ -221,7 +1139,7 @@ pub fn compile_file(
                                 figure_id: None,
                                 invariant: String::new(),
                                 message: format!("{}", e),
-                                source_line: line_start + 1,
+                                source_line: line_start + 1 + source_line_offset,
                             });
                             any_err = true;
                         }
@@ -233,7 +1151,16 @@ pub fn compile_file(
                 } else {
                     // Convert attrs directly to LayoutConfig — no re-serialization to avoid
                     // label corruption (labels with spaces would be split by the string parser)
-                    let layout_config = attrs.to_layout_config();
+                    let layout_config = LayoutConfig {
+                        gap: attrs.gap,
+                        align: Align::parse(&attrs.align).unwrap_or(Align::Top),
+                        labels: attrs.labels.clone(),
+                        cols: attrs.cols,
+                        width: attrs.width,
+                        direction: Direction::parse(&attrs.direction)
+                            .unwrap_or(Direction::Horizontal),
+                        border: attrs.border,
+                    };
 
                     let composed = layout::layout(figures, &layout_config);
                     // Strip outer ``` wrapper — compile embeds content inline
@@ -251,11 +1178,17 @@ pub fn compile_file(
                         uri,
                         &content,
                         &fig_file,
-                        line_start + 1,
+                        line_start + 1 + source_line_offset,
                         &runner,
                         &mut violations,
                     );
-                    validate_davinci(uri, &content, config, line_start, &mut violations);
+                    validate_davinci(
+                        uri,
+                        &content,
+                        config,
+                        line_start + source_line_offset,
+                        &mut violations,
+                    );
                     resolved_count += 1;
                     format_include_block(uri, &content)
                 }
@@ -267,7 +1200,7 @@ pub fn compile_file(
                         figure_id: None,
                         invariant: String::new(),
                         message: format!("{}", e),
-                        source_line: line_start + 1,
+                        source_line: line_start + 1 + source_line_offset,
                     });
                     source_lines[line_start..=line_end].join("\n")
                 }
@@ -280,41 +1213,46 @@ pub fn compile_file(
                 attrs,
                 ..
             } => {
-                generate_tree_block(
+                match generate_tree_block(
                     kind,
                     source.as_deref(),
                     inline_body,
                     attrs,
                     root,
-                    line_start,
+                    line_start + source_line_offset,
                     &mut violations,
-                )
-                .unwrap_or_else(|e| {
-                    // stub=true: WIP directive — downgrade error to warning, keep source block
-                    let severity = if attrs.stub {
-                        ViolationSeverity::Warning
-                    } else {
-                        ViolationSeverity::Error
-                    };
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity,
-                        uri: source.clone().unwrap_or_default(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!(
-                            "tree generation failed: {}{}",
-                            e,
-                            if attrs.stub {
-                                " (stub — skipped)"
-                            } else {
-                                ""
-                            }
-                        ),
-                        source_line: line_start + 1,
-                    });
-                    source_fallback(&source_lines, line_start, line_end)
-                })
+                ) {
+                    Ok(block) => {
+                        resolved_count += 1;
+                        block
+                    }
+                    Err(e) => {
+                        // stub=true: WIP directive — downgrade error to warning, keep source block
+                        let severity = if attrs.stub {
+                            ViolationSeverity::Warning
+                        } else {
+                            ViolationSeverity::Error
+                        };
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity,
+                            uri: source.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!(
+                                "tree generation failed: {}{}",
+                                e,
+                                if attrs.stub {
+                                    " (stub — skipped)"
+                                } else {
+                                    ""
+                                }
+                            ),
+                            source_line: line_start + 1 + source_line_offset,
+                        });
+                        source_fallback(&source_lines, line_start, line_end)
+                    }
+                }
             }
 
             Directive::Element {
@@ -331,7 +1269,7 @@ pub fn compile_file(
                 inline_value.as_deref(),
                 attrs,
                 root,
-                line_start,
+                line_start + source_line_offset,
                 &mut violations,
                 &source_lines,
                 line_end,
@@ -353,7 +1291,7 @@ pub fn compile_file(
                 elements,
                 *no_chrome,
                 root,
-                line_start,
+                line_start + source_line_offset,
                 &mut violations,
                 &source_lines,
                 line_end,
@@ -387,7 +1325,7 @@ pub fn compile_file(
                             figure_id: None,
                             invariant: String::new(),
                             message: format!("Unknown symbol '{}'{}", name, hint),
-                            source_line: line_start + 1,
+                            source_line: line_start + 1 + source_line_offset,
                         });
                         source_lines[line_start..=line_end].join("\n")
                     }
@@ -410,7 +1348,7 @@ pub fn compile_file(
                         figure_id: None,
                         invariant: String::new(),
                         message: e.message,
-                        source_line: line_start + 1,
+                        source_line: line_start + 1 + source_line_offset,
                     });
                     source_lines[line_start..=line_end].join("\n")
                 }
@@ -431,7 +1369,7 @@ pub fn compile_file(
                         "proof:region {:?} is only valid in .dashboard.source.md files",
                         name
                     ),
-                    source_line: line_start + 1,
+                    source_line: line_start + 1 + source_line_offset,
                 });
                 source_lines[line_start..=line_end].join("\n")
             }
@@ -454,7 +1392,7 @@ pub fn compile_file(
                         figure_id: None,
                         invariant: String::new(),
                         message: d.message.clone(),
-                        source_line: line_start + 1,
+                        source_line: line_start + 1 + source_line_offset,
                     });
                 }
                 let rendered = math_lines.join("\n");
@@ -486,7 +1424,7 @@ pub fn compile_file(
                                 figure_id: None,
                                 invariant: String::new(),
                                 message: format!("toc source error: {}", e),
-                                source_line: line_start + 1,
+                                source_line: line_start + 1 + source_line_offset,
                             });
                             None
                         }
@@ -525,7 +1463,7 @@ pub fn compile_file(
                         figure_id: None,
                         invariant: String::new(),
                         message: format!("xref error: {}", e),
-                        source_line: line_start + 1,
+                        source_line: line_start + 1 + source_line_offset,
                     });
                     source_fallback(&source_lines, line_start, line_end)
                 }
@@ -582,7 +1520,7 @@ pub fn compile_file(
                                 figure_id: None,
                                 invariant: String::new(),
                                 message: e.message,
-                                source_line: line_start + 1,
+                                source_line: line_start + 1 + source_line_offset,
                             });
                             source_lines[line_start..=line_end].join("\n")
                         }
@@ -595,7 +1533,7 @@ pub fn compile_file(
                             figure_id: None,
                             invariant: String::new(),
                             message: msg,
-                            source_line: line_start + 1,
+                            source_line: line_start + 1 + source_line_offset,
                         });
                         source_lines[line_start..=line_end].join("\n")
                     }
@@ -639,7 +1577,7 @@ pub fn compile_file(
     {
         let source_parse_key =
             crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
-        let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
+        let cache_key = crate::cache::compile_key(&source_parse_key, &[], &compile_attrs);
         let entry = crate::cache::CompileCacheEntry {
             compile_key: cache_key,
             source_path: source_path.to_string_lossy().to_string(),
@@ -651,6 +1589,7 @@ pub fn compile_file(
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as u64,
+            directives_resolved: resolved_count,
         };
         crate::cache::save_compile_cache(root, &entry);
         crate::cache::save_path_index(root, &path_index);
@@ -672,11 +1611,17 @@ pub fn compile_file(
 // ─────────────────────────────────────────────────────────
 
 fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
-    let parsed =
-        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    Ok((element.content, element.file))
+    let content = if query.is_empty() {
+        element.content
+    } else {
+        apply_md_query(&element.content, &query)?
+    };
+    Ok((content, element.file))
 }
 
 /// Tier 2 cached version of `resolve_uri`.
@@ -687,8 +1632,9 @@ fn resolve_uri_cached(
     root: &Path,
     path_index: &mut crate::cache::PathIndex,
 ) -> Result<(String, PathBuf)> {
-    let parsed =
-        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
 
     let target_file = root.join(&parsed.path);
     if !target_file.exists() {
@@ -698,22 +1644,38 @@ fn resolve_uri_cached(
         Ok(c) => c,
         Err(_) => return resolve_uri(uri, root),
     };
-    if let Some(cached) =
-        crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, uri, path_index)
-    {
-        return Ok((cached, target_file));
+    if let Some(cached) = crate::cache::try_resolve_cache_hit(
+        root,
+        &target_file,
+        &target_content,
+        &clean_uri,
+        path_index,
+    ) {
+        let final_content = if query.is_empty() {
+            cached
+        } else {
+            apply_md_query(&cached, &query)?
+        };
+        return Ok((final_content, target_file));
     }
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+    // Cache the *raw* mdpath content (independent of query params) so multiple
+    // queries against the same source share a single cache entry.
     crate::cache::store_resolve_cache(
         root,
         &target_file,
         &target_content,
-        uri,
+        &clean_uri,
         &element.content,
         path_index,
     );
-    Ok((element.content, element.file))
+    let final_content = if query.is_empty() {
+        element.content
+    } else {
+        apply_md_query(&element.content, &query)?
+    };
+    Ok((final_content, element.file))
 }
 
 /// Validate figure content with the proof linter before embedding.
@@ -858,8 +1820,8 @@ fn generate_tree_block(
     inline_body: &[String],
     attrs: &TreeAttrs,
     root: &Path,
-    _source_line: usize,
-    _violations: &mut Vec<CompileViolation>,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
 ) -> Result<String> {
     let body = match kind {
         "dirtree" => {
@@ -896,15 +1858,34 @@ fn generate_tree_block(
                         generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?
                     }
                     "outline" => generate_outline(&content, attrs.indent_width)?,
+                    "decision" => {
+                        generate_decision(&content, &attrs.format, &mut map, attrs.indent_width)?
+                    }
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else if !inline_body.is_empty() {
                 let content = inline_body.join("\n");
+                let mut map = FieldMap {
+                    name: attrs.name.clone(),
+                    parent: attrs.parent.clone(),
+                    label: attrs.label.clone(),
+                    ..Default::default()
+                };
                 match kind {
                     "org" | "taxonomy" | "dependency" => {
                         render_inline_tree(&content, attrs.indent_width)?
                     }
-                    "outline" => render_inline_outline(&content)?,
+                    "outline" => render_inline_outline(
+                        &content,
+                        attrs.indent_width,
+                        source_line + 1,
+                        violations,
+                    )?,
+                    // Decision trees never have a free-form inline body shape;
+                    // an inline body for kind=decision is always a markdown table.
+                    "decision" => {
+                        generate_decision(&content, &attrs.format, &mut map, attrs.indent_width)?
+                    }
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else {
@@ -932,9 +1913,771 @@ fn generate_tree_block(
     ))
 }
 
+fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
+    let (target_level, _) = headings.last().unwrap();
+    let target_depth = target_level - min_level;
+    let mut counters: Vec<usize> = vec![0; target_depth + 1];
+    for (level, _) in headings {
+        let depth = level - min_level;
+        if depth <= target_depth {
+            counters[depth] += 1;
+            for d in (depth + 1)..=target_depth {
+                counters[d] = 0;
+            }
+        }
+    }
+    let parts: Vec<String> = counters[..=target_depth]
+        .iter()
+        .map(|n| n.to_string())
+        .collect();
+    format!("{}.", parts.join("."))
+}
+
+fn generate_toc(content: &str, max_depth: usize, style: &str, section: Option<&str>) -> String {
+    // Collect every ATX heading outside fenced code blocks. Depth filtering and
+    // section narrowing happen below so that a target section can sit at any
+    // level relative to `max_depth`.
+    let mut all: Vec<(usize, String)> = Vec::new();
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let text = trimmed[level..].trim().to_string();
+            if !text.is_empty() {
+                all.push((level, text));
+            }
+        }
+    }
+
+    // If `section` is given, narrow `all` to the descendants of the first
+    // heading whose text matches (case-insensitive trim). Descendants run from
+    // the heading after the match through to the next heading at the same or
+    // shallower level. The matching heading itself is excluded — only its
+    // children are listed.
+    let scoped: Vec<(usize, String)> = if let Some(target) = section {
+        let want = target.trim().to_lowercase();
+        let start = all
+            .iter()
+            .position(|(_, t)| t.trim().to_lowercase() == want);
+        match start {
+            Some(idx) => {
+                let parent_level = all[idx].0;
+                let mut out = Vec::new();
+                for (level, text) in all.iter().skip(idx + 1) {
+                    if *level <= parent_level {
+                        break;
+                    }
+                    out.push((*level, text.clone()));
+                }
+                out
+            }
+            None => Vec::new(),
+        }
+    } else {
+        all
+    };
+
+    // Apply max_depth as the last filter so it always means "the absolute
+    // heading level cap" (`level <= max_depth`).
+    let headings: Vec<(usize, String)> = scoped
+        .into_iter()
+        .filter(|(level, _)| *level <= max_depth)
+        .collect();
+
+    if headings.is_empty() {
+        return String::new();
+    }
+    let min_level = headings.iter().map(|(l, _)| *l).min().unwrap_or(1);
+    let mut out = String::new();
+    for (i, (level, text)) in headings.iter().enumerate() {
+        let depth = level - min_level;
+        let indent = "  ".repeat(depth);
+        if style == "tree" && depth > 0 {
+            let is_last = !headings[i + 1..].iter().any(|(l, _)| *l <= *level);
+            let connector = if is_last { "└── " } else { "├── " };
+            let parent_indent = "  ".repeat(depth.saturating_sub(1));
+            out.push_str(&format!("{}  {}{}\n", parent_indent, connector, text));
+        } else if style == "numbered" {
+            let number = build_numbered_label(&headings[..=i], min_level);
+            out.push_str(&format!("{}{} {}\n", indent, number, text));
+        } else {
+            out.push_str(&format!("{}- {}\n", indent, text));
+        }
+    }
+    out.trim_end().to_string()
+}
+
+fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
+    let render_iw = indent_width.max(2);
+
+    // Pass 1: extract (raw_leading_ws, label, has_bullet) for each non-empty line.
+    // Strip leading whitespace and bullet markers separately so the parser can detect
+    // the input's indent unit independently of the rendering indent_width.
+    let mut parsed: Vec<(usize, String, bool)> = Vec::new();
+    for line in content.lines() {
+        let trimmed_end = line.trim_end();
+        if trimmed_end.is_empty() {
+            continue;
+        }
+
+        if let Some(rest) = trimmed_end.strip_prefix("root:") {
+            parsed.push((0, rest.trim().to_string(), false));
+            continue;
+        }
+
+        let ws_len = line.len() - line.trim_start().len();
+        let after_ws = &line[ws_len..];
+        let (has_bullet, label_start) = if let Some(rest) = after_ws.strip_prefix("- ") {
+            (true, rest)
+        } else if after_ws == "-" {
+            (true, "")
+        } else {
+            (false, after_ws)
+        };
+        let label = label_start.trim().to_string();
+        if label.is_empty() {
+            continue;
+        }
+        parsed.push((ws_len, label, has_bullet));
+    }
+
+    if parsed.is_empty() {
+        anyhow::bail!("inline tree body is empty");
+    }
+
+    // Auto-detect input indent unit: smallest non-zero leading whitespace among
+    // bulleted lines. Falls back to 2 when no indented lines exist (single-level tree).
+    let parse_iw = parsed
+        .iter()
+        .filter_map(|(ws, _, bullet)| if *bullet && *ws > 0 { Some(*ws) } else { None })
+        .min()
+        .unwrap_or(2);
+
+    // Pass 2: build (depth, label) using detected indent unit.
+    let mut nodes: Vec<(usize, String)> = Vec::with_capacity(parsed.len());
+    let mut have_root = false;
+    for (i, (ws, label, has_bullet)) in parsed.iter().enumerate() {
+        if !has_bullet && i == 0 && !have_root {
+            // First line without bullet acts as root (with or without root: prefix).
+            nodes.push((0, label.clone()));
+            have_root = true;
+            continue;
+        }
+        let depth = (ws / parse_iw) + 1;
+        nodes.push((depth, label.clone()));
+    }
+
+    let mut out = String::new();
+    for (i, (depth, label)) in nodes.iter().enumerate() {
+        if *depth == 0 {
+            out.push_str(label);
+            out.push('\n');
+            continue;
+        }
+        // Build prefix: for each ancestor level 1..depth, emit `│` + (iw-1) spaces
+        // if that level is still "open" (has a later sibling), else iw spaces.
+        let mut prefix = String::new();
+        for ancestor in 1..*depth {
+            if is_ancestor_level_open(&nodes, i, ancestor) {
+                prefix.push('│');
+                for _ in 0..render_iw.saturating_sub(1) {
+                    prefix.push(' ');
+                }
+            } else {
+                for _ in 0..render_iw {
+                    prefix.push(' ');
+                }
+            }
+        }
+        // is_last: walk forward; the first node with depth <= current decides.
+        // - Hits depth < current first → we left this subtree without a sibling → last.
+        // - Hits depth == current first → there is a later sibling → not last.
+        // - End of list → last.
+        let is_last = nodes[i + 1..]
+            .iter()
+            .find(|(d, _)| *d <= *depth)
+            .map_or(true, |(d, _)| *d < *depth);
+        let connector = if is_last { "└── " } else { "├── " };
+        out.push_str(&prefix);
+        out.push_str(connector);
+        out.push_str(label);
+        out.push('\n');
+    }
+    Ok(out.trim_end().to_string())
+}
+
+/// Returns true if the ancestor at `level` has a later sibling reachable from `pos`,
+/// i.e. there is some node after `pos` with depth == level encountered before any
+/// node with depth < level.
+fn is_ancestor_level_open(nodes: &[(usize, String)], pos: usize, level: usize) -> bool {
+    for (d, _) in &nodes[pos + 1..] {
+        if *d < level {
+            return false;
+        }
+        if *d == level {
+            return true;
+        }
+    }
+    false
+}
+
+fn render_inline_outline(
+    content: &str,
+    indent_width: usize,
+    source_line: usize,
+    violations: &mut Vec<CompileViolation>,
+) -> Result<String> {
+    // Detect dash-bulleted body — kind=outline expects numbered bullets ("1. Foo")
+    // for inline content (per docs/guides/05-trees.md), but users coming from
+    // kind=org/kind=taxonomy commonly write dash bullets. Warn and auto-promote
+    // to taxonomy rendering rather than emitting the body verbatim.
+    let has_dash_bullet = content.lines().any(|line| {
+        let after_ws = line.trim_start();
+        after_ws.starts_with("- ") || after_ws == "-"
+    });
+    if has_dash_bullet {
+        violations.push(CompileViolation {
+            code: "TREE-001",
+            severity: ViolationSeverity::Warning,
+            uri: String::new(),
+            figure_id: None,
+            invariant: String::new(),
+            message: "kind=outline expects numbered bullets (e.g. '1. Foo', '1.1 Bar') for inline content; rendering as kind=taxonomy. Did you mean kind=taxonomy?".to_string(),
+            source_line,
+        });
+        return render_inline_tree(content, indent_width);
+    }
+
+    // Numbered-bullet path: parse `1.`, `1.1`, `1.1.1`, ... prefixes.
+    // Depth is the dot count in the number sequence (`1` → 0, `1.1` → 1).
+    // Lines with a parseable number get re-indented based on depth so authors
+    // can type without aligning manually. Unparseable lines emit verbatim at
+    // depth 0 (so "Title:" or freeform headers still pass through).
+    let mut out = String::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match parse_outline_number_prefix(trimmed) {
+            Some((depth, number, label)) => {
+                let indent = " ".repeat(depth.saturating_mul(indent_width));
+                if label.is_empty() {
+                    out.push_str(&format!("{}{}\n", indent, number));
+                } else {
+                    out.push_str(&format!("{}{} {}\n", indent, number, label));
+                }
+            }
+            None => {
+                out.push_str(trimmed);
+                out.push('\n');
+            }
+        }
+    }
+    Ok(out.trim_end().to_string())
+}
+
+/// Parse an outline-style numbered prefix from `s`. Returns
+/// `Some((depth, normalized_number, label))` if the line begins with a number
+/// like `1`, `1.`, `1.1`, `1.1.1.`, optionally followed by whitespace and a
+/// label. The returned number is normalized: a trailing period is kept only
+/// for top-level (depth 0) entries to match the canonical "1. Foo" form.
+fn parse_outline_number_prefix(s: &str) -> Option<(usize, String, String)> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    // Read digits.dot.digits.dot... Must start with a digit.
+    if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+        return None;
+    }
+    let mut had_digit = false;
+    let mut dot_count = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b.is_ascii_digit() {
+            had_digit = true;
+            i += 1;
+            continue;
+        }
+        if b == b'.' {
+            // A dot is a separator only if a digit follows. Otherwise it's
+            // the trailing "1." form and the prefix ends here.
+            if i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
+                dot_count += 1;
+                i += 1;
+                continue;
+            }
+            // Consume the trailing dot too — it's part of the number.
+            i += 1;
+            break;
+        }
+        break;
+    }
+    if !had_digit {
+        return None;
+    }
+    // The next char (if any) must be whitespace, otherwise this is e.g. "1foo"
+    // which we don't treat as a numbered bullet.
+    if i < bytes.len() {
+        let b = bytes[i];
+        if b != b' ' && b != b'\t' {
+            return None;
+        }
+    }
+    let raw_number = &s[..i];
+    let label = s[i..].trim_start().to_string();
+    // Normalize: top-level (depth 0) keeps a trailing period if absent;
+    // sub-levels drop a trailing period to match "1.1 Foo" form.
+    let trimmed_number = raw_number.trim_end_matches('.');
+    let normalized = if dot_count == 0 {
+        format!("{}.", trimmed_number)
+    } else {
+        trimmed_number.to_string()
+    };
+    Some((dot_count, normalized, label))
+}
+
+/// Render a `proof:xref` directive as a formatted cross-reference.
+///
+/// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
+/// reading the target file and finding the heading whose slug matches.
+/// Falls back to the URI path if no specific heading is found.
+fn render_xref(uri: &str, label: Option<&str>, format: &str, root: &Path) -> Result<String> {
+    let parsed =
+        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid xref URI {:?}: {}", uri, e))?;
+
+    let target_path = root.join(&parsed.path);
+    if !target_path.exists() {
+        anyhow::bail!("xref target file not found: {:?}", parsed.path);
+    }
+
+    // Resolve heading text from the heading_path (if any)
+    let heading_text: String = if parsed.heading_path.is_empty() {
+        // No heading — use filename without extension
+        target_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&parsed.path)
+            .replace('-', " ")
+            .replace('_', " ")
+    } else {
+        let content = std::fs::read_to_string(&target_path)?;
+        let slug_target = parsed.heading_path.last().map(|s| s.as_str()).unwrap_or("");
+        find_heading_by_slug(&content, slug_target).unwrap_or_else(|| slug_target.replace('-', " "))
+    };
+
+    let display_label = label.unwrap_or(&heading_text);
+
+    // Build a relative link to the target (path + anchor slug if heading present)
+    let anchor = if parsed.heading_path.is_empty() {
+        String::new()
+    } else {
+        let slug = heading_slug(&heading_text);
+        format!("#{}", slug)
+    };
+    let link = format!("{}{}", parsed.path, anchor);
+
+    let rendered = match format {
+        "note" => format!("> **See also:** [{}]({})", display_label, link),
+        "callout" => format!("→ [{}]({})", display_label, link),
+        _ => format!("*See: [{}]({})*", display_label, link), // "inline" default
+    };
+
+    Ok(rendered)
+}
+
+/// Find a heading in `content` whose GitHub-style slug matches `target_slug`.
+fn find_heading_by_slug(content: &str, target_slug: &str) -> Option<String> {
+    let mut in_fence = false;
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let text = trimmed[level..].trim();
+            if !text.is_empty() && heading_slug(text) == target_slug {
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Produce a GitHub-style heading anchor slug from heading text.
+/// Lowercase, spaces → hyphens, strip non-alphanumeric/non-hyphen.
+fn heading_slug(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .collect()
+}
+
+fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
+    // Split off any query string (?select=… &filter=… etc.) before delegating
+    // resolution so mdpath sees a clean URI. Transforms apply to table content
+    // after the file is read.
+    let (clean_src, query) = split_md_query(src);
+
+    let raw = if clean_src.starts_with("md://") {
+        if let Ok(parsed) = mdpath::parse(&clean_src) {
+            if let Ok(element) =
+                mdpath::resolve_with_classifier(&parsed, root, &mdpath::DefaultClassifier)
+            {
+                element.content
+            } else {
+                let path_part = clean_src.strip_prefix("md://").unwrap_or(&clean_src);
+                let path = root.join(path_part);
+                if !path.exists() {
+                    anyhow::bail!(
+                        "cannot resolve md:// URI {:?} — file not found and no addressed element",
+                        src
+                    );
+                }
+                std::fs::read_to_string(&path)
+                    .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+            }
+        } else {
+            let path_part = clean_src.strip_prefix("md://").unwrap_or(&clean_src);
+            let path = root.join(path_part);
+            std::fs::read_to_string(&path)
+                .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+        }
+    } else {
+        let path = root.join(&clean_src);
+        std::fs::read_to_string(&path).map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))?
+    };
+
+    if query.is_empty() {
+        return Ok(raw);
+    }
+    apply_md_query(&raw, &query)
+}
+
+/// Split a URI into (uri_without_query, query_pairs). Query starts at the
+/// first `?`. Pairs are `&`-separated `key=value`; bare keys without `=`
+/// (e.g. `?count`) carry an empty value string. Mdpath's own selector
+/// syntax uses `#` so query stays distinct.
+fn split_md_query(src: &str) -> (String, Vec<(String, String)>) {
+    if let Some((head, tail)) = src.split_once('?') {
+        let pairs: Vec<(String, String)> = tail
+            .split('&')
+            .filter(|kv| !kv.is_empty())
+            .map(|kv| {
+                if let Some((k, v)) = kv.split_once('=') {
+                    (k.trim().to_string(), v.trim().to_string())
+                } else {
+                    // Bare key (e.g. ?count) — value is empty; downstream
+                    // operators that don't need a value (count) work; ones
+                    // that do (filter/select/top/skip) error out cleanly.
+                    (kv.trim().to_string(), String::new())
+                }
+            })
+            .collect();
+        (head.to_string(), pairs)
+    } else {
+        (src.to_string(), Vec::new())
+    }
+}
+
+/// Apply query-param transforms to raw table content. Returns the transformed
+/// table as a markdown-table string. Operations applied in this order:
+///   filter → skip → top → select → count
+/// (count returns a single-cell synthetic table.)
+fn apply_md_query(raw: &str, query: &[(String, String)]) -> Result<String> {
+    use crate::tree::schema::parse_md_table;
+    let (headers, rows) = parse_md_table(raw)?;
+    let mut headers = headers;
+    let mut rows = rows;
+
+    // ── filter: col=value, col!=value, col>value, col<value (numeric for >/<)
+    for (_, v) in query.iter().filter(|(k, _)| k == "filter") {
+        let (col, op, target) = parse_filter_term(v).ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid ?filter term {:?} — expected col=val, col!=val, col>val, or col<val",
+                v
+            )
+        })?;
+        if !headers.iter().any(|h| h == col) {
+            anyhow::bail!("?filter references unknown column {:?}", col);
+        }
+        rows.retain(|r| {
+            let cell = r.get(col).cloned().unwrap_or_default();
+            match op {
+                FilterOp::Eq => cell == target,
+                FilterOp::Neq => cell != target,
+                FilterOp::Gt => cell
+                    .parse::<f64>()
+                    .ok()
+                    .zip(target.parse::<f64>().ok())
+                    .map_or(false, |(a, b)| a > b),
+                FilterOp::Lt => cell
+                    .parse::<f64>()
+                    .ok()
+                    .zip(target.parse::<f64>().ok())
+                    .map_or(false, |(a, b)| a < b),
+            }
+        });
+    }
+
+    // ── skip: drop first N rows
+    if let Some((_, n)) = query.iter().find(|(k, _)| k == "skip") {
+        let n: usize = n
+            .parse()
+            .map_err(|_| anyhow::anyhow!("?skip value must be a non-negative integer"))?;
+        if n >= rows.len() {
+            rows.clear();
+        } else {
+            rows.drain(0..n);
+        }
+    }
+
+    // ── top: keep first N rows
+    if let Some((_, n)) = query.iter().find(|(k, _)| k == "top") {
+        let n: usize = n
+            .parse()
+            .map_err(|_| anyhow::anyhow!("?top value must be a non-negative integer"))?;
+        rows.truncate(n);
+    }
+
+    // ── select: project columns
+    if let Some((_, cols_csv)) = query.iter().find(|(k, _)| k == "select") {
+        let want: Vec<String> = cols_csv.split(',').map(|s| s.trim().to_string()).collect();
+        for c in &want {
+            if !headers.iter().any(|h| h == c) {
+                anyhow::bail!("?select references unknown column {:?}", c);
+            }
+        }
+        headers = want;
+    }
+
+    // ── count: replace with single-cell "count" table
+    if query.iter().any(|(k, _)| k == "count") {
+        let n = rows.len();
+        return Ok(format!("| count |\n|-------|\n| {} |\n", n));
+    }
+
+    // Re-emit as a markdown table.
+    let mut out = String::new();
+    out.push('|');
+    for h in &headers {
+        out.push_str(&format!(" {} |", h));
+    }
+    out.push('\n');
+    out.push('|');
+    for _ in &headers {
+        out.push_str("---|");
+    }
+    out.push('\n');
+    for r in &rows {
+        out.push('|');
+        for h in &headers {
+            let cell = r.get(h).cloned().unwrap_or_default();
+            out.push_str(&format!(" {} |", cell));
+        }
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FilterOp {
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+}
+
+/// Parse a filter term like "Pos=F" or "Goals>30". Returns (col, op, target).
+fn parse_filter_term(term: &str) -> Option<(&str, FilterOp, String)> {
+    // Order matters: check 2-char ops first.
+    if let Some((c, t)) = term.split_once("!=") {
+        return Some((c.trim(), FilterOp::Neq, t.trim().to_string()));
+    }
+    if let Some((c, t)) = term.split_once('>') {
+        return Some((c.trim(), FilterOp::Gt, t.trim().to_string()));
+    }
+    if let Some((c, t)) = term.split_once('<') {
+        return Some((c.trim(), FilterOp::Lt, t.trim().to_string()));
+    }
+    if let Some((c, t)) = term.split_once('=') {
+        return Some((c.trim(), FilterOp::Eq, t.trim().to_string()));
+    }
+    None
+}
+
 // ─────────────────────────────────────────────────────────
 // proof:element compile arm
 // ─────────────────────────────────────────────────────────
+
+/// Render a `proof:blockquote` directive for prose documents.
+///
+/// Distinct from `proof:quote` (slide-only, centered, curly-quoted): this is
+/// left-aligned, indented, with optional attribution on a trailing line. Two
+/// styles are supported:
+///
+/// - `style="indent"` (default) — emits standard markdown blockquote syntax:
+///   each line of the body is prefixed with `> `, blank lines remain `>`-prefixed
+///   to keep the quote contiguous, and attribution appears as a trailing
+///   `> — Name` line.
+///
+/// - `style="boxed"` — emits an ASCII-framed quote using `┌─...─┐ │ ... │ └─...─┘`,
+///   left-aligned within the frame. Attribution renders inside the frame on its
+///   own right-aligned line. Frame width is `max(visual_width(line) for line in body) + 4`,
+///   capped at the longest body line so the box hugs the content.
+///
+/// Unknown `style=` values silently fall back to `"indent"`.
+fn render_blockquote(text: &str, attribution: Option<&str>, style: &str) -> String {
+    let body_lines: Vec<&str> = text.lines().collect();
+    // Trim leading and trailing blank lines so authors can leave whitespace
+    // around the body for readability without it becoming part of the output.
+    let trimmed_body = trim_blank_edges(&body_lines);
+
+    match style {
+        "boxed" => render_blockquote_boxed(&trimmed_body, attribution),
+        // "indent" and any unknown style fall back to markdown blockquote.
+        _ => render_blockquote_indent(&trimmed_body, attribution),
+    }
+}
+
+fn trim_blank_edges<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let start = lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
+    let end = lines
+        .iter()
+        .rposition(|l| !l.trim().is_empty())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    if start >= end {
+        Vec::new()
+    } else {
+        lines[start..end].to_vec()
+    }
+}
+
+fn render_blockquote_indent(body: &[&str], attribution: Option<&str>) -> String {
+    let mut out: Vec<String> = body
+        .iter()
+        .map(|line| {
+            if line.trim().is_empty() {
+                ">".to_string()
+            } else {
+                format!("> {}", line)
+            }
+        })
+        .collect();
+    if let Some(by) = attribution {
+        if !out.is_empty() {
+            out.push(">".to_string());
+        }
+        out.push(format!("> — {}", by));
+    }
+    out.join("\n")
+}
+
+fn render_blockquote_boxed(body: &[&str], attribution: Option<&str>) -> String {
+    use crate::layout::visual_width;
+
+    if body.is_empty() && attribution.is_none() {
+        return String::new();
+    }
+
+    // Compute inner width: longest body line, or attribution length, whichever wider.
+    let body_max = body.iter().map(|l| visual_width(l)).max().unwrap_or(0);
+    let attr_w = attribution.map(|a| visual_width(a) + 2).unwrap_or(0); // "— "
+    let inner_w = body_max.max(attr_w);
+
+    let horizontal = "─".repeat(inner_w + 2); // 1 cell of padding each side
+    let top = format!("┌{}┐", horizontal);
+    let bot = format!("└{}┘", horizontal);
+
+    let mut out = vec![top];
+    for line in body {
+        let pad = inner_w.saturating_sub(visual_width(line));
+        out.push(format!("│ {}{} │", line, " ".repeat(pad)));
+    }
+    if let Some(by) = attribution {
+        // Insert a blank padded row before the attribution if there was body content.
+        if !body.is_empty() {
+            out.push(format!("│ {} │", " ".repeat(inner_w)));
+        }
+        let attr_text = format!("— {}", by);
+        let pad = inner_w.saturating_sub(visual_width(&attr_text));
+        // Right-align attribution inside the frame.
+        out.push(format!("│ {}{} │", " ".repeat(pad), attr_text));
+    }
+    out.push(bot);
+    out.join("\n")
+}
+
+/// Resolve a proof:chart directive's data — either from an md:// table or
+/// from the inline `label: value` body.
+fn resolve_chart_data(
+    source: Option<&str>,
+    label_field: Option<&str>,
+    value_field: Option<&str>,
+    inline_body: &str,
+    root: &Path,
+) -> std::result::Result<crate::chart::ChartData, String> {
+    if let Some(uri) = source {
+        let label_col = label_field
+            .ok_or_else(|| "proof:chart with source= requires label-field=".to_string())?;
+        let value_col = value_field
+            .ok_or_else(|| "proof:chart with source= requires value-field=".to_string())?;
+        let content = resolve_source_for_compile(uri, root)
+            .map_err(|e| format!("chart source error: {}", e))?;
+        chart_data_from_table(&content, label_col, value_col)
+            .map_err(|e| format!("chart table error: {}", e))
+    } else {
+        crate::chart::render::parse_inline_body(inline_body)
+            .map_err(|(line, msg)| format!("chart body line {}: {}", line + 1, msg))
+    }
+}
+
+/// Parse a markdown table and extract `(label_col, value_col)` as a `ChartData`.
+/// Delegates to `tree::schema::parse_md_table` so the chart consumer accepts
+/// the same lenient table forms (bounded `| a | b |` and inner-pipe `a | b`)
+/// as every other md:// table consumer.
+fn chart_data_from_table(
+    content: &str,
+    label_col: &str,
+    value_col: &str,
+) -> std::result::Result<crate::chart::ChartData, String> {
+    let (headers, table_rows) =
+        crate::tree::schema::parse_md_table(content).map_err(|e| format!("{}", e))?;
+    if !headers.iter().any(|h| h == label_col) {
+        return Err(format!("label column {:?} not found in header", label_col));
+    }
+    if !headers.iter().any(|h| h == value_col) {
+        return Err(format!("value column {:?} not found in header", value_col));
+    }
+    let mut points = Vec::new();
+    for (i, row) in table_rows.iter().enumerate() {
+        let label = row.get(label_col).cloned().unwrap_or_default();
+        let value_str = row.get(value_col).cloned().unwrap_or_default();
+        let value: f64 = value_str
+            .parse()
+            .map_err(|_| format!("row {}: invalid number {:?}", i + 1, value_str))?;
+        points.push(crate::chart::ChartPoint {
+            label,
+            value,
+            extras: Vec::new(),
+        });
+    }
+    Ok(crate::chart::ChartData(points))
+}
 
 #[allow(clippy::too_many_arguments)]
 /// Safe fallback: return source lines for the directive block, guarded against OOB.
@@ -1246,6 +2989,60 @@ fn format_row_block(uri: &str, rendered: &str) -> String {
         "<!-- proof:compiled from=\"proof:row\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
         uri, rendered
     )
+}
+
+// ─────────────────────────────────────────────────────────
+// proof:row foreach parsing helpers
+// ─────────────────────────────────────────────────────────
+
+/// Parse `foreach=VAR in URI` from the info string after `proof:row`.
+/// Returns (var_name, source_uri). Both empty strings on parse failure.
+fn parse_foreach(info: &str) -> (String, String) {
+    // Supports two forms:
+    //   source=md://file.md foreach=row    (attr style — source= anywhere)
+    //   foreach=row in md://file.md        (positional style — md:// after foreach=)
+    let mut var_name = String::new();
+    let mut source_uri = String::new();
+
+    // Check source= attr first
+    if let Some(s) = extract_attr_value(info, "source") {
+        if s.starts_with("md://") || s.contains('/') {
+            source_uri = s;
+        }
+    }
+
+    for tok in info.split_whitespace() {
+        if tok.starts_with("foreach=") {
+            var_name = tok["foreach=".len()..].to_string();
+        } else if tok.starts_with("md://") && source_uri.is_empty() {
+            source_uri = tok.to_string();
+        }
+    }
+    (var_name, source_uri)
+}
+
+/// Parse a body line of the form `proof:element kind=X field=Y width=N ...`
+/// into a RowElement. Returns None if the line doesn't start with `proof:element`.
+fn parse_row_element_line(line: &str) -> Option<RowElement> {
+    let rest = line.strip_prefix("proof:element")?.trim();
+    let attrs = ElementAttrs::parse(rest);
+    let kind_str = extract_attr_value(rest, "kind").unwrap_or_else(|| "value".to_string());
+    let kind = ElementKind::parse(&kind_str)?;
+    let field = extract_attr_value(rest, "field").unwrap_or_default();
+    let width = attrs.width.unwrap_or(0);
+    if field.is_empty() || width == 0 {
+        return None;
+    }
+    Some(RowElement {
+        kind,
+        field,
+        width,
+        align: ElementAlign::parse(&attrs.align),
+        format: attrs.format,
+        max: attrs.max,
+        fill_char: attrs.fill,
+        empty_char: attrs.empty,
+    })
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1758,45 +3555,83 @@ fn render_region_body(
     violations: &mut Vec<CompileViolation>,
     resolved_count: &mut usize,
 ) -> Vec<String> {
-    use crate::dashboard::region::{classify_region_line, RegionLine};
-
     let mut output: Vec<String> = Vec::new();
     let mut i = 0;
     while i < body.len() {
         let line = &body[i];
-        match classify_region_line(line) {
-            RegionLine::Literal(lit) => {
-                output.push(lit.to_string());
-                i += 1;
+        if let Some(header) = top_level_region_directive_header(line) {
+            // Gobble body lines until the next column-0 directive header or end.
+            // Indented proof:* lines stay with the parent (e.g. proof:row + indented
+            // proof:element children). Blank and literal lines are also body.
+            let mut j = i + 1;
+            while j < body.len() && top_level_region_directive_header(&body[j]).is_none() {
+                j += 1;
             }
-            RegionLine::Directive(d) => {
-                // Strategy: build a synthetic ```proof:foo ...``` fenced block,
-                // run collect_directives on it, dispatch the resulting Directive
-                // through render_one_directive_no_chrome.
-                let synth = format!("```{}\n```", d);
-                let nested = collect_directives(&synth);
-                if let Some(directive) = nested.into_iter().next() {
-                    let rendered = render_one_directive_no_chrome(
-                        &directive,
-                        root,
-                        config,
-                        runner,
-                        abs_line + i,
-                        violations,
-                        resolved_count,
-                    );
-                    for line in rendered.lines() {
-                        output.push(line.to_string());
-                    }
-                } else {
-                    // Unrecognized directive — fall through as literal
-                    output.push(line.clone());
+            let body_slice: Vec<String> = body[i + 1..j].to_vec();
+            let synth = if body_slice.is_empty() {
+                format!("```{}\n```", header)
+            } else {
+                format!("```{}\n{}\n```", header, body_slice.join("\n"))
+            };
+            let nested = collect_directives(&synth);
+            if let Some(directive) = nested.into_iter().next() {
+                let rendered = render_one_directive_no_chrome(
+                    &directive,
+                    root,
+                    config,
+                    runner,
+                    abs_line + i,
+                    violations,
+                    resolved_count,
+                );
+                for rline in rendered.lines() {
+                    output.push(rline.to_string());
                 }
-                i += 1;
+            } else {
+                // Couldn't synthesize — fall back to literal lines so the user sees something.
+                output.push(line.clone());
+                for b in &body_slice {
+                    output.push(b.clone());
+                }
             }
+            i = j;
+        } else {
+            output.push(line.clone());
+            i += 1;
         }
     }
     output
+}
+
+/// Return the directive header (trimmed of the leading column-0 anchor) if
+/// `line` begins at column 0 with a known proof:* directive name. Returns
+/// None for indented lines (they belong to the enclosing directive body) and
+/// for plain text. The set must match `classify_region_line`.
+fn top_level_region_directive_header(line: &str) -> Option<&str> {
+    if line.starts_with(' ') || line.starts_with('\t') {
+        return None;
+    }
+    const HEADERS: &[&str] = &[
+        "proof:element",
+        "proof:tree",
+        "proof:chart",
+        "proof:row",
+        "proof:symbol",
+        "proof:shape",
+        "proof:bullets",
+        "proof:centered",
+        "proof:stat",
+    ];
+    for h in HEADERS {
+        if line.starts_with(h) {
+            // Require word-boundary so e.g. "proof:rowx" doesn't match "proof:row".
+            let next = line.as_bytes().get(h.len()).copied();
+            if next.is_none() || next == Some(b' ') || next == Some(b'\t') {
+                return Some(line);
+            }
+        }
+    }
+    None
 }
 
 /// Render a single directive with `no-chrome` semantics — strips the
@@ -1928,6 +3763,7 @@ fn render_one_directive_no_chrome(
                 violations,
             ) {
                 Ok(block) => {
+                    *resolved_count += 1;
                     // generate_tree_block wraps in chrome — strip it for canvas paste.
                     strip_compiled_chrome(&block)
                 }
@@ -1965,7 +3801,74 @@ fn render_one_directive_no_chrome(
                 String::new()
             }
         },
-        // Layout, Table, Region not supported inline within a region
+        Directive::Chart {
+            attrs,
+            source,
+            label_field,
+            value_field,
+            inline_body,
+            ..
+        } => {
+            let data_result = resolve_chart_data(
+                source.as_deref(),
+                label_field.as_deref(),
+                value_field.as_deref(),
+                inline_body,
+                root,
+            );
+            match data_result {
+                Ok(data) => match crate::chart::render_chart(&data, attrs) {
+                    Ok(lines) => {
+                        *resolved_count += 1;
+                        lines.join("\n")
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: e.code,
+                            severity: ViolationSeverity::Error,
+                            uri: source.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: e.message,
+                            source_line: abs_line + 1,
+                        });
+                        String::new()
+                    }
+                },
+                Err(msg) => {
+                    violations.push(CompileViolation {
+                        code: "CHART-002",
+                        severity: ViolationSeverity::Error,
+                        uri: source.clone().unwrap_or_default(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: msg,
+                        source_line: abs_line + 1,
+                    });
+                    String::new()
+                }
+            }
+        }
+        Directive::Math {
+            expr, width, align, ..
+        } => {
+            let (math_lines, math_diags) = crate::math::render_display_math(expr, *width, *align);
+            *resolved_count += 1;
+            for d in &math_diags {
+                violations.push(CompileViolation {
+                    code: d.code,
+                    severity: ViolationSeverity::Warning,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: d.message.clone(),
+                    source_line: abs_line + 1,
+                });
+            }
+            math_lines.join("\n")
+        }
+        // Layout, Table, Region, Toc, Xref, Blockquote not supported inline within a region.
+        // (They produce wrapper chrome / external content unsuited to canvas paste.)
         _ => String::new(),
     }
 }
@@ -2026,10 +3929,7 @@ pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use crate::compile_directive::{parse_foreach, parse_row_element_line, LayoutAttrs};
-
     use super::*;
-    use crate::compile_directive::proof_directive_kind;
 
     // ── parse_directives ──────────────────────────────────
 
@@ -3328,5 +5228,198 @@ Some prose.
             }
             other => panic!("expected Blockquote, got {:?}", other),
         }
+    }
+
+    // ── inline tree rendering: 2-space-indent nesting (issue #2) ─────────
+
+    #[test]
+    fn inline_tree_two_space_indent_renders_nested() {
+        // Reproduces issue #2: 2-space-indented children under a `- foo` parent
+        // must produce a nested tree, not flatten everything to siblings.
+        let body = "root: Plugin runtime channels\n\
+                    - Typed plugin hooks\n  \
+                    - File: src/plugins/hook-types.ts\n  \
+                    - Style: pull, modify\n\
+                    - Diagnostic event stream\n  \
+                    - File: src/infra/diagnostic-events.ts\n  \
+                    - Style: push, observe";
+        let out = render_inline_tree(body, 4).expect("render must succeed");
+        // Root.
+        assert!(
+            out.starts_with("Plugin runtime channels"),
+            "root must come first: {}",
+            out
+        );
+        // First-level children: Typed plugin hooks (Tee), Diagnostic event stream (Corner).
+        assert!(
+            out.contains("├── Typed plugin hooks"),
+            "first parent should be Tee:\n{}",
+            out
+        );
+        assert!(
+            out.contains("└── Diagnostic event stream"),
+            "second parent should be Corner:\n{}",
+            out
+        );
+        // Children must be indented under their parent and use Tee/Corner correctly.
+        assert!(
+            out.contains("│   ├── File: src/plugins/hook-types.ts"),
+            "first parent's first child should be Tee under │:\n{}",
+            out
+        );
+        assert!(
+            out.contains("│   └── Style: pull, modify"),
+            "first parent's last child should be Corner under │:\n{}",
+            out
+        );
+        assert!(
+            out.contains("    ├── File: src/infra/diagnostic-events.ts"),
+            "second parent's first child should be Tee under spaces:\n{}",
+            out
+        );
+        assert!(
+            out.contains("    └── Style: push, observe"),
+            "second parent's last child should be Corner under spaces:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_tree_four_space_indent_also_nests() {
+        // Auto-detect: 4-space input should also nest correctly.
+        let body = "root: Top\n\
+                    - One\n    \
+                    - One.A\n\
+                    - Two";
+        let out = render_inline_tree(body, 4).unwrap();
+        assert!(out.contains("├── One"), "got:\n{}", out);
+        assert!(out.contains("│   └── One.A"), "got:\n{}", out);
+        assert!(out.contains("└── Two"), "got:\n{}", out);
+    }
+
+    #[test]
+    fn inline_tree_last_sibling_uses_corner() {
+        // The buggy is_last logic flagged last-of-non-last-parent as Tee instead of Corner.
+        let body = "root: R\n- A\n  - A1\n  - A2\n- B";
+        let out = render_inline_tree(body, 4).unwrap();
+        // A2 is last child of A → must be Corner.
+        assert!(
+            out.contains("│   └── A2"),
+            "last child A2 should be Corner under non-last parent A:\n{}",
+            out
+        );
+    }
+
+    // ── inline outline: dash-bullet detection + auto-promote (issue #1) ──
+
+    #[test]
+    fn inline_outline_dash_bullets_warn_and_promote() {
+        let body = "root: Plugin lifecycle\n- 1 Discovery\n- 2 Manifest read\n- 3 Activation";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut violations).expect("must render");
+        // Warning emitted with TREE-001 code.
+        assert_eq!(
+            violations.len(),
+            1,
+            "expected exactly one warning, got {:?}",
+            violations.iter().map(|v| v.code).collect::<Vec<_>>()
+        );
+        assert_eq!(violations[0].code, "TREE-001");
+        assert!(matches!(violations[0].severity, ViolationSeverity::Warning));
+        assert!(
+            violations[0].message.contains("kind=taxonomy"),
+            "warning should suggest kind=taxonomy: {}",
+            violations[0].message
+        );
+        // Body promoted to a rendered tree, not emitted verbatim.
+        assert!(
+            out.contains("├──") || out.contains("└──"),
+            "must contain tree connectors:\n{}",
+            out
+        );
+        assert!(
+            out.contains("Plugin lifecycle"),
+            "root must appear:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_outline_no_bullets_no_warning() {
+        // Numbered/heading content should NOT warn.
+        let body = "1. First\n1.1 Sub\n2. Second";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut violations).unwrap();
+        assert!(
+            violations.is_empty(),
+            "no warnings expected for numbered body"
+        );
+        assert!(out.contains("1. First"));
+    }
+
+    // ── inline outline: numbered-bullet auto-indent (task #2) ────────────
+
+    #[test]
+    fn inline_outline_numbered_bullets_auto_indent() {
+        // Author types unindented numbered bullets — output re-indents by dot depth.
+        let body =
+            "1. Installation\n1.1 From source\n1.2 From crates.io\n2. Configuration\n2.1 Basics";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(violations.is_empty(), "no warnings for numbered input");
+        let expected =
+            "1. Installation\n   1.1 From source\n   1.2 From crates.io\n2. Configuration\n   2.1 Basics";
+        assert_eq!(out, expected, "depth-based indent normalization");
+    }
+
+    #[test]
+    fn inline_outline_numbered_three_levels() {
+        let body = "1. A\n1.1 B\n1.1.1 C\n2. D";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        let expected = "1. A\n   1.1 B\n      1.1.1 C\n2. D";
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn inline_outline_preserves_trailing_period_only_at_depth_zero() {
+        // "1." stays "1.", but "1.1." normalizes to "1.1" (no trailing dot at depth ≥ 1).
+        let body = "1. A\n1.1. B";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(out.contains("1. A"));
+        assert!(
+            out.contains("1.1 B"),
+            "trailing period dropped at depth 1: got\n{}",
+            out
+        );
+        assert!(
+            !out.contains("1.1. B"),
+            "trailing period must not survive: got\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_outline_unnumbered_line_passes_through() {
+        // Lines without a numeric prefix are emitted verbatim at depth 0.
+        let body = "Project plan:\n1. Phase one\n1.1 Step";
+        let mut violations: Vec<CompileViolation> = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut violations).unwrap();
+        assert!(
+            out.starts_with("Project plan:"),
+            "header preserved at top:\n{}",
+            out
+        );
+        assert!(
+            out.contains("\n1. Phase one"),
+            "depth-0 numbered line at column 0:\n{}",
+            out
+        );
+        assert!(
+            out.contains("\n   1.1 Step"),
+            "depth-1 numbered line indented:\n{}",
+            out
+        );
     }
 }

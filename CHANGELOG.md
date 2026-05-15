@@ -5,8 +5,11 @@ All notable changes to **proof** (formerly **glint**), in [Keep a Changelog](htt
 The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → compile** — with stable figure addressing, invariant pinning, and a math/diagram/slide rendering pipeline on top.
 
 ```
-v0.6  ┌──────────────────────────────────────────────────────────────┐
-      │ xref · chart · reveal · AI CLI · author experience            │
+v0.7  ┌──────────────────────────────────────────────────────────────┐
+      │ stress test (US-61..110) + 4 real bugs surfaced & fixed       │
+      │ spec-honesty · 8 chart kinds · md:// query params · snapshots │
+      ├──────────────────────────────────────────────────────────────┤
+v0.6  │ xref · chart · reveal · AI CLI · author experience            │
       ├──────────────────────────────────────────────────────────────┤
 v0.5  │ math · watch · multi-target compile · guides · source-link    │
       ├──────────────────────────────────────────────────────────────┤
@@ -19,6 +22,62 @@ v0.2  │ fix pipeline · draft · baseline                               │
 v0.1  │ check · ASCII box / flow / tree · markdown rules              │
       └──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## [0.7.1] — 2026-04-30 — *the stress-test release*
+
+A 50-scenario authoring stress test (US-61..110) shook out four real bugs that the v0.7.0 audit and the existing test suite had missed — exactly the value of writing realistic fixtures over narrow unit tests. All four are fixed in this release.
+
+### Fixed
+
+- **Chart-from-table parser was the *old* strict pipe parser.** `chart_data_from_table` still required `starts_with('|')` so it failed on mdpath's unbounded `a | b | c` output (parse_md_table was lenient since v0.7.0 but this site wasn't). Now delegates to parse_md_table for consistent behavior across every md:// table consumer.
+- **`kind=decision` had no inline-body dispatch.** generate_decision was wired into the source-URI arm but not the inline-body arm; an inline decision-table directive failed with "unknown tree kind 'decision'". The inline arm now also routes to generate_decision.
+- **`?count` silently dropped because split_md_query required `key=value`.** The query parser used `split_once('=')?` and bare keys like `?count` were filtered out before reaching apply_md_query. Bare keys now carry an empty value; operators that don't need one (count) work, ones that do error out cleanly.
+- **SYMBOL-SPEC overpromised proof:shape kinds.** Spec listed banner, badge, star, cloud (+ ribbon, callout-cloud, arrow examples). Code only ships banner, badge, ribbon. Spec trimmed to match what ships and now points readers at `proof figure import --shape <name>` for the 10-shape geometric roster (those live behind the figure-import path, not proof:shape).
+
+### Added
+
+- 50 new user scenarios (US-61..110) covering chart variants, tree kinds, slide layouts, dashboard compositions, md:// query params, math, symbols/elements, compile directives, lint cases, and full-doc integration. Each scenario has a committed source.md and rendered .md sibling so the output is reviewable in the diff.
+- Two new user guides: `docs/guides/10-query-params.md` (worked examples for ?select / ?filter / ?count / ?top / ?skip with composition rules) and `docs/guides/11-cache-snapshots.md` (save / restore / list / diff / prune / deploy workflow).
+- Release workflow (`.github/workflows/release.yml`) — pushing a `v*.*.*` tag now auto-builds the release binary, extracts the matching CHANGELOG section as notes, and creates the GitHub release with the binary attached.
+
+### Tests
+
+793 unit + integration tests still pass; zero build warnings. The 50-scenario stress test runs with 48 clean compiles + 2 intentional negative tests (US-85 ?select bogus column, US-109 missing source file) verifying error paths.
+
+---
+
+## [0.7.0] — 2026-04-30 — *the spec-honesty release*
+
+A push to close every overpromised "✅ Implemented" status against the actual code. Every item below was either claimed in spec but a placeholder, or labeled deferred. Now they ship.
+
+### Added
+
+- **Multi-line directives inside `proof:region` bodies** — `proof:chart`, `proof:tree`, `proof:row`, `proof:element`, `proof:symbol`, `proof:shape`, `proof:math` all render correctly when nested inside a dashboard region (fenceless syntax). Previously the inner directive header was kept but its body lines were dropped, so anything with inline data silently rendered as a placeholder. (Closed issue #6.)
+- **`proof:tree kind=outline` numbered-bullet inline mode** — `1. / 1.1 / 1.1.1` lines auto-indent by dot depth; trailing periods normalize at depth ≥ 1.
+- **Slide layout `content-caption`** — title + body + caption strip from `subtitle:`. Was previously a fallback to `title-content`.
+- **Slide layout `comparison`** — 2×2 quadrant grid via `## q:tl/tr/bl/br` markers, with optional `## axis:x` / `## axis:y` labels. Was previously a fallback.
+- **`proof:tree kind=decision`** — DFS with Yes/No branch labels, leaf labels for unknown targets, cycle guard. Was listed in TREE-SPEC but had no implementation.
+- **DaVinci `regex` invariant rule** — alongside the existing substring `pattern` rule. Powered by the `regex` crate.
+- **Quarter-block dither mode for figure import** — full 16-glyph 2×2 quadrant table; previously fell back to full-block. Also unbroke the `--features figure` build (37 → 0 errors).
+- **ASCII tree T-4 children-shape lint** — detects continuation `│` lines that imply a child but where the next real node sits at the same or shallower depth.
+- **md:// URI query parameters** — `?select=cols`, `?filter=col=val|col!=val|col>val|col<val`, `?count`, `?top=N`, `?skip=N`. Threaded through both URI resolution paths so every directive that reads md:// honors them.
+- **Eight new chart kinds** — `area`, `stacked-bar`, `waterfall`, `scatter`, `heatmap`, `candlestick`, `gantt`, `timeline`. `ChartPoint` extended with `extras: Vec<f64>` for multi-value kinds.
+- **Cache snapshots subsystem** — `proof cache snapshot {save|restore|list|diff|prune|deploy}`. Named compile states with integrity hash; restore is rejected with `COMPILE-004` if the manifest was tampered with.
+
+### Changed
+
+- `parse_md_table` now accepts both bounded (`| a | b |`) and unbounded (`a | b`) pipe-table forms; mdpath returns the unbounded form when extracting an addressed table.
+- DASHBOARD-SPEC, SLIDE-SPEC, TREE-SPEC, FIGURE-IMPL-PLAN, MAPPING-SPEC, CHART-SPEC, CACHE-SNAPSHOTS status lines all updated to match what ships.
+
+### Removed
+
+- **`proof:chart kind=sankey` removed from CHART-SPEC scope.** Proportional flow widths quantize poorly to fixed-width character cells. Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or embed an SVG via `proof:include`.
+
+### Tests
+
+93 new unit and integration tests across the changes. 793 total pass; zero build warnings.
 
 ---
 

@@ -119,10 +119,23 @@ fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
             }
         }
         "pattern" => {
-            // Simple substring match — regex support deferred
+            // Substring match — for regex semantics use rule="regex" instead.
             let text = inv.text.as_deref()?;
             if !content.contains(text) {
                 return Some(format!("must match pattern {:?}", text));
+            }
+        }
+        "regex" => {
+            let text = inv.text.as_deref()?;
+            match regex::Regex::new(text) {
+                Ok(re) => {
+                    if !re.is_match(content) {
+                        return Some(format!("regex {:?} did not match", text));
+                    }
+                }
+                Err(e) => {
+                    return Some(format!("invalid regex {:?}: {}", text, e));
+                }
             }
         }
         "line-count" => {
@@ -335,6 +348,92 @@ mod tests {
         };
         let content = "| Axis | Value |\n| Binding | Late |\n| Typing | Static |";
         assert!(evaluate_invariant_inner(&inv, content).is_none());
+    }
+
+    #[test]
+    fn regex_matches_anchored_pattern() {
+        // Substring match would over-match; regex anchors do not.
+        let inv = Invariant {
+            rule: "regex".into(),
+            text: Some(r"^Status: (DONE|WIP)$".into()),
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
+        };
+        assert!(
+            evaluate_invariant_inner(&inv, "Status: DONE").is_none(),
+            "DONE on its own line satisfies the anchored regex"
+        );
+        // Default ^/$ are string-anchored. With multiline mode prefix `(?m)` they
+        // become line-anchored; users opt in explicitly when needed.
+        let inv_m = Invariant {
+            rule: "regex".into(),
+            text: Some(r"(?m)^Status: (DONE|WIP)$".into()),
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
+        };
+        assert!(
+            evaluate_invariant_inner(&inv_m, "preamble\nStatus: DONE\n").is_none(),
+            "(?m) enables per-line anchors"
+        );
+        // "Status: PROGRESS" — neither DONE nor WIP — fails.
+        assert!(
+            evaluate_invariant_inner(&inv, "Status: PROGRESS").is_some(),
+            "PROGRESS doesn't match the alternation"
+        );
+    }
+
+    #[test]
+    fn regex_invalid_pattern_reports_error() {
+        let inv = Invariant {
+            rule: "regex".into(),
+            text: Some("(unclosed".into()),
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
+        };
+        let result = evaluate_invariant_inner(&inv, "anything");
+        assert!(result.is_some(), "invalid regex must violate");
+        assert!(
+            result.unwrap().contains("invalid regex"),
+            "message names the failure"
+        );
+    }
+
+    #[test]
+    fn regex_distinct_from_pattern_substring() {
+        // "pattern" is substring; "regex" interprets metacharacters.
+        let content = "function fn_name() { ... }";
+        let pattern_inv = Invariant {
+            rule: "pattern".into(),
+            text: Some("fn.*".into()),
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
+        };
+        // Substring "fn.*" doesn't appear literally → violates.
+        assert!(evaluate_invariant_inner(&pattern_inv, content).is_some());
+
+        let regex_inv = Invariant {
+            rule: "regex".into(),
+            text: Some("fn.*".into()),
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
+        };
+        // Regex "fn.*" matches "fn_name() { ... }" → passes.
+        assert!(evaluate_invariant_inner(&regex_inv, content).is_none());
     }
 
     #[test]
