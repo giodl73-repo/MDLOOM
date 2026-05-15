@@ -49,6 +49,11 @@ pub(crate) fn run_catalog(args: Args) -> Result<()> {
 }
 
 fn run_crop_page(command: &str, args: Args) -> Result<()> {
+    let crop_bin = args.crop_bin.clone();
+    crate::cmd_crop::run_crop(crop_bin, build_crop_page_args(command, args)?)
+}
+
+fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
     let page = args.page;
     if page.root.is_some() && page.view.is_some() {
         bail!(
@@ -83,5 +88,111 @@ fn run_crop_page(command: &str, args: Args) -> Result<()> {
         crop_args.push(output.display().to_string());
     }
 
-    crate::cmd_crop::run_crop(args.crop_bin, crop_args)
+    Ok(crop_args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(page: CorpusPageArgs) -> Args {
+        Args {
+            crop_bin: PathBuf::from("crop"),
+            page,
+        }
+    }
+
+    #[test]
+    fn index_args_map_to_crop_index() {
+        let crop_args = build_crop_page_args(
+            "index",
+            args(CorpusPageArgs {
+                root: Some(PathBuf::from("docs")),
+                view: None,
+                title: Some("Guide Index".to_string()),
+                extensions: vec!["md".to_string()],
+                exclude_dirs: vec!["target".to_string()],
+                output: Some(PathBuf::from("INDEX.md")),
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            crop_args,
+            vec![
+                "index",
+                "--root",
+                "docs",
+                "--title",
+                "Guide Index",
+                "--extension",
+                "md",
+                "--exclude-dir",
+                "target",
+                "--output",
+                "INDEX.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn catalog_args_map_to_crop_catalog_view() {
+        let crop_args = build_crop_page_args(
+            "catalog",
+            args(CorpusPageArgs {
+                root: None,
+                view: Some(PathBuf::from("ready.json")),
+                title: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: Some(PathBuf::from("CATALOG.md")),
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(
+            crop_args,
+            vec!["catalog", "--view", "ready.json", "--output", "CATALOG.md"]
+        );
+    }
+
+    #[test]
+    fn toc_sets_default_title_when_missing() {
+        let mut toc_args = args(CorpusPageArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            output: None,
+        });
+        if toc_args.page.title.is_none() {
+            toc_args.page.title = Some("Table of Contents".to_string());
+        }
+
+        let crop_args = build_crop_page_args("index", toc_args).unwrap();
+
+        assert_eq!(
+            crop_args,
+            vec!["index", "--root", "docs", "--title", "Table of Contents"]
+        );
+    }
+
+    #[test]
+    fn index_rejects_root_and_view() {
+        let err = build_crop_page_args(
+            "index",
+            args(CorpusPageArgs {
+                root: Some(PathBuf::from("docs")),
+                view: Some(PathBuf::from("view.json")),
+                title: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: None,
+            }),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("either --root or --view"));
+    }
 }

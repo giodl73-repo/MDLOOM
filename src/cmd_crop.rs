@@ -118,6 +118,10 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
 }
 
 fn run_status(crop_bin: PathBuf, args: StatusArgs) -> Result<()> {
+    run_crop(crop_bin, build_status_args(args)?)
+}
+
+fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
         bail!("proof crop status accepts either --root or --view, not both");
     }
@@ -151,10 +155,14 @@ fn run_status(crop_bin: PathBuf, args: StatusArgs) -> Result<()> {
         crop_args.push(output.display().to_string());
     }
 
-    run_crop(crop_bin, crop_args)
+    Ok(crop_args)
 }
 
 fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
+    run_crop(crop_bin, build_inspect_views_args(args))
+}
+
+fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
     let mut crop_args = vec![
         "view".to_string(),
         "--inspect".to_string(),
@@ -165,7 +173,7 @@ fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
         crop_args.push("--strict".to_string());
     }
 
-    run_crop(crop_bin, crop_args)
+    crop_args
 }
 
 fn run_side_info(
@@ -174,6 +182,14 @@ fn run_side_info(
     args: SideInfoArgs,
     globals: &GlobalOptions,
 ) -> Result<()> {
+    run_crop(crop_bin, build_side_info_args(command, args, globals)?)
+}
+
+fn build_side_info_args(
+    command: &str,
+    args: SideInfoArgs,
+    globals: &GlobalOptions,
+) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
         bail!(
             "proof crop {} accepts either --root or --view, not both",
@@ -205,10 +221,14 @@ fn run_side_info(
         crop_args.push(output.display().to_string());
     }
 
-    run_crop(crop_bin, crop_args)
+    Ok(crop_args)
 }
 
 fn run_artifacts(crop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions) -> Result<()> {
+    run_crop(crop_bin, build_artifacts_args(args, globals)?)
+}
+
+fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<Vec<String>> {
     if args.root.is_some() && args.manifest.is_some() {
         bail!("proof crop artifacts accepts either --root or --manifest, not both");
     }
@@ -229,7 +249,7 @@ fn run_artifacts(crop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions
         crop_args.push(output.display().to_string());
     }
 
-    run_crop(crop_bin, crop_args)
+    Ok(crop_args)
 }
 
 fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
@@ -262,4 +282,178 @@ pub(crate) fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
         process::exit(1);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn globals(format: &str) -> GlobalOptions {
+        GlobalOptions::new(None, format.to_string(), false, false, None)
+    }
+
+    #[test]
+    fn status_args_map_to_crop_status() {
+        let args = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: Some("Docs".to_string()),
+            extensions: vec!["md".to_string()],
+            exclude_dirs: vec!["target".to_string()],
+            strict: true,
+            output: Some(PathBuf::from("STATUS.md")),
+        })
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status",
+                "--root",
+                "docs",
+                "--title",
+                "Docs",
+                "--extension",
+                "md",
+                "--exclude-dir",
+                "target",
+                "--strict",
+                "--output",
+                "STATUS.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn status_rejects_root_and_view() {
+        let err = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: Some(PathBuf::from("view.json")),
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("either --root or --view"));
+    }
+
+    #[test]
+    fn inspect_views_args_map_to_crop_view_inspect() {
+        let args = build_inspect_views_args(InspectViewsArgs {
+            dir: PathBuf::from(".crop\\views"),
+            strict: true,
+        });
+
+        assert_eq!(
+            args,
+            vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
+        );
+    }
+
+    #[test]
+    fn side_info_defaults_text_global_format_to_json() {
+        let args = build_side_info_args(
+            "frontmatter",
+            SideInfoArgs {
+                root: None,
+                view: Some(PathBuf::from("ready.json")),
+                extensions: vec!["md".to_string()],
+                exclude_dirs: vec![],
+                output: Some(PathBuf::from("frontmatter.json")),
+            },
+            &globals("text"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "frontmatter",
+                "--view",
+                "ready.json",
+                "--extension",
+                "md",
+                "--format",
+                "json",
+                "--output",
+                "frontmatter.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn side_info_relays_markdown_global_format() {
+        let args = build_side_info_args(
+            "links",
+            SideInfoArgs {
+                root: Some(PathBuf::from("docs")),
+                view: None,
+                extensions: vec![],
+                exclude_dirs: vec!["target".to_string()],
+                output: None,
+            },
+            &globals("markdown"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "links",
+                "--root",
+                "docs",
+                "--exclude-dir",
+                "target",
+                "--format",
+                "markdown"
+            ]
+        );
+    }
+
+    #[test]
+    fn side_info_rejects_unsupported_global_format() {
+        let err = build_side_info_args(
+            "links",
+            SideInfoArgs {
+                root: Some(PathBuf::from("docs")),
+                view: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: None,
+            },
+            &globals("rich"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("json or markdown"));
+    }
+
+    #[test]
+    fn artifacts_args_map_to_crop_artifacts() {
+        let args = build_artifacts_args(
+            ArtifactsArgs {
+                root: None,
+                manifest: Some(PathBuf::from(".proof\\artifacts.json")),
+                output: Some(PathBuf::from("ARTIFACTS.md")),
+            },
+            &globals("markdown"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "artifacts",
+                "--manifest",
+                ".proof\\artifacts.json",
+                "--format",
+                "markdown",
+                "--output",
+                "ARTIFACTS.md"
+            ]
+        );
+    }
 }
