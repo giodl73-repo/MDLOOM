@@ -8,6 +8,18 @@ The `proof crop` command is a thin adapter over the CROP CLI. It keeps CROP
 optional while making the recommended integration workflow discoverable from
 PROOF.
 
+For author-facing corpus pages, prefer the first-class PROOF commands:
+
+```text
+proof index --root docs/guides --output docs/INDEX.md
+proof toc --root docs/guides --output docs/TOC.md
+proof catalog --view .crop/views/ready-guides.json --output docs/CATALOG.md
+```
+
+These commands are backed by CROP's `index` and `catalog` engines, but they are
+PROOF authoring surfaces. Use `proof crop ...` when you need a lower-level CROP
+report directly.
+
 ---
 
 ## Generate a corpus status page
@@ -57,6 +69,13 @@ Generate a status page from the view:
 
 ```text
 proof crop status --view .crop/views/ready-guides.json --output READY_GUIDES.md
+```
+
+Generate first-class authoring pages from the same view:
+
+```text
+proof index --view .crop/views/ready-guides.json --output INDEX.md
+proof catalog --view .crop/views/ready-guides.json --output CATALOG.md
 ```
 
 Preflight every recipe in a view store:

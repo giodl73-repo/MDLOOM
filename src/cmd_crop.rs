@@ -243,7 +243,7 @@ fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
     }
 }
 
-fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
+pub(crate) fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
     let status = Command::new(&crop_bin)
         .args(&args)
         .status()

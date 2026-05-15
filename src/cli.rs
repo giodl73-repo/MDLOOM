@@ -103,6 +103,12 @@ pub(crate) enum Command {
     Config(crate::cmd_config::Args),
     /// Delegate corpus-intelligence workflows to CROP
     Crop(crate::cmd_crop::Args),
+    /// Generate a corpus index page
+    Index(crate::cmd_index::Args),
+    /// Generate a corpus table-of-contents page
+    Toc(crate::cmd_index::Args),
+    /// Generate a corpus catalog page with metadata and link side-info
+    Catalog(crate::cmd_index::Args),
     /// Write a proof.toml to the current directory
     Init,
     /// Corpus health summary — source count, stale files, last compile time

@@ -11,6 +11,7 @@ mod cmd_crop;
 mod cmd_depends;
 mod cmd_draft;
 mod cmd_fix;
+mod cmd_index;
 mod cmd_init;
 mod cmd_layout;
 mod cmd_paths;

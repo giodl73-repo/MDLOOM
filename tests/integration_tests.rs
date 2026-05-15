@@ -1893,6 +1893,133 @@ fn binary_crop_relays_crop_exit_code() {
 }
 
 #[test]
+fn binary_index_delegates_to_crop_index() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let output_path = dir.path().join("INDEX.md");
+
+    let output = std::process::Command::new(&bin)
+        .arg("index")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--title")
+        .arg("Guide Index")
+        .arg("--extension")
+        .arg("md")
+        .arg("--exclude-dir")
+        .arg("target")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof index");
+
+    assert!(
+        output.status.success(),
+        "proof index failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("index"), "got: {}", args);
+    assert!(args.contains("--root"), "got: {}", args);
+    assert!(
+        args.contains(&dir.path().display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--title"), "got: {}", args);
+    assert!(args.contains("Guide Index"), "got: {}", args);
+    assert!(args.contains("--extension md"), "got: {}", args);
+    assert!(args.contains("--exclude-dir target"), "got: {}", args);
+    assert!(args.contains("--output"), "got: {}", args);
+    assert!(
+        args.contains(&output_path.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
+fn binary_toc_delegates_to_crop_index_with_toc_title() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("toc")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .expect("failed to run proof toc");
+
+    assert!(
+        output.status.success(),
+        "proof toc failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("index"), "got: {}", args);
+    assert!(args.contains("--title"), "got: {}", args);
+    assert!(args.contains("Table of Contents"), "got: {}", args);
+}
+
+#[test]
+fn binary_catalog_delegates_to_crop_catalog() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join("ready-guides.json");
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("catalog")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--view")
+        .arg(&view_file)
+        .arg("--output")
+        .arg(dir.path().join("CATALOG.md"))
+        .output()
+        .expect("failed to run proof catalog");
+
+    assert!(
+        output.status.success(),
+        "proof catalog failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("catalog"), "got: {}", args);
+    assert!(args.contains("--view"), "got: {}", args);
+    assert!(
+        args.contains(&view_file.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
 fn binary_compile_tag_filter_limits_sources() {
     let bin = debug_bin();
     if !bin.exists() {

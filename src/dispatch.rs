@@ -5,8 +5,8 @@ use crate::cli::{Cli, Command, DispatchInput};
 use crate::cmd_context::GlobalOptions;
 use crate::{
     cmd_backfill, cmd_check, cmd_compile, cmd_config, cmd_crop, cmd_depends, cmd_draft, cmd_fix,
-    cmd_init, cmd_layout, cmd_pin, cmd_pin_list, cmd_resolve, cmd_spec_generate, cmd_stats,
-    cmd_status, cmd_tree,
+    cmd_index, cmd_init, cmd_layout, cmd_pin, cmd_pin_list, cmd_resolve, cmd_spec_generate,
+    cmd_stats, cmd_status, cmd_tree,
 };
 
 pub(crate) fn run(cli: Cli) -> Result<()> {
@@ -54,6 +54,9 @@ impl DispatchContext {
             Some(Command::Status(args)) => cmd_status::run_with_globals(args, &globals),
             Some(Command::Config(args)) => cmd_config::run_with_globals(args, &globals),
             Some(Command::Crop(args)) => cmd_crop::run_with_globals(args, &globals),
+            Some(Command::Index(args)) => cmd_index::run_index(args),
+            Some(Command::Toc(args)) => cmd_index::run_toc(args),
+            Some(Command::Catalog(args)) => cmd_index::run_catalog(args),
             Some(Command::Stats(args)) => cmd_stats::run_with_globals(args, &globals),
             Some(Command::Tree(args)) => cmd_tree::run(args),
             Some(Command::SpecGenerate(args)) => {
