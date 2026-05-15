@@ -1809,6 +1809,65 @@ fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
 }
 
 #[test]
+fn binary_crop_view_writes_crop_view_recipe() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("proof.toml"),
+        r#"
+[files]
+include = ["src/**/*.source.md"]
+exclude = ["target/**"]
+"#,
+    )
+    .unwrap();
+    let output_path = dir.path().join(".crop").join("views").join("ready.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("view")
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--name")
+        .arg("ready-guides")
+        .arg("--tag")
+        .arg("guide")
+        .arg("--op")
+        .arg("compile")
+        .arg("--content-tag")
+        .arg("markdown")
+        .output()
+        .expect("failed to run proof crop view");
+
+    assert!(
+        output.status.success(),
+        "proof crop view failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let recipe: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+    assert_eq!(recipe["schema_version"], "crop.view.v1");
+    assert_eq!(recipe["name"], "ready-guides");
+    assert_eq!(
+        recipe["root"],
+        PathBuf::from("..").join("..").display().to_string()
+    );
+    assert_eq!(recipe["include_extensions"], serde_json::json!(["md"]));
+    assert_eq!(recipe["exclude_dirs"], serde_json::json!(["target"]));
+    assert_eq!(
+        recipe["frontmatter_query"],
+        "tags has 'guide' and ops has 'compile' and content_tags has 'markdown'"
+    );
+}
+
+#[test]
 fn binary_crop_side_info_delegates_to_named_crop_report() {
     let bin = debug_bin();
     if !bin.exists() {

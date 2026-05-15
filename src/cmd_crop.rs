@@ -1,7 +1,10 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
-use std::path::PathBuf;
+use proof_lib::lint::load_config_for_path as load_config;
+use serde::Serialize;
+use std::collections::BTreeSet;
+use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
 #[derive(clap::Args)]
@@ -20,6 +23,8 @@ enum CropCommand {
     Status(StatusArgs),
     /// Validate CROP view recipes in a view store
     InspectViews(InspectViewsArgs),
+    /// Write a crop.view.v1 recipe from PROOF root/config/tag settings
+    View(ViewArgs),
     /// Generate local link side-info
     Links(SideInfoArgs),
     /// Generate backlink and orphan side-info
@@ -67,6 +72,43 @@ struct InspectViewsArgs {
     /// Exit non-zero when any view recipe fails inspection
     #[arg(long)]
     strict: bool,
+}
+
+#[derive(clap::Args)]
+struct ViewArgs {
+    /// Documentation/source root for the CROP view
+    #[arg(long, default_value = ".")]
+    root: PathBuf,
+    /// Output crop.view.v1 recipe path
+    #[arg(long, default_value = ".crop\\views\\proof-view.json")]
+    output: PathBuf,
+    /// View name
+    #[arg(long, default_value = "proof-view")]
+    name: String,
+    /// Context-crop task prompt for crop view --file
+    #[arg(long)]
+    task: Option<String>,
+    /// Context-crop token budget
+    #[arg(long, default_value_t = 12000)]
+    token_budget: usize,
+    /// Seed unit index for crop expansion
+    #[arg(long, default_value_t = 0)]
+    seed: usize,
+    /// Restrict view files to one or more extensions, e.g. --extension md
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
+    /// Add a frontmatter tags predicate (repeatable)
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    /// Add a frontmatter ops predicate (repeatable)
+    #[arg(long = "op")]
+    ops: Vec<String>,
+    /// Add a frontmatter content_tags predicate (repeatable)
+    #[arg(long = "content-tag")]
+    content_tags: Vec<String>,
 }
 
 #[derive(clap::Args)]
@@ -124,6 +166,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect),
+        CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
         CropCommand::Backlinks(side_info) => {
             run_side_info(args.crop_bin, "backlinks", side_info, globals)
@@ -196,6 +239,243 @@ fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
     }
 
     crop_args
+}
+
+fn run_view(args: ViewArgs, globals: &GlobalOptions) -> Result<()> {
+    let recipe = build_view_recipe(&args, globals)?;
+    if let Some(parent) = args.output.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&recipe)?;
+    std::fs::write(&args.output, json)
+        .with_context(|| format!("writing {}", args.output.display()))?;
+    println!("wrote {}", args.output.display());
+    Ok(())
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct CropViewRecipe {
+    schema_version: &'static str,
+    name: String,
+    root: String,
+    task: String,
+    token_budget: usize,
+    seed: usize,
+    include_extensions: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    exclude_dirs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frontmatter_query: Option<String>,
+}
+
+fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<CropViewRecipe> {
+    let config = load_config(&args.root, globals.config())?;
+    let include_extensions = if args.extensions.is_empty() {
+        extensions_from_include_patterns(&config.files.include)
+    } else {
+        normalize_extensions(&args.extensions)
+    };
+    let exclude_dirs = if args.exclude_dirs.is_empty() {
+        exclude_dirs_from_patterns(&config.files.exclude)
+    } else {
+        dedupe_strings(&args.exclude_dirs)
+    };
+
+    Ok(CropViewRecipe {
+        schema_version: "crop.view.v1",
+        name: args.name.clone(),
+        root: view_root_for_output(&args.root, &args.output)?,
+        task: args
+            .task
+            .clone()
+            .unwrap_or_else(|| format!("{} corpus", args.name)),
+        token_budget: args.token_budget,
+        seed: args.seed,
+        include_extensions,
+        exclude_dirs,
+        frontmatter_query: build_frontmatter_query(args)?,
+    })
+}
+
+fn view_root_for_output(root: &Path, output: &Path) -> Result<String> {
+    let cwd = std::env::current_dir()?;
+    let target = absolute_lexical(root, &cwd);
+    let base = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|parent| absolute_lexical(parent, &cwd))
+        .unwrap_or(cwd);
+    Ok(relative_path(&target, &base)
+        .unwrap_or(target)
+        .display()
+        .to_string())
+}
+
+fn absolute_lexical(path: &Path, cwd: &Path) -> PathBuf {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    };
+    normalize_lexical(&absolute)
+}
+
+fn normalize_lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+fn relative_path(target: &Path, base: &Path) -> Option<PathBuf> {
+    let target_components: Vec<_> = target.components().collect();
+    let base_components: Vec<_> = base.components().collect();
+    let mut common = 0usize;
+    while common < target_components.len()
+        && common < base_components.len()
+        && component_eq(target_components[common], base_components[common])
+    {
+        common += 1;
+    }
+    if common == 0 {
+        return None;
+    }
+
+    let mut out = PathBuf::new();
+    for component in &base_components[common..] {
+        if matches!(component, Component::Normal(_)) {
+            out.push("..");
+        }
+    }
+    for component in &target_components[common..] {
+        out.push(component.as_os_str());
+    }
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+    Some(out)
+}
+
+fn component_eq(left: Component<'_>, right: Component<'_>) -> bool {
+    left.as_os_str()
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&right.as_os_str().to_string_lossy())
+}
+
+fn build_frontmatter_query(args: &ViewArgs) -> Result<Option<String>> {
+    let mut clauses = Vec::new();
+    for tag in &args.tags {
+        clauses.push(frontmatter_clause("tags", tag)?);
+    }
+    for op in &args.ops {
+        clauses.push(frontmatter_clause("ops", op)?);
+    }
+    for content_tag in &args.content_tags {
+        clauses.push(frontmatter_clause("content_tags", content_tag)?);
+    }
+    Ok((!clauses.is_empty()).then(|| clauses.join(" and ")))
+}
+
+fn frontmatter_clause(field: &str, value: &str) -> Result<String> {
+    if value.contains('\'') {
+        bail!(
+            "frontmatter query value {:?} contains a single quote, which crop.view.v1 cannot encode safely",
+            value
+        );
+    }
+    Ok(format!("{} has '{}'", field, value))
+}
+
+fn extensions_from_include_patterns(patterns: &[String]) -> Vec<String> {
+    let mut extensions = BTreeSet::new();
+    for pattern in patterns {
+        for part in pattern.split(['{', '}', ',']) {
+            if let Some(extension) = extension_from_pattern(part) {
+                extensions.insert(extension);
+            }
+        }
+    }
+    if extensions.is_empty() {
+        extensions.insert("md".to_string());
+    }
+    extensions.into_iter().collect()
+}
+
+fn extension_from_pattern(pattern: &str) -> Option<String> {
+    let trimmed = pattern.trim().trim_matches('"').trim_matches('\'');
+    let (_, extension) = trimmed.rsplit_once('.')?;
+    let extension = extension
+        .trim_matches('*')
+        .trim_matches('?')
+        .trim_matches(']')
+        .trim_matches(')')
+        .trim();
+    if extension.is_empty()
+        || extension
+            .chars()
+            .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'))
+    {
+        None
+    } else {
+        Some(extension.trim_start_matches('.').to_string())
+    }
+}
+
+fn normalize_extensions(extensions: &[String]) -> Vec<String> {
+    let mut out = BTreeSet::new();
+    for extension in extensions {
+        let normalized = extension.trim().trim_start_matches('.');
+        if !normalized.is_empty() {
+            out.insert(normalized.to_string());
+        }
+    }
+    out.into_iter().collect()
+}
+
+fn exclude_dirs_from_patterns(patterns: &[String]) -> Vec<String> {
+    let mut dirs = BTreeSet::new();
+    for pattern in patterns {
+        if let Some(dir) = exclude_dir_from_pattern(pattern) {
+            dirs.insert(dir);
+        }
+    }
+    dirs.into_iter().collect()
+}
+
+fn exclude_dir_from_pattern(pattern: &str) -> Option<String> {
+    let normalized = pattern.replace('\\', "/");
+    let mut parts = normalized
+        .split('/')
+        .map(str::trim)
+        .filter(|part| !part.is_empty() && *part != "**" && *part != "*");
+    parts
+        .find(|part| {
+            !part.contains('*')
+                && !part.contains('?')
+                && !part.contains('.')
+                && *part != "!"
+                && *part != "."
+        })
+        .map(str::to_string)
+}
+
+fn dedupe_strings(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn run_side_info(
@@ -422,6 +702,100 @@ mod tests {
             args,
             vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
         );
+    }
+
+    #[test]
+    fn view_recipe_maps_config_and_frontmatter_filters() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("proof.toml"),
+            r#"
+[files]
+include = ["src/**/*.source.md", "docs/**/*.md"]
+exclude = ["target/**", "node_modules/**"]
+"#,
+        )
+        .unwrap();
+
+        let recipe = build_view_recipe(
+            &ViewArgs {
+                root: dir.path().to_path_buf(),
+                output: PathBuf::from("ready.json"),
+                name: "ready-guides".to_string(),
+                task: None,
+                token_budget: 8000,
+                seed: 2,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                tags: vec!["guide".to_string()],
+                ops: vec!["compile".to_string()],
+                content_tags: vec!["markdown".to_string()],
+            },
+            &globals("text"),
+        )
+        .unwrap();
+
+        assert_eq!(recipe.schema_version, "crop.view.v1");
+        assert_eq!(recipe.name, "ready-guides");
+        assert_eq!(recipe.task, "ready-guides corpus");
+        assert_eq!(recipe.token_budget, 8000);
+        assert_eq!(recipe.seed, 2);
+        assert_eq!(recipe.include_extensions, vec!["md"]);
+        assert_eq!(recipe.exclude_dirs, vec!["node_modules", "target"]);
+        assert_eq!(
+            recipe.frontmatter_query.as_deref(),
+            Some("tags has 'guide' and ops has 'compile' and content_tags has 'markdown'")
+        );
+    }
+
+    #[test]
+    fn view_recipe_prefers_explicit_extensions_and_exclude_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let recipe = build_view_recipe(
+            &ViewArgs {
+                root: dir.path().to_path_buf(),
+                output: PathBuf::from("view.json"),
+                name: "all-docs".to_string(),
+                task: Some("all docs".to_string()),
+                token_budget: 12000,
+                seed: 0,
+                extensions: vec![".md".to_string(), "mdx".to_string(), "md".to_string()],
+                exclude_dirs: vec!["target".to_string(), "target".to_string()],
+                tags: vec![],
+                ops: vec![],
+                content_tags: vec![],
+            },
+            &globals("text"),
+        )
+        .unwrap();
+
+        assert_eq!(recipe.include_extensions, vec!["md", "mdx"]);
+        assert_eq!(recipe.exclude_dirs, vec!["target"]);
+        assert_eq!(recipe.frontmatter_query, None);
+    }
+
+    #[test]
+    fn view_recipe_rejects_unencodable_frontmatter_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = build_view_recipe(
+            &ViewArgs {
+                root: dir.path().to_path_buf(),
+                output: PathBuf::from("view.json"),
+                name: "bad".to_string(),
+                task: None,
+                token_budget: 12000,
+                seed: 0,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                tags: vec!["author's".to_string()],
+                ops: vec![],
+                content_tags: vec![],
+            },
+            &globals("text"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("single quote"));
     }
 
     #[test]
