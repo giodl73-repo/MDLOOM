@@ -2,12 +2,10 @@ pub mod dither;
 pub mod shape;
 
 #[cfg(feature = "figure")]
-use image::{DynamicImage, GrayImage, imageops};
-
+use image::{imageops, DynamicImage, GrayImage};
 
 #[cfg(feature = "figure")]
-use crate::figure::dither::{DitherContext, dither};
-
+use crate::figure::dither::{dither, DitherContext};
 
 // ─────────────────────────────────────────────────────────
 // Public enums — available even without --features figure
@@ -25,19 +23,21 @@ pub enum DitherMode {
 }
 
 impl Default for DitherMode {
-    fn default() -> Self { DitherMode::Block }
+    fn default() -> Self {
+        DitherMode::Block
+    }
 }
 
 impl DitherMode {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "density"      => Some(Self::Density),
-            "block"        => Some(Self::Block),
-            "half-block"   => Some(Self::HalfBlock),
-            "quarter-block"=> Some(Self::QuarterBlock),
-            "braille"      => Some(Self::Braille),
-            "binary"       => Some(Self::Binary),
-            "edge"         => Some(Self::Edge),
+            "density" => Some(Self::Density),
+            "block" => Some(Self::Block),
+            "half-block" => Some(Self::HalfBlock),
+            "quarter-block" => Some(Self::QuarterBlock),
+            "braille" => Some(Self::Braille),
+            "binary" => Some(Self::Binary),
+            "edge" => Some(Self::Edge),
             _ => None,
         }
     }
@@ -59,14 +59,14 @@ pub enum ShapeKind {
 impl ShapeKind {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "circle"       => Some(Self::Circle),
-            "octagon"      => Some(Self::Octagon),
-            "shield"       => Some(Self::Shield),
-            "star"         => Some(Self::Star),
-            "heart"        => Some(Self::Heart),
-            "diamond"      => Some(Self::Diamond),
-            "hexagon"      => Some(Self::Hexagon),
-            "pentagon"     => Some(Self::Pentagon),
+            "circle" => Some(Self::Circle),
+            "octagon" => Some(Self::Octagon),
+            "shield" => Some(Self::Shield),
+            "star" => Some(Self::Star),
+            "heart" => Some(Self::Heart),
+            "diamond" => Some(Self::Diamond),
+            "hexagon" => Some(Self::Hexagon),
+            "pentagon" => Some(Self::Pentagon),
             "rounded-rect" => Some(Self::RoundedRect),
             _ => None,
         }
@@ -81,7 +81,9 @@ pub enum LabelPos {
 }
 
 impl Default for LabelPos {
-    fn default() -> Self { LabelPos::Bottom }
+    fn default() -> Self {
+        LabelPos::Bottom
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -133,29 +135,34 @@ impl Default for ImportOptions {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FigureWarning {
-    AspectRatioChanged { original: (u32, u32), requested: (u32, u32) }, // FIGURE-002
-    BrailleMode,                                                         // FIGURE-004
+    AspectRatioChanged {
+        original: (u32, u32),
+        requested: (u32, u32),
+    }, // FIGURE-002
+    BrailleMode, // FIGURE-004
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FigureError {
-    NotFound(String),          // FIGURE-001
-    ShapeEmpty,                // FIGURE-003
-    RemoteWithoutFetch(String),// FIGURE-006
-    ShapeTooSmall(String),     // from enforce_minimum_size
-    UnsupportedFormat(String), // FIGURE-001 variant
-    ImageError(String),        // FIGURE-001 variant
+    NotFound(String),           // FIGURE-001
+    ShapeEmpty,                 // FIGURE-003
+    RemoteWithoutFetch(String), // FIGURE-006
+    ShapeTooSmall(String),      // from enforce_minimum_size
+    UnsupportedFormat(String),  // FIGURE-001 variant
+    ImageError(String),         // FIGURE-001 variant
 }
 
 impl std::fmt::Display for FigureError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotFound(p)            => write!(f, "FIGURE-001: file not found: {}", p),
-            Self::ShapeEmpty             => write!(f, "FIGURE-003: shape clip produced empty output"),
-            Self::RemoteWithoutFetch(u)  => write!(f, "FIGURE-006: remote URL requires --allow-fetch: {}", u),
-            Self::ShapeTooSmall(msg)     => write!(f, "FIGURE-003: {}", msg),
+            Self::NotFound(p) => write!(f, "FIGURE-001: file not found: {}", p),
+            Self::ShapeEmpty => write!(f, "FIGURE-003: shape clip produced empty output"),
+            Self::RemoteWithoutFetch(u) => {
+                write!(f, "FIGURE-006: remote URL requires --allow-fetch: {}", u)
+            }
+            Self::ShapeTooSmall(msg) => write!(f, "FIGURE-003: {}", msg),
             Self::UnsupportedFormat(ext) => write!(f, "FIGURE-001: unsupported format: {}", ext),
-            Self::ImageError(msg)        => write!(f, "FIGURE-001: {}", msg),
+            Self::ImageError(msg) => write!(f, "FIGURE-001: {}", msg),
         }
     }
 }
@@ -214,8 +221,7 @@ pub fn import_image(path: &Path, opts: &ImportOptions) -> Result<ImportResult, F
 
     // Enforce shape minimum size
     if let Some(ref kind) = opts.shape {
-        enforce_minimum_size(kind, target_w)
-            .map_err(FigureError::ShapeTooSmall)?;
+        enforce_minimum_size(kind, target_w).map_err(FigureError::ShapeTooSmall)?;
     }
 
     // Apply gamma/contrast
@@ -262,7 +268,8 @@ pub fn import_image(path: &Path, opts: &ImportOptions) -> Result<ImportResult, F
 
 #[cfg(feature = "figure")]
 pub fn load_image(path: &Path, _opts: &ImportOptions) -> Result<DynamicImage, FigureError> {
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
@@ -274,7 +281,7 @@ pub fn load_image(path: &Path, _opts: &ImportOptions) -> Result<DynamicImage, Fi
 
     if ext == "svg" {
         return Err(FigureError::UnsupportedFormat(
-            "SVG requires --features svg".to_string()
+            "SVG requires --features svg".to_string(),
         ));
     }
 
@@ -298,7 +305,11 @@ fn load_svg(path: &Path) -> Result<DynamicImage, FigureError> {
     let h = (size.height() as u32).max(1);
     let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| FigureError::ImageError("pixmap allocation failed".to_string()))?;
-    resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
     let rgba = pixmap.take();
     let img = image::RgbaImage::from_raw(w, h, rgba)
         .ok_or_else(|| FigureError::ImageError("image buffer mismatch".to_string()))?;
@@ -311,7 +322,7 @@ fn load_svg(path: &Path) -> Result<DynamicImage, FigureError> {
 
 #[cfg(feature = "figure")]
 pub fn apply_gamma_contrast(img: DynamicImage, opts: &ImportOptions) -> DynamicImage {
-    use image::{Pixel, ImageBuffer};
+    use image::{ImageBuffer, Pixel};
 
     let contrast = opts.contrast;
     let gamma = opts.gamma;
@@ -325,7 +336,11 @@ pub fn apply_gamma_contrast(img: DynamicImage, opts: &ImportOptions) -> DynamicI
     let out = ImageBuffer::from_fn(w, h, |x, y| {
         let v = img.get_pixel(x, y)[0] as f64 / 255.0;
         // Gamma correction
-        let v = if (gamma - 1.0).abs() > 1e-6 { v.powf(1.0 / gamma as f64) } else { v };
+        let v = if (gamma - 1.0).abs() > 1e-6 {
+            v.powf(1.0 / gamma as f64)
+        } else {
+            v
+        };
         // Contrast adjustment: (v - 0.5) * contrast + 0.5
         let v = (v - 0.5) * contrast as f64 + 0.5;
         let v = v.clamp(0.0, 1.0);
@@ -338,8 +353,14 @@ pub fn apply_gamma_contrast(img: DynamicImage, opts: &ImportOptions) -> DynamicI
 // Label overlay
 // ─────────────────────────────────────────────────────────
 
-pub fn apply_label_overlay(mut rows: Vec<String>, label: &str, opts: &ImportOptions) -> Vec<String> {
-    if rows.is_empty() { return rows; }
+pub fn apply_label_overlay(
+    mut rows: Vec<String>,
+    label: &str,
+    opts: &ImportOptions,
+) -> Vec<String> {
+    if rows.is_empty() {
+        return rows;
+    }
 
     let frame_w = rows[0].chars().count();
     // Truncate label if wider than frame
@@ -347,12 +368,7 @@ pub fn apply_label_overlay(mut rows: Vec<String>, label: &str, opts: &ImportOpti
     let label_w = label.chars().count();
     let pad_left = (frame_w.saturating_sub(label_w)) / 2;
     let pad_right = frame_w.saturating_sub(label_w + pad_left);
-    let label_line = format!(
-        "{}{}{}",
-        " ".repeat(pad_left),
-        label,
-        " ".repeat(pad_right)
-    );
+    let label_line = format!("{}{}{}", " ".repeat(pad_left), label, " ".repeat(pad_right));
 
     match opts.label_pos {
         LabelPos::Top => {
@@ -412,48 +428,86 @@ mod tests {
 
     #[test]
     fn test_figure_error_display_codes() {
-        assert!(FigureError::NotFound("x".into()).to_string().contains("FIGURE-001"));
+        assert!(FigureError::NotFound("x".into())
+            .to_string()
+            .contains("FIGURE-001"));
         assert!(FigureError::ShapeEmpty.to_string().contains("FIGURE-003"));
-        assert!(FigureError::ShapeTooSmall("octagon too small".into()).to_string().contains("FIGURE-003"));
-        assert!(FigureError::UnsupportedFormat("tiff".into()).to_string().contains("FIGURE-001"));
+        assert!(FigureError::ShapeTooSmall("octagon too small".into())
+            .to_string()
+            .contains("FIGURE-003"));
+        assert!(FigureError::UnsupportedFormat("tiff".into())
+            .to_string()
+            .contains("FIGURE-001"));
     }
 
     #[test]
     fn test_label_overlay_center_positioning() {
         let rows: Vec<String> = (0..5).map(|_| "          ".to_string()).collect();
-        let opts = ImportOptions { label_pos: LabelPos::Center, ..Default::default() };
+        let opts = ImportOptions {
+            label_pos: LabelPos::Center,
+            ..Default::default()
+        };
         let result = apply_label_overlay(rows, "Hi", &opts);
-        assert_eq!(result.len(), 5, "center overlay should not change row count");
+        assert_eq!(
+            result.len(),
+            5,
+            "center overlay should not change row count"
+        );
         let mid = result.len() / 2;
-        assert!(result[mid].contains("Hi"), "center row should contain label: {:?}", result[mid]);
+        assert!(
+            result[mid].contains("Hi"),
+            "center row should contain label: {:?}",
+            result[mid]
+        );
     }
 
     #[test]
     fn test_label_overlay_top_positioning() {
         let rows: Vec<String> = vec!["          ".to_string(); 4];
-        let opts = ImportOptions { label_pos: LabelPos::Top, ..Default::default() };
+        let opts = ImportOptions {
+            label_pos: LabelPos::Top,
+            ..Default::default()
+        };
         let result = apply_label_overlay(rows, "TOP", &opts);
         assert_eq!(result.len(), 5, "top overlay should add one row");
-        assert!(result[0].contains("TOP"), "first row should contain label: {:?}", result[0]);
+        assert!(
+            result[0].contains("TOP"),
+            "first row should contain label: {:?}",
+            result[0]
+        );
     }
 
     #[test]
     fn test_label_overlay_bottom_positioning() {
         let rows: Vec<String> = vec!["          ".to_string(); 4];
-        let opts = ImportOptions { label_pos: LabelPos::Bottom, ..Default::default() };
+        let opts = ImportOptions {
+            label_pos: LabelPos::Bottom,
+            ..Default::default()
+        };
         let result = apply_label_overlay(rows, "BOT", &opts);
         assert_eq!(result.len(), 5, "bottom overlay should add one row");
         let last = result.last().unwrap();
-        assert!(last.contains("BOT"), "last row should contain label: {:?}", last);
+        assert!(
+            last.contains("BOT"),
+            "last row should contain label: {:?}",
+            last
+        );
     }
 
     #[test]
     fn test_label_truncated_at_frame_width() {
         let rows: Vec<String> = vec!["1234567890".to_string()]; // 10 wide
-        let opts = ImportOptions { label_pos: LabelPos::Center, ..Default::default() };
+        let opts = ImportOptions {
+            label_pos: LabelPos::Center,
+            ..Default::default()
+        };
         let result = apply_label_overlay(rows, "TOOLONGLABEL", &opts);
         // Label should be truncated to 10 chars
-        assert_eq!(result[0].chars().count(), 10, "label row must match frame width");
+        assert_eq!(
+            result[0].chars().count(),
+            10,
+            "label row must match frame width"
+        );
     }
 
     #[test]
@@ -475,20 +529,28 @@ mod tests {
     #[test]
     fn test_import_1x1_black_image_produces_nonempty_ascii() {
         use image::{GrayImage, Luma};
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         // Create a 1×1 PNG in a temp file (must have .png extension for format detection)
         let mut tmp = NamedTempFile::with_suffix(".png").unwrap();
         let img = GrayImage::from_pixel(1, 1, Luma([0u8]));
         let mut buf = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png).unwrap();
+        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+            .unwrap();
         tmp.write_all(&buf).unwrap();
         tmp.flush().unwrap();
 
-        let opts = ImportOptions { width: 1, height: Some(1), ..Default::default() };
+        let opts = ImportOptions {
+            width: 1,
+            height: Some(1),
+            ..Default::default()
+        };
         let result = import_image(tmp.path(), &opts).unwrap();
-        assert!(!result.ascii.is_empty(), "1×1 image should produce non-empty ASCII");
+        assert!(
+            !result.ascii.is_empty(),
+            "1×1 image should produce non-empty ASCII"
+        );
     }
 
     #[cfg(feature = "figure")]
@@ -516,64 +578,79 @@ mod tests {
     #[test]
     fn test_aspect_ratio_warning_fires_on_override() {
         use image::{GrayImage, Luma};
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         // Create a 100×100 (square) image (must have .png extension for format detection)
         let mut tmp = NamedTempFile::with_suffix(".png").unwrap();
         let img = GrayImage::from_pixel(100, 100, Luma([128u8]));
         let mut buf = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png).unwrap();
+        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+            .unwrap();
         tmp.write_all(&buf).unwrap();
         tmp.flush().unwrap();
 
         // Request width=40, height=2 — extreme ratio change
         let opts = ImportOptions {
-            width: 40, height: Some(2),
+            width: 40,
+            height: Some(2),
             ..Default::default()
         };
         let result = import_image(tmp.path(), &opts).unwrap();
-        let has_ratio_warning = result.warnings.iter().any(|w| {
-            matches!(w, FigureWarning::AspectRatioChanged { .. })
-        });
-        assert!(has_ratio_warning, "extreme height override should warn about aspect ratio change");
+        let has_ratio_warning = result
+            .warnings
+            .iter()
+            .any(|w| matches!(w, FigureWarning::AspectRatioChanged { .. }));
+        assert!(
+            has_ratio_warning,
+            "extreme height override should warn about aspect ratio change"
+        );
     }
 
     #[cfg(feature = "figure")]
     #[test]
     fn test_gamma_contrast_applied_before_dither() {
         use image::{GrayImage, Luma};
-        use tempfile::NamedTempFile;
         use std::io::Write;
+        use tempfile::NamedTempFile;
 
         // Must have .png extension for format detection
         let mut tmp = NamedTempFile::with_suffix(".png").unwrap();
         // Mid-gray image
         let img = GrayImage::from_pixel(4, 4, Luma([128u8]));
         let mut buf = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png).unwrap();
+        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+            .unwrap();
         tmp.write_all(&buf).unwrap();
         tmp.flush().unwrap();
 
         // High contrast (10.0) pushes mid-gray (≈128) noticeably above threshold=130.
         // Formula: (0.502 - 0.5) * 10 + 0.5 ≈ 0.52 → 133 > 130 → '█'
         let opts = ImportOptions {
-            width: 4, height: Some(4),
-            contrast: 10.0, dither: DitherMode::Binary, threshold: 130,
+            width: 4,
+            height: Some(4),
+            contrast: 10.0,
+            dither: DitherMode::Binary,
+            threshold: 130,
             ..Default::default()
         };
         let result_high = import_image(tmp.path(), &opts).unwrap();
 
         // Very low contrast (0.01) keeps mid-gray essentially unchanged ≈ 128 < 130 → ' '
         let opts_low = ImportOptions {
-            width: 4, height: Some(4),
-            contrast: 0.01, dither: DitherMode::Binary, threshold: 130,
+            width: 4,
+            height: Some(4),
+            contrast: 0.01,
+            dither: DitherMode::Binary,
+            threshold: 130,
             ..Default::default()
         };
         let result_low = import_image(tmp.path(), &opts_low).unwrap();
 
         // They must differ: high contrast → '█', low contrast → ' '
-        assert_ne!(result_high.ascii, result_low.ascii,
-            "different contrast values should produce different output");
+        assert_ne!(
+            result_high.ascii, result_low.ascii,
+            "different contrast values should produce different output"
+        );
     }
 }

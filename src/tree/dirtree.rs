@@ -2,7 +2,6 @@
 ///
 /// Generates formatted dirtree code blocks from a filesystem root,
 /// and validates that paths declared in a dirtree block exist on disk.
-
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::path::{Path, PathBuf};
@@ -15,19 +14,19 @@ use std::path::{Path, PathBuf};
 pub struct DirtreeOptions {
     pub root: PathBuf,
     pub max_depth: Option<usize>,
-    pub exclude: Vec<String>,   // glob patterns relative to root
-    pub dirs_first: bool,       // directories before files (default: true)
+    pub exclude: Vec<String>, // glob patterns relative to root
+    pub dirs_first: bool,     // directories before files (default: true)
     pub sort: SortOrder,
-    pub wrap_fence: bool,       // wrap output in ```dirtree fence (default: true)
-    pub indent_width: usize,    // spaces per level (default: 4)
+    pub wrap_fence: bool,    // wrap output in ```dirtree fence (default: true)
+    pub indent_width: usize, // spaces per level (default: 4)
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SortOrder {
-    Name,   // alphabetical (default)
-    Ext,    // by file extension then name
-    Size,   // by file size descending
-    Mtime,  // by modification time descending
+    Name,  // alphabetical (default)
+    Ext,   // by file extension then name
+    Size,  // by file size descending
+    Mtime, // by modification time descending
 }
 
 impl Default for DirtreeOptions {
@@ -51,7 +50,8 @@ impl Default for DirtreeOptions {
 /// Generate a dirtree from the filesystem.
 pub fn generate(opts: &DirtreeOptions) -> Result<String> {
     let exclude_set = build_exclude_set(&opts.exclude)?;
-    let root_name = opts.root
+    let root_name = opts
+        .root
         .file_name()
         .map(|n| format!("{}/", n.to_string_lossy()))
         .unwrap_or_else(|| "./".to_string());
@@ -59,7 +59,15 @@ pub fn generate(opts: &DirtreeOptions) -> Result<String> {
     let mut lines: Vec<String> = Vec::new();
     lines.push(root_name);
 
-    walk_dir_inner(&opts.root, &opts.root, "", &exclude_set, opts, 0, &mut lines)?;
+    walk_dir_inner(
+        &opts.root,
+        &opts.root,
+        "",
+        &exclude_set,
+        opts,
+        0,
+        &mut lines,
+    )?;
 
     let body = lines.join("\n");
     if opts.wrap_fence {
@@ -79,13 +87,15 @@ fn walk_dir_inner(
     lines: &mut Vec<String>,
 ) -> Result<()> {
     if let Some(max) = opts.max_depth {
-        if depth >= max { return Ok(()); }
+        if depth >= max {
+            return Ok(());
+        }
     }
 
     let mut entries: Vec<(String, PathBuf, bool)> = Vec::new(); // (name, path, is_dir)
 
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("reading directory: {}", dir.display()))?
+    for entry in
+        std::fs::read_dir(dir).with_context(|| format!("reading directory: {}", dir.display()))?
     {
         let entry = entry?;
         let path = entry.path();
@@ -95,7 +105,9 @@ fn walk_dir_inner(
         // Check exclusion
         let rel = path.strip_prefix(root).unwrap_or(&path);
         let rel_str = rel.to_string_lossy().replace('\\', "/");
-        if exclude.is_match(&*rel_str) { continue; }
+        if exclude.is_match(&*rel_str) {
+            continue;
+        }
 
         entries.push((name, path, is_dir));
     }
@@ -107,12 +119,18 @@ fn walk_dir_inner(
     for (i, (name, path, is_dir)) in entries.iter().enumerate() {
         let is_last = i == n - 1;
         let connector = if is_last { "└──" } else { "├──" };
-        let display_name = if *is_dir { format!("{}/", name) } else { name.clone() };
+        let display_name = if *is_dir {
+            format!("{}/", name)
+        } else {
+            name.clone()
+        };
 
         lines.push(format!("{}{} {}", prefix, connector, display_name));
 
         if *is_dir {
-            let child_prefix = format!("{}{}", prefix,
+            let child_prefix = format!(
+                "{}{}",
+                prefix,
                 if is_last {
                     " ".repeat(opts.indent_width)
                 } else {
@@ -135,9 +153,17 @@ fn sort_entries(entries: &mut Vec<(String, PathBuf, bool)>, opts: &DirtreeOption
         match &opts.sort {
             SortOrder::Name => name_a.to_lowercase().cmp(&name_b.to_lowercase()),
             SortOrder::Ext => {
-                let ext_a = path_a.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-                let ext_b = path_b.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-                ext_a.cmp(&ext_b).then(name_a.to_lowercase().cmp(&name_b.to_lowercase()))
+                let ext_a = path_a
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                let ext_b = path_b
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                ext_a
+                    .cmp(&ext_b)
+                    .then(name_a.to_lowercase().cmp(&name_b.to_lowercase()))
             }
             SortOrder::Size => {
                 let size_a = path_a.metadata().map(|m| m.len()).unwrap_or(0);
@@ -146,8 +172,14 @@ fn sort_entries(entries: &mut Vec<(String, PathBuf, bool)>, opts: &DirtreeOption
             }
             SortOrder::Mtime => {
                 use std::time::SystemTime;
-                let mtime_a = path_a.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
-                let mtime_b = path_b.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
+                let mtime_a = path_a
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+                let mtime_b = path_b
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
                 mtime_b.cmp(&mtime_a) // descending (newest first)
             }
         }
@@ -190,8 +222,12 @@ pub fn verify_paths(
 
     for node in nodes {
         use crate::checks::ascii_tree::Connector;
-        if node.connector == Connector::Continuation { continue; }
-        if node.label.is_empty() { continue; }
+        if node.connector == Connector::Continuation {
+            continue;
+        }
+        if node.label.is_empty() {
+            continue;
+        }
 
         let level = node.indent_level;
 
@@ -274,8 +310,14 @@ mod tests {
         let result = generate(&opts).unwrap();
         let lines: Vec<&str> = result.lines().collect();
         // src/ and tests/ (dirs) should appear before Cargo.toml and README.md (files)
-        let src_pos = lines.iter().position(|l| l.contains("src/")).unwrap_or(usize::MAX);
-        let cargo_pos = lines.iter().position(|l| l.contains("Cargo.toml")).unwrap_or(usize::MAX);
+        let src_pos = lines
+            .iter()
+            .position(|l| l.contains("src/"))
+            .unwrap_or(usize::MAX);
+        let cargo_pos = lines
+            .iter()
+            .position(|l| l.contains("Cargo.toml"))
+            .unwrap_or(usize::MAX);
         assert!(src_pos < cargo_pos, "directories should come before files");
     }
 
@@ -320,8 +362,16 @@ mod tests {
         let result = generate(&opts).unwrap();
         let lines: Vec<&str> = result.lines().collect();
         // The last entry at each level must use └──
-        let last_non_indent = lines.iter().filter(|l| !l.trim().is_empty()).last().unwrap();
-        assert!(last_non_indent.contains("└──"), "last entry should use └──: {:?}", last_non_indent);
+        let last_non_indent = lines
+            .iter()
+            .filter(|l| !l.trim().is_empty())
+            .last()
+            .unwrap();
+        assert!(
+            last_non_indent.contains("└──"),
+            "last entry should use └──: {:?}",
+            last_non_indent
+        );
     }
 
     #[test]
@@ -329,21 +379,29 @@ mod tests {
         // Build nodes from a real directory
         let dir = make_test_tree();
         // Manually create nodes that match the actual tree
-        use crate::checks::ascii_tree::{TreeNode, Connector};
-        let nodes = vec![
-            TreeNode { line_no: 1, indent_level: 0, connector: Connector::None, label: "src/".to_string(), raw: "src/".to_string() },
-        ];
+        use crate::checks::ascii_tree::{Connector, TreeNode};
+        let nodes = vec![TreeNode {
+            line_no: 1,
+            indent_level: 0,
+            connector: Connector::None,
+            label: "src/".to_string(),
+            raw: "src/".to_string(),
+        }];
         let missing = verify_paths(&nodes, dir.path());
         assert!(missing.is_empty(), "src/ should exist");
     }
 
     #[test]
     fn test_verify_paths_missing() {
-        use crate::checks::ascii_tree::{TreeNode, Connector};
+        use crate::checks::ascii_tree::{Connector, TreeNode};
         let dir = tempfile::tempdir().unwrap();
-        let nodes = vec![
-            TreeNode { line_no: 1, indent_level: 0, connector: Connector::None, label: "nonexistent/".to_string(), raw: "nonexistent/".to_string() },
-        ];
+        let nodes = vec![TreeNode {
+            line_no: 1,
+            indent_level: 0,
+            connector: Connector::None,
+            label: "nonexistent/".to_string(),
+            raw: "nonexistent/".to_string(),
+        }];
         let missing = verify_paths(&nodes, dir.path());
         assert_eq!(missing.len(), 1);
         assert!(missing[0].1.contains("nonexistent"));

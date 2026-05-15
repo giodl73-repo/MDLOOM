@@ -4,7 +4,6 @@
 ///   1. `proof check --format rich` → rich.json
 ///   2. AI (fix-guide skill) reads rich.json → writes plan.json
 ///   3. `proof fix --plan plan.json` applies edits to files
-
 use anyhow::{Context, Result};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -101,15 +100,20 @@ pub struct FixOptions {
 
 impl Default for FixOptions {
     fn default() -> Self {
-        Self { dry_run: false, min_confidence: Confidence::Low, check_signal: true }
+        Self {
+            dry_run: false,
+            min_confidence: Confidence::Low,
+            check_signal: true,
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct FixResult {
-    pub applied: Vec<String>,   // fix IDs applied
+    pub applied: Vec<String>, // fix IDs applied
     pub skipped: Vec<SkipReason>,
     pub files_modified: usize,
+    pub modified_files: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -153,6 +157,7 @@ impl FixPlan {
 
         let mut applied = Vec::new();
         let mut files_modified = 0;
+        let mut modified_files = Vec::new();
 
         for (file_path, mut fixes) in by_file {
             // Apply in reverse line order so earlier line numbers stay valid
@@ -161,6 +166,11 @@ impl FixPlan {
             let content = std::fs::read_to_string(&file_path)
                 .with_context(|| format!("reading {}", file_path.display()))?;
 
+            let line_ending = if content.contains("\r\n") {
+                "\r\n"
+            } else {
+                "\n"
+            };
             let mut lines: Vec<String> = content.lines().map(String::from).collect();
             // Preserve trailing newline flag
             let had_trailing_newline = content.ends_with('\n');
@@ -188,9 +198,7 @@ impl FixPlan {
                         id: fix.id.clone(),
                         reason: format!(
                             "old_string mismatch at line {} — expected {:?}, found {:?}",
-                            fix.edit.line,
-                            fix.edit.old_string,
-                            lines[line_idx]
+                            fix.edit.line, fix.edit.old_string, lines[line_idx]
                         ),
                     });
                     continue;
@@ -235,17 +243,23 @@ impl FixPlan {
             }
 
             if file_modified && !opts.dry_run {
-                let mut new_content = lines.join("\n");
+                let mut new_content = lines.join(line_ending);
                 if had_trailing_newline {
-                    new_content.push('\n');
+                    new_content.push_str(line_ending);
                 }
                 std::fs::write(&file_path, new_content)
                     .with_context(|| format!("writing {}", file_path.display()))?;
                 files_modified += 1;
+                modified_files.push(file_path);
             }
         }
 
-        Ok(FixResult { applied, skipped, files_modified })
+        Ok(FixResult {
+            applied,
+            skipped,
+            files_modified,
+            modified_files,
+        })
     }
 }
 
@@ -253,17 +267,18 @@ impl FixPlan {
 /// "Words" are non-whitespace tokens. Pure whitespace changes → no signal loss.
 /// Used to catch Pattern B removals (annotation after │) before they're applied.
 pub fn signal_loss(old: &str, new: &str) -> Vec<String> {
-    if old.trim() == new.trim() { return vec![]; } // whitespace-only change
+    if old.trim() == new.trim() {
+        return vec![];
+    } // whitespace-only change
 
     let old_words: std::collections::HashSet<&str> = old
         .split_whitespace()
         .filter(|w| w.len() > 2) // skip short tokens (│, ←, spaces)
         .collect();
-    let new_words: std::collections::HashSet<&str> = new
-        .split_whitespace()
-        .collect();
+    let new_words: std::collections::HashSet<&str> = new.split_whitespace().collect();
 
-    old_words.into_iter()
+    old_words
+        .into_iter()
         .filter(|w| !new_words.contains(*w))
         .map(String::from)
         .collect()
@@ -275,8 +290,12 @@ pub fn is_pattern_b(old_string: &str) -> bool {
     let trimmed = old_string.trim_end();
     // Find the last │ or | in the line
     if let Some(last_bar_pos) = trimmed.rfind(['│', '|']) {
-        let after = &trimmed[last_bar_pos + trimmed[last_bar_pos..].chars().next()
-            .map(|c| c.len_utf8()).unwrap_or(1)..];
+        let after = &trimmed[last_bar_pos
+            + trimmed[last_bar_pos..]
+                .chars()
+                .next()
+                .map(|c| c.len_utf8())
+                .unwrap_or(1)..];
         // If there's non-whitespace content after the last bar → Pattern B
         !after.trim().is_empty()
     } else {
@@ -391,10 +410,16 @@ mod tests {
             ..sample_plan("hello world", "hello earth")
         };
 
-        let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
-            dir.path(),
-        ).unwrap();
+        let result = plan
+            .apply(
+                &FixOptions {
+                    dry_run: false,
+                    min_confidence: Confidence::Low,
+                    check_signal: false,
+                },
+                dir.path(),
+            )
+            .unwrap();
 
         assert_eq!(result.applied, vec!["fix-001"]);
         assert!(result.skipped.is_empty());
@@ -424,10 +449,16 @@ mod tests {
             ..sample_plan("x", "y")
         };
 
-        let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
-            dir.path(),
-        ).unwrap();
+        let result = plan
+            .apply(
+                &FixOptions {
+                    dry_run: false,
+                    min_confidence: Confidence::Low,
+                    check_signal: false,
+                },
+                dir.path(),
+            )
+            .unwrap();
 
         assert!(result.applied.is_empty());
         assert_eq!(result.skipped.len(), 1);
@@ -459,10 +490,16 @@ mod tests {
             ..sample_plan("original", "modified")
         };
 
-        let _result = plan.apply(
-            &FixOptions { dry_run: true, min_confidence: Confidence::Low, check_signal: false },
-            dir.path(),
-        ).unwrap();
+        let _result = plan
+            .apply(
+                &FixOptions {
+                    dry_run: true,
+                    min_confidence: Confidence::Low,
+                    check_signal: false,
+                },
+                dir.path(),
+            )
+            .unwrap();
 
         // File must be unchanged (invariant I-12)
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "original\n");
@@ -486,7 +523,11 @@ mod tests {
                     confidence: Confidence::High,
                     description: "fix line 1".to_string(),
                     reasoning: String::new(),
-                    edit: Edit { line: 1, old_string: "line 1".to_string(), new_string: "LINE 1".to_string() },
+                    edit: Edit {
+                        line: 1,
+                        old_string: "line 1".to_string(),
+                        new_string: "LINE 1".to_string(),
+                    },
                     diagnostic: DiagnosticRef::default(),
                 },
                 Fix {
@@ -495,19 +536,70 @@ mod tests {
                     confidence: Confidence::High,
                     description: "fix line 3".to_string(),
                     reasoning: String::new(),
-                    edit: Edit { line: 3, old_string: "line 3".to_string(), new_string: "LINE 3".to_string() },
+                    edit: Edit {
+                        line: 3,
+                        old_string: "line 3".to_string(),
+                        new_string: "LINE 3".to_string(),
+                    },
                     diagnostic: DiagnosticRef::default(),
                 },
             ],
         };
 
-        let result = plan.apply(
-            &FixOptions { dry_run: false, min_confidence: Confidence::Low, check_signal: false },
-            dir.path(),
-        ).unwrap();
+        let result = plan
+            .apply(
+                &FixOptions {
+                    dry_run: false,
+                    min_confidence: Confidence::Low,
+                    check_signal: false,
+                },
+                dir.path(),
+            )
+            .unwrap();
 
         assert_eq!(result.applied.len(), 2);
         let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content, "LINE 1\nline 2\nLINE 3\n");
+    }
+
+    #[test]
+    fn apply_fix_preserves_crlf_line_endings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.md");
+        std::fs::write(&path, "line 1\r\nline 2\r\n").unwrap();
+
+        let plan = FixPlan {
+            fixes: vec![Fix {
+                id: "fix-001".to_string(),
+                file: path.clone(),
+                description: "replace".to_string(),
+                confidence: Confidence::High,
+                reasoning: String::new(),
+                edit: Edit {
+                    line: 2,
+                    old_string: "line 2".to_string(),
+                    new_string: "LINE 2".to_string(),
+                },
+                diagnostic: DiagnosticRef::default(),
+            }],
+            ..sample_plan("line 2", "LINE 2")
+        };
+
+        let result = plan
+            .apply(
+                &FixOptions {
+                    dry_run: false,
+                    min_confidence: Confidence::Low,
+                    check_signal: false,
+                },
+                dir.path(),
+            )
+            .unwrap();
+
+        assert_eq!(result.applied, vec!["fix-001"]);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "line 1\r\nLINE 2\r\n"
+        );
     }
 }

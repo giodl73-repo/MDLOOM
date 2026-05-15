@@ -1,5 +1,4 @@
 /// Inline slide content renderers: quote, centered, stat, callout, divider.
-
 use crate::slide::layout::{center_in_width, fit_to_width};
 
 // ─────────────────────────────────────────────────────────
@@ -25,9 +24,7 @@ pub fn render_quote(text: &str, attribution: Option<&str>, width: usize) -> Vec<
 
 /// Center each line of text within `width`.
 pub fn render_centered(text: &str, width: usize) -> Vec<String> {
-    text.lines()
-        .map(|l| center_in_width(l, width))
-        .collect()
+    text.lines().map(|l| center_in_width(l, width)).collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -38,8 +35,14 @@ pub fn render_centered(text: &str, width: usize) -> Vec<String> {
 pub fn render_stat(value: &str, label: &str, sublabel: Option<&str>, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     lines.push(center_in_width(value, width));
-    if !label.is_empty() { lines.push(center_in_width(label, width)); }
-    if let Some(sl) = sublabel { if !sl.is_empty() { lines.push(center_in_width(sl, width)); } }
+    if !label.is_empty() {
+        lines.push(center_in_width(label, width));
+    }
+    if let Some(sl) = sublabel {
+        if !sl.is_empty() {
+            lines.push(center_in_width(sl, width));
+        }
+    }
     lines
 }
 
@@ -49,31 +52,31 @@ pub fn render_stat(value: &str, label: &str, sublabel: Option<&str>, width: usiz
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CalloutStyle {
-    Key,      // ★
-    Info,     // ℹ
-    Warning,  // ⚠
-    Tip,      // →
-    Note,     // ◆
+    Key,     // ★
+    Info,    // ℹ
+    Warning, // ⚠
+    Tip,     // →
+    Note,    // ◆
 }
 
 impl CalloutStyle {
     pub fn parse(s: &str) -> Self {
         match s {
-            "key"     => Self::Key,
-            "info"    => Self::Info,
+            "key" => Self::Key,
+            "info" => Self::Info,
             "warning" => Self::Warning,
-            "tip"     => Self::Tip,
-            _         => Self::Note,
+            "tip" => Self::Tip,
+            _ => Self::Note,
         }
     }
 
     pub fn icon(self) -> &'static str {
         match self {
-            Self::Key     => "★",
-            Self::Info    => "ℹ",
+            Self::Key => "★",
+            Self::Info => "ℹ",
             Self::Warning => "⚠",
-            Self::Tip     => "→",
-            Self::Note    => "◆",
+            Self::Tip => "→",
+            Self::Note => "◆",
         }
     }
 }
@@ -99,21 +102,21 @@ pub fn render_callout(text: &str, style: CalloutStyle, width: usize) -> Vec<Stri
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DividerStyle {
-    Thin,    // ─────────
-    Double,  // ═════════
-    Dotted,  // ·········
-    Dashed,  // - - - - -
-    Approx,  // ≈≈≈≈≈≈≈≈≈ (wave alt — avoids ~ strikethrough risk)
+    Thin,   // ─────────
+    Double, // ═════════
+    Dotted, // ·········
+    Dashed, // - - - - -
+    Approx, // ≈≈≈≈≈≈≈≈≈ (wave alt — avoids ~ strikethrough risk)
 }
 
 impl DividerStyle {
     pub fn parse(s: &str) -> Self {
         match s {
-            "double"  => Self::Double,
-            "dotted"  => Self::Dotted,
-            "dashed"  => Self::Dashed,
+            "double" => Self::Double,
+            "dotted" => Self::Dotted,
+            "dashed" => Self::Dashed,
             "approx" | "wave" => Self::Approx,
-            _         => Self::Thin,
+            _ => Self::Thin,
         }
     }
 }
@@ -127,7 +130,9 @@ pub fn render_right(text: &str, width: usize) -> Vec<String> {
     text.lines()
         .map(|l| {
             let len = l.chars().count();
-            if len >= width { return l.to_string(); }
+            if len >= width {
+                return l.to_string();
+            }
             format!("{}{}", " ".repeat(width - len), l)
         })
         .collect()
@@ -146,8 +151,6 @@ pub fn render_right(text: &str, width: usize) -> Vec<String> {
 /// sub-items and get decimal numbering (1.1, 1.2, ...).
 /// Returns rendered lines word-wrapped to `width`.
 pub fn render_ol(text: &str, width: usize) -> Vec<String> {
-    
-
     let mut lines = Vec::new();
     let mut counters: Vec<usize> = Vec::new(); // stack of counters per depth
 
@@ -160,21 +163,29 @@ pub fn render_ol(text: &str, width: usize) -> Vec<String> {
         let depth = leading / 2; // 2 spaces per level
 
         // Grow or reset counter stack
-        while counters.len() <= depth { counters.push(0); }
+        while counters.len() <= depth {
+            counters.push(0);
+        }
         counters[depth] += 1;
         // Reset all deeper counters when we go back up
-        for d in (depth + 1)..counters.len() { counters[d] = 0; }
+        for d in (depth + 1)..counters.len() {
+            counters[d] = 0;
+        }
 
         let trimmed = raw.trim();
-        let content = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* "))
+        let content = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
             .unwrap_or(trimmed);
 
         // Build number prefix: "1." / "1.1." / "1.1.1."
-        let number: String = counters[..=depth].iter()
+        let number: String = counters[..=depth]
+            .iter()
             .filter(|&&c| c > 0)
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
-            .join(".") + ".";
+            .join(".")
+            + ".";
 
         let indent = "  ".repeat(depth);
         let prefix = format!("{}{} ", indent, number);
@@ -195,16 +206,29 @@ pub fn render_ol(text: &str, width: usize) -> Vec<String> {
                 let ww = crate::layout::visual_width(word);
                 let max_w = if first { width } else { cont_width };
                 if cur.is_empty() {
-                    cur = word.to_string(); cur_w = ww;
+                    cur = word.to_string();
+                    cur_w = ww;
                 } else if cur_w + 1 + ww <= max_w {
-                    cur.push(' '); cur.push_str(word); cur_w += 1 + ww;
+                    cur.push(' ');
+                    cur.push_str(word);
+                    cur_w += 1 + ww;
                 } else {
-                    result.push(if first { cur.clone() } else { format!("{}{}", continuation, cur) });
-                    first = false; cur = word.to_string(); cur_w = ww;
+                    result.push(if first {
+                        cur.clone()
+                    } else {
+                        format!("{}{}", continuation, cur)
+                    });
+                    first = false;
+                    cur = word.to_string();
+                    cur_w = ww;
                 }
             }
             if !cur.is_empty() {
-                result.push(if first { cur } else { format!("{}{}", continuation, cur) });
+                result.push(if first {
+                    cur
+                } else {
+                    format!("{}{}", continuation, cur)
+                });
             }
             result
         };
@@ -216,12 +240,14 @@ pub fn render_ol(text: &str, width: usize) -> Vec<String> {
 /// Render a horizontal divider of `width` chars.
 pub fn render_divider(style: DividerStyle, width: usize) -> String {
     let ch: String = match style {
-        DividerStyle::Thin   => "─".repeat(width),
+        DividerStyle::Thin => "─".repeat(width),
         DividerStyle::Double => "═".repeat(width),
         DividerStyle::Dotted => "·".repeat(width),
         DividerStyle::Dashed => {
             let mut s = String::with_capacity(width);
-            for i in 0..width { s.push(if i % 2 == 0 { '-' } else { ' ' }); }
+            for i in 0..width {
+                s.push(if i % 2 == 0 { '-' } else { ' ' });
+            }
             s
         }
         DividerStyle::Approx => "≈".repeat(width),
@@ -255,7 +281,9 @@ mod tests {
     fn centered_each_line() {
         let lines = render_centered("hello\nworld", 20);
         assert_eq!(lines.len(), 2);
-        for l in &lines { assert_eq!(l.chars().count(), 20); }
+        for l in &lines {
+            assert_eq!(l.chars().count(), 20);
+        }
     }
 
     #[test]
@@ -294,7 +322,10 @@ mod tests {
     #[test]
     fn divider_approx_not_tilde() {
         let d = render_divider(DividerStyle::Approx, 5);
-        assert!(!d.contains('~'), "wave divider must not use ~ (strikethrough risk)");
+        assert!(
+            !d.contains('~'),
+            "wave divider must not use ~ (strikethrough risk)"
+        );
         assert!(d.contains('≈'));
     }
 

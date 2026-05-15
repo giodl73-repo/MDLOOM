@@ -18,12 +18,19 @@ use walkdir::WalkDir;
 
 pub struct Runner {
     root: PathBuf,
-    #[allow(dead_code)]
     root_config: GlintConfig,
+    use_supplied_config: bool,
     /// Cache of per-directory resolved configs (dir path → resolved config)
     config_cache: Arc<Mutex<HashMap<PathBuf, Arc<GlintConfig>>>>,
     include: GlobSet,
     exclude: GlobSet,
+}
+
+#[derive(Debug, Clone)]
+pub struct RunSummary {
+    pub diagnostics: Vec<Diagnostic>,
+    pub files_checked: usize,
+    pub files: Vec<PathBuf>,
 }
 
 impl Runner {
@@ -33,6 +40,22 @@ impl Runner {
         Ok(Self {
             root: root.to_path_buf(),
             root_config: config,
+            use_supplied_config: false,
+            config_cache: Arc::new(Mutex::new(HashMap::new())),
+            include,
+            exclude,
+        })
+    }
+
+    /// Build a runner that applies the supplied config directly to every file.
+    /// Used for explicit `--config`, which is documented to skip auto-cascade.
+    pub fn new_with_config(root: &Path, config: GlintConfig) -> anyhow::Result<Self> {
+        let include = build_globset(&config.files.include)?;
+        let exclude = build_globset(&config.files.exclude)?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            root_config: config,
+            use_supplied_config: true,
             config_cache: Arc::new(Mutex::new(HashMap::new())),
             include,
             exclude,
@@ -41,10 +64,36 @@ impl Runner {
 
     /// Lint all matching files under root. Returns all diagnostics.
     pub fn run(&self) -> Vec<Diagnostic> {
+        self.run_summary().diagnostics
+    }
+
+    /// Lint all matching files and return diagnostics plus selected file count
+    /// from the same directory walk.
+    pub fn run_summary(&self) -> RunSummary {
         let files = self.collect_files();
-        files.par_iter()
+        let files_checked = files.len();
+        let diagnostics = files
+            .par_iter()
             .flat_map(|path| self.lint_file(path))
-            .collect()
+            .collect();
+        RunSummary {
+            diagnostics,
+            files_checked,
+            files,
+        }
+    }
+
+    /// Lint either a single file or all matching files under a directory.
+    pub fn run_path_summary(&self, path: &Path) -> RunSummary {
+        if path.is_file() {
+            RunSummary {
+                diagnostics: self.lint_file(path),
+                files_checked: 1,
+                files: vec![path.to_path_buf()],
+            }
+        } else {
+            self.run_summary()
+        }
     }
 
     /// Lint content directly (for inline validation — e.g., figure content before embed).
@@ -52,7 +101,8 @@ impl Runner {
     pub fn lint_content(&self, content: &str, path: &Path) -> Vec<Diagnostic> {
         let config = self.resolve_config_for(path);
         let checks = build_checks(&config, path, &self.root);
-        checks.iter()
+        checks
+            .iter()
             .flat_map(|check| check.check(path, content))
             .collect()
     }
@@ -63,7 +113,10 @@ impl Runner {
             Ok(c) => c,
             Err(e) => {
                 return vec![Diagnostic::error(
-                    path.to_path_buf(), 1, 1, "io_error",
+                    path.to_path_buf(),
+                    1,
+                    1,
+                    "io_error",
                     format!("cannot read file: {}", e),
                 )];
             }
@@ -72,7 +125,8 @@ impl Runner {
         let config = self.resolve_config_for(path);
         let checks = build_checks(&config, path, &self.root);
 
-        checks.iter()
+        checks
+            .iter()
             .flat_map(|check| check.check(path, &content))
             .collect()
     }
@@ -90,8 +144,12 @@ impl Runner {
             }
         }
 
-        // Resolve by cascading up to root
-        let resolved = GlintConfig::resolve_for(file, &self.root);
+        let resolved = if self.use_supplied_config {
+            self.root_config.clone()
+        } else {
+            // Resolve by cascading up to root
+            GlintConfig::resolve_for(file, &self.root)
+        };
         let arc = Arc::new(resolved);
 
         let mut cache = self.config_cache.lock().unwrap();
@@ -113,7 +171,11 @@ impl Runner {
     fn matches(&self, path: &Path) -> bool {
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
         let rel_str = rel.to_string_lossy().replace('\\', "/");
-        let included = if self.include.is_empty() { true } else { self.include.is_match(&*rel_str) };
+        let included = if self.include.is_empty() {
+            true
+        } else {
+            self.include.is_match(&*rel_str)
+        };
         let excluded = self.exclude.is_match(&*rel_str);
         included && !excluded
     }
@@ -170,7 +232,9 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
     }
 
     // Source link check — always on for .source.md files; skips non-source files internally
-    checks.push(Box::new(SourceLinkCheck { root: root.to_path_buf() }));
+    checks.push(Box::new(SourceLinkCheck {
+        root: root.to_path_buf(),
+    }));
 
     checks
 }
@@ -187,11 +251,17 @@ fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> Markdow
     for schema in &config.section_schemas {
         let include = match build_globset(&schema.paths) {
             Ok(gs) => gs,
-            Err(e) => { eprintln!("proof: invalid glob in section_schema paths: {}", e); continue; }
+            Err(e) => {
+                eprintln!("proof: invalid glob in section_schema paths: {}", e);
+                continue;
+            }
         };
         let exclude = match build_globset(&schema.paths_exclude) {
             Ok(gs) => gs,
-            Err(e) => { eprintln!("proof: invalid glob in section_schema paths_exclude: {}", e); continue; }
+            Err(e) => {
+                eprintln!("proof: invalid glob in section_schema paths_exclude: {}", e);
+                continue;
+            }
         };
         if include.is_match(&*rel_str) && !exclude.is_match(&*rel_str) {
             apply_section_schema(&mut md, schema);
@@ -210,7 +280,8 @@ fn apply_section_schema(md: &mut MarkdownConfig, schema: &SectionSchema) {
     md.optional_h2.dedup();
     md.forbidden_h2.extend(schema.forbidden_h2.clone());
     md.forbidden_h2.dedup();
-    md.required_patterns.extend(schema.required_patterns.clone());
+    md.required_patterns
+        .extend(schema.required_patterns.clone());
     if let Some(max) = schema.max_lines {
         md.max_lines = Some(max);
     }

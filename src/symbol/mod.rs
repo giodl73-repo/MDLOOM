@@ -1,7 +1,7 @@
 pub mod library;
 pub mod shape;
 
-use library::{BUILT_IN_SYMBOLS, SymbolEntry};
+use library::{SymbolEntry, BUILT_IN_SYMBOLS};
 
 // ─────────────────────────────────────────────────────────
 // Public types
@@ -65,7 +65,9 @@ impl SymbolLibrary {
 }
 
 impl Default for SymbolLibrary {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -146,8 +148,12 @@ fn edit_distance(a: &str, b: &str) -> usize {
     let b: Vec<char> = b.chars().collect();
     let m = a.len();
     let n = b.len();
-    if m == 0 { return n; }
-    if n == 0 { return m; }
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
 
     let mut row: Vec<usize> = (0..=n).collect();
     for i in 1..=m {
@@ -155,10 +161,10 @@ fn edit_distance(a: &str, b: &str) -> usize {
         row[0] = i;
         for j in 1..=n {
             let old = row[j];
-            row[j] = if a[i-1] == b[j-1] {
+            row[j] = if a[i - 1] == b[j - 1] {
                 prev
             } else {
-                1 + prev.min(row[j]).min(row[j-1])
+                1 + prev.min(row[j]).min(row[j - 1])
             };
             prev = old;
         }
@@ -210,7 +216,6 @@ pub struct SymbolWarning {
 /// inside inline code (odd backtick count) or inside a URL.
 /// Fenced code blocks must be stripped by the caller before passing text here.
 pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWarning>) {
-    
     let mut result = String::with_capacity(text.len());
     let mut warnings = Vec::new();
     let mut rest = text;
@@ -226,14 +231,21 @@ pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWar
         // Skip if inside inline code (odd backtick count on current line only)
         let in_code = before_on_line.chars().filter(|&c| c == '`').count() % 2 != 0;
         // Skip if inside a URL (preceded by scheme:// with no whitespace gap)
-        let word_start = before_on_line.rfind(char::is_whitespace).map(|i| line_start + i + 1).unwrap_or(line_start);
+        let word_start = before_on_line
+            .rfind(char::is_whitespace)
+            .map(|i| line_start + i + 1)
+            .unwrap_or(line_start);
         let word = &before[word_start..];
         let in_url = matches!(word.split_once("://"),
             Some((s, _)) if matches!(s, "http" | "https" | "md" | "ftp"));
 
         if in_code || in_url {
             // Pass through one char and keep scanning
-            let next = rest.char_indices().nth(1).map(|(i, _)| i).unwrap_or(rest.len());
+            let next = rest
+                .char_indices()
+                .nth(1)
+                .map(|(i, _)| i)
+                .unwrap_or(rest.len());
             result.push_str(&rest[..next]);
             rest = &rest[next..];
             continue;
@@ -328,7 +340,12 @@ mod tests {
         let out = render_symbol_block(&sym, 2);
         assert_eq!(out.lines().count(), 3, "size=2 should produce 3 rows");
         for line in out.lines() {
-            assert_eq!(line.chars().count(), 3, "each row should be 3 chars: {:?}", line);
+            assert_eq!(
+                line.chars().count(),
+                3,
+                "each row should be 3 chars: {:?}",
+                line
+            );
         }
     }
 
@@ -394,17 +411,41 @@ mod tests {
         let lib = SymbolLibrary::new();
         // `[sym:star]` — inside inline code, should not expand
         let (out, warns) = expand_symbols("`[sym:star]`", &lib);
-        assert!(out.contains("[sym:star]"), "should not expand inside backtick: {}", out);
+        assert!(
+            out.contains("[sym:star]"),
+            "should not expand inside backtick: {}",
+            out
+        );
         assert!(warns.is_empty());
     }
 
     #[test]
     fn all_core_symbols_resolve() {
         let lib = SymbolLibrary::new();
-        for name in &["checkmark","x","warning","info","dot","dot-open","diamond",
-                      "star","star-open","arrow-right","arrow-left","arrow-up",
-                      "arrow-down","triangle-up","triangle-down","rule-thin","rule-double"] {
-            assert!(resolve(name, &lib).is_some(), "missing core symbol: {}", name);
+        for name in &[
+            "checkmark",
+            "x",
+            "warning",
+            "info",
+            "dot",
+            "dot-open",
+            "diamond",
+            "star",
+            "star-open",
+            "arrow-right",
+            "arrow-left",
+            "arrow-up",
+            "arrow-down",
+            "triangle-up",
+            "triangle-down",
+            "rule-thin",
+            "rule-double",
+        ] {
+            assert!(
+                resolve(name, &lib).is_some(),
+                "missing core symbol: {}",
+                name
+            );
         }
     }
 

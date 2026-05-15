@@ -159,7 +159,8 @@ A simple `split('|')` is never correct for GFM table rows.
 until the fix generator itself uses the correct escaped-pipe-aware parser.  
 **Discovered by:** Running `proof fix --dry-run` on a draft plan — fixes broke `\|`, `|>`,
 and `` ` `` spans in language guide tables.  
-**Test:** Add tests for `parse_row` with `\|`, backtick spans, and `||` input.
+**Test:** `markdown_table::tests::parse_row_handles_escaped_pipe_and_code_span`;
+`markdown_table::tests::parse_row_handles_sql_concat_as_content_when_escaped_or_in_code`
 
 ---
 
@@ -183,7 +184,7 @@ when the char before the trailing `#` run is whitespace — `## Title ##` (space
 `md_heading_format` warnings were false positives on C# and F# guide headings.  
 **Proved by:** Zero `md_heading_format` errors after fix; real trailing-hash headings
 (with space before `##`) still detected correctly.  
-**Test:** Add test: `## Title ##` → warning, `## Gotchas from C#` → clean.
+**Test:** `markdown::tests::trailing_hash_style_warns_but_csharp_heading_is_clean`
 
 ---
 

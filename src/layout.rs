@@ -18,7 +18,10 @@ impl Align {
             "top" => Ok(Align::Top),
             "center" => Ok(Align::Center),
             "bottom" => Ok(Align::Bottom),
-            other => bail!("unknown align value {:?} — use top, center, or bottom", other),
+            other => bail!(
+                "unknown align value {:?} — use top, center, or bottom",
+                other
+            ),
         }
     }
 }
@@ -78,7 +81,8 @@ pub fn visual_width(s: &str) -> usize {
             if (0x2190..=0x21FF).contains(&cp)  // arrows
                 || (0x2500..=0x259F).contains(&cp)  // box-drawing + block elements
                 || (0x25A0..=0x25FF).contains(&cp)  // geometric shapes
-                || (0x2800..=0x28FF).contains(&cp)  // Braille patterns
+                || (0x2800..=0x28FF).contains(&cp)
+            // Braille patterns
             {
                 1
             } else {
@@ -210,7 +214,12 @@ fn normalize_frame(mut lines: Vec<String>, config: &LayoutConfig, frame_idx: usi
     }
 
     // Step 2: frame width = max visual width of all lines
-    let frame_width = lines.iter().map(|l| visual_width(l)).max().unwrap_or(0).max(1);
+    let frame_width = lines
+        .iter()
+        .map(|l| visual_width(l))
+        .max()
+        .unwrap_or(0)
+        .max(1);
 
     // Pad every line to frame_width (right-pad with spaces)
     let padded: Vec<String> = lines
@@ -226,7 +235,11 @@ fn normalize_frame(mut lines: Vec<String>, config: &LayoutConfig, frame_idx: usi
         .collect();
 
     // Step 4: prepend label line if provided
-    let label_str = config.labels.get(frame_idx).map(|s| s.as_str()).unwrap_or("");
+    let label_str = config
+        .labels
+        .get(frame_idx)
+        .map(|s| s.as_str())
+        .unwrap_or("");
     let mut final_lines = if !label_str.is_empty() {
         let mut v = vec![center_label(label_str, frame_width)];
         v.extend(padded);
@@ -326,10 +339,7 @@ fn equalize_height(
 fn apply_border(lines: &mut Vec<String>, inner_width: usize) {
     let top = format!("┌{}┐", "─".repeat(inner_width + 2));
     let bottom = format!("└{}┘", "─".repeat(inner_width + 2));
-    let bordered: Vec<String> = lines
-        .iter()
-        .map(|l| format!("│ {} │", l))
-        .collect();
+    let bordered: Vec<String> = lines.iter().map(|l| format!("│ {} │", l)).collect();
     *lines = std::iter::once(top)
         .chain(bordered)
         .chain(std::iter::once(bottom))
@@ -517,11 +527,12 @@ mod tests {
     fn test_layout_two_figures_side_by_side() {
         let fig_a = vec!["AAA".to_string(), "AAA".to_string()];
         let fig_b = vec!["BB".to_string(), "BB".to_string()];
-        let config = LayoutConfig { gap: 2, ..Default::default() };
+        let config = LayoutConfig {
+            gap: 2,
+            ..Default::default()
+        };
         let result = layout(vec![fig_a, fig_b], &config);
-        let inner = result
-            .trim_start_matches("```\n")
-            .trim_end_matches("\n```");
+        let inner = result.trim_start_matches("```\n").trim_end_matches("\n```");
         let lines: Vec<&str> = inner.lines().collect();
         assert_eq!(lines.len(), 2);
         // Each line: "AAA" + "  " + "BB" = "AAA  BB"
@@ -533,11 +544,12 @@ mod tests {
     fn test_layout_gap_respected() {
         let fig_a = vec!["A".to_string()];
         let fig_b = vec!["B".to_string()];
-        let config = LayoutConfig { gap: 5, ..Default::default() };
+        let config = LayoutConfig {
+            gap: 5,
+            ..Default::default()
+        };
         let result = layout(vec![fig_a, fig_b], &config);
-        let inner = result
-            .trim_start_matches("```\n")
-            .trim_end_matches("\n```");
+        let inner = result.trim_start_matches("```\n").trim_end_matches("\n```");
         assert_eq!(inner, "A     B");
     }
 
@@ -545,15 +557,17 @@ mod tests {
     fn test_layout_height_equalized_top() {
         let tall = vec!["T".to_string(), "T".to_string(), "T".to_string()];
         let short = vec!["S".to_string()];
-        let config = LayoutConfig { gap: 1, align: Align::Top, ..Default::default() };
+        let config = LayoutConfig {
+            gap: 1,
+            align: Align::Top,
+            ..Default::default()
+        };
         let result = layout(vec![tall, short], &config);
-        let inner = result
-            .trim_start_matches("```\n")
-            .trim_end_matches("\n```");
+        let inner = result.trim_start_matches("```\n").trim_end_matches("\n```");
         let lines: Vec<&str> = inner.lines().collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "T S"); // first line: both have content
-        assert_eq!(lines[1], "T");   // short frame padded (blank, trailing stripped)
+        assert_eq!(lines[1], "T"); // short frame padded (blank, trailing stripped)
         assert_eq!(lines[2], "T");
     }
 
@@ -563,11 +577,13 @@ mod tests {
         let a = vec!["A".to_string()];
         let b = vec!["B".to_string()];
         let c = vec!["C".to_string()];
-        let config = LayoutConfig { gap: 1, cols: Some(2), ..Default::default() };
+        let config = LayoutConfig {
+            gap: 1,
+            cols: Some(2),
+            ..Default::default()
+        };
         let result = layout(vec![a, b, c], &config);
-        let inner = result
-            .trim_start_matches("```\n")
-            .trim_end_matches("\n```");
+        let inner = result.trim_start_matches("```\n").trim_end_matches("\n```");
         // Should have row1 "A B", blank line, row2 "C"
         let sections: Vec<&str> = inner.split("\n\n").collect();
         assert_eq!(sections.len(), 2);
@@ -580,14 +596,13 @@ mod tests {
         // Short frames padded to frame_width for alignment, but trailing spaces stripped on emit
         let tall = vec!["LONG".to_string(), "LONG".to_string()];
         let short = vec!["X".to_string()];
-        let config = LayoutConfig { gap: 1, ..Default::default() };
+        let config = LayoutConfig {
+            gap: 1,
+            ..Default::default()
+        };
         let result = layout(vec![tall, short], &config);
         for line in result.lines() {
-            assert!(
-                !line.ends_with(' '),
-                "line has trailing space: {:?}",
-                line
-            );
+            assert!(!line.ends_with(' '), "line has trailing space: {:?}", line);
         }
     }
 
@@ -640,18 +655,22 @@ mod tests {
     fn test_layout_vertical() {
         let fig_a = vec!["A".to_string()];
         let fig_b = vec!["B".to_string()];
-        let config = LayoutConfig { direction: Direction::Vertical, ..Default::default() };
+        let config = LayoutConfig {
+            direction: Direction::Vertical,
+            ..Default::default()
+        };
         let result = layout(vec![fig_a, fig_b], &config);
-        let inner = result
-            .trim_start_matches("```\n")
-            .trim_end_matches("\n```");
+        let inner = result.trim_start_matches("```\n").trim_end_matches("\n```");
         assert_eq!(inner, "A\n\nB");
     }
 
     #[test]
     fn test_layout_border() {
         let figures = vec![vec!["hi".to_string()]];
-        let config = LayoutConfig { border: true, ..Default::default() };
+        let config = LayoutConfig {
+            border: true,
+            ..Default::default()
+        };
         let result = layout(figures, &config);
         assert!(result.contains('┌'));
         assert!(result.contains('┐'));

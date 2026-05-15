@@ -18,7 +18,7 @@ and no config is found, emit a `note:` line on stderr: `"no proof.toml found —
 This makes silent fallback visible.
 
 **Status:** PARTIAL — `--config` flag exists and errors on missing file; auto-detection is silent.
-**Test:** `tests/integration_tests.rs::default_config_loads_without_panic`
+**Test:** `tests/integration_tests.rs::default_config_loads_without_panic` covers safe default loading only; add a CLI test for missing explicit `--config`.
 
 ---
 

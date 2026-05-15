@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct GlintConfig {
     /// Explicit parent config to inherit from (overrides auto-cascade).
     /// Path is relative to this config file's directory.
@@ -54,7 +54,7 @@ pub struct GlintConfig {
 /// source_dir = "src/presentations"
 /// output_dir = "docs/presentations"
 /// ```
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct CompileTarget {
     /// Source directory containing `.source.md` files.
     /// Relative to the proof root.
@@ -85,7 +85,7 @@ pub struct CompileTarget {
 ///
 /// `{prompt}` in any arg is replaced with the prompt text at call time.
 /// If `{prompt}` does not appear in any arg, the prompt is written to stdin.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AiConfig {
     /// The CLI binary to invoke (must be on PATH or an absolute path).
     pub command: String,
@@ -105,7 +105,7 @@ impl Default for AiConfig {
 
 /// A schema applied to files matching a glob pattern.
 /// Merged additively on top of the root markdown config.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct SectionSchema {
     /// Glob patterns — files matching ANY of these are candidates.
     /// In a directory-level proof.toml, paths are relative to that directory.
@@ -144,7 +144,7 @@ pub struct SectionSchema {
 }
 
 /// GFM pipe table validator configuration.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MarkdownTableConfig {
     #[serde(default = "bool_true")]
     pub enabled: bool,
@@ -193,7 +193,7 @@ impl Default for MarkdownTableConfig {
 }
 
 /// Schema for a required table — structural constraints that a table must satisfy.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct TableSchema {
     /// Table must appear under this exact ## heading text (without the `##`).
     /// If None, applies to any table in the file.
@@ -214,7 +214,6 @@ pub struct TableSchema {
     pub column_allowed_values: std::collections::HashMap<String, Vec<String>>,
 
     // ── Link validation ────────────────────────────────────────────────────
-
     /// Columns where every body cell MUST contain at least one markdown link.
     /// Pattern: `[text](url)` — bare text is flagged as `md_table_missing_link`.
     /// Example: `link_columns = ["Directory", "Entry Point"]`
@@ -234,7 +233,7 @@ pub struct TableSchema {
 }
 
 /// ASCII bar chart validator.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AsciiBarchartConfig {
     #[serde(default = "bool_true")]
     pub enabled: bool,
@@ -289,19 +288,29 @@ impl Default for AsciiBarchartConfig {
     }
 }
 
-fn default_min_bar_width() -> usize { 3 }
-fn default_min_chart_rows() -> usize { 2 }
-fn default_one() -> usize { 1 }
-fn default_prop_tolerance() -> usize { 2 }
-fn default_sep_dashes() -> usize { 3 }
+fn default_min_bar_width() -> usize {
+    3
+}
+fn default_min_chart_rows() -> usize {
+    2
+}
+fn default_one() -> usize {
+    1
+}
+fn default_prop_tolerance() -> usize {
+    2
+}
+fn default_sep_dashes() -> usize {
+    3
+}
 
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct MetaConfig {
     pub name: Option<String>,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct FilesConfig {
     #[serde(default = "default_include")]
     pub include: Vec<String>,
@@ -326,7 +335,7 @@ fn default_include() -> Vec<String> {
     vec!["**/*.md".to_string()]
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AsciiBoxConfig {
     #[serde(default = "bool_true")]
     pub enabled: bool,
@@ -363,7 +372,7 @@ impl Default for AsciiBoxConfig {
 }
 
 /// Character range check (Style Guide Rule S-01).
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AsciiCharConfig {
     #[serde(default = "bool_true")]
     pub enabled: bool,
@@ -385,7 +394,7 @@ impl Default for AsciiCharConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AsciiTreeConfig {
     /// Master switch
     #[serde(default = "bool_true")]
@@ -411,7 +420,9 @@ pub struct AsciiTreeConfig {
     pub verify_root: Option<String>,
 }
 
-fn default_indent_width() -> usize { 4 }
+fn default_indent_width() -> usize {
+    4
+}
 
 impl Default for AsciiTreeConfig {
     fn default() -> Self {
@@ -435,9 +446,11 @@ impl AsciiTreeConfig {
     }
 }
 
-fn default_tab_width() -> usize { 4 }
+fn default_tab_width() -> usize {
+    4
+}
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AsciiFlowConfig {
     #[serde(default = "bool_true")]
     pub enabled: bool,
@@ -460,7 +473,7 @@ impl Default for AsciiFlowConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MarkdownConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -489,7 +502,6 @@ pub struct MarkdownConfig {
     pub max_lines: Option<usize>,
 
     // ── Heading quality checks ──────────────────────────────────────────────
-
     /// Warn on headings missing the required space after `#` (e.g. `##heading`)
     #[serde(default = "bool_true")]
     pub check_heading_format: bool,
@@ -504,7 +516,6 @@ pub struct MarkdownConfig {
     pub check_duplicate_headings: bool,
 
     // ── Document style checks ────────────────────────────────────────────────
-
     /// Enforce a consistent thematic break style: "---" | "***" | "___" | "" (any)
     #[serde(default)]
     pub thematic_break_style: Option<String>,
@@ -513,7 +524,6 @@ pub struct MarkdownConfig {
     pub check_blockquote_spacing: bool,
 
     // ── Link target checks ───────────────────────────────────────────────────
-
     /// Verify cross-document `[text](path.md)` links resolve to a file on disk.
     /// Skips http(s)://, mailto:, md://, and `#anchor` links.
     #[serde(default = "bool_true")]
@@ -542,7 +552,7 @@ impl Default for MarkdownConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RequiredPattern {
     pub pattern: String,
     pub description: String,
@@ -550,7 +560,7 @@ pub struct RequiredPattern {
     pub severity: PatternSeverity,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PatternSeverity {
     #[default]
@@ -558,7 +568,7 @@ pub enum PatternSeverity {
     Warning,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CustomRule {
     pub name: String,
     pub description: String,
@@ -573,21 +583,35 @@ pub struct CustomRule {
     pub only_in: Vec<String>,
 }
 
-fn bool_true() -> bool { true }
-fn default_min_padding() -> usize { 1 }
-fn default_custom_severity() -> String { "warning".to_string() }
+fn bool_true() -> bool {
+    true
+}
+fn default_min_padding() -> usize {
+    1
+}
+fn default_custom_severity() -> String {
+    "warning".to_string()
+}
 
 // ─────────────────────────────────────────────────────────
 // Config resolution: cascade up the directory tree
 // ─────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Default)]
+struct ConfigExplicitness {
+    files_include: bool,
+    markdown_enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+struct LoadedConfig {
+    config: GlintConfig,
+    explicit: ConfigExplicitness,
+}
+
 impl GlintConfig {
     pub fn load(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("reading config file: {}", path.display()))?;
-        let config: GlintConfig = toml::from_str(&content)
-            .with_context(|| format!("parsing config file: {}", path.display()))?;
-        Ok(config)
+        Ok(load_with_explicitness(path)?.config)
     }
 
     /// Resolve the effective config for a file at `file_path` by cascading up
@@ -606,27 +630,37 @@ impl GlintConfig {
         // Prefix each config's section_schema paths with that config's
         // directory relative to root, so directory-level configs can use
         // simple names like "02-*.md" rather than "languages/02-*.md".
-        let prefixed = configs_with_origin.into_iter().map(|(origin_dir, mut cfg)| {
-            let prefix = origin_dir
-                .strip_prefix(root_dir)
-                .unwrap_or(Path::new(""))
-                .to_string_lossy()
-                .replace('\\', "/");
+        let prefixed = configs_with_origin
+            .into_iter()
+            .map(|(origin_dir, mut loaded)| {
+                let prefix = origin_dir
+                    .strip_prefix(root_dir)
+                    .unwrap_or(Path::new(""))
+                    .to_string_lossy()
+                    .replace('\\', "/");
 
-            if !prefix.is_empty() {
-                for schema in &mut cfg.section_schemas {
-                    let prefix_glob = |p: &String| -> String {
-                        if p.starts_with('/') { p.clone() } // root-absolute — leave it
-                        else { format!("{}/{}", prefix, p) }
-                    };
-                    schema.paths = schema.paths.iter().map(prefix_glob).collect();
-                    schema.paths_exclude = schema.paths_exclude.iter().map(prefix_glob).collect();
+                if !prefix.is_empty() {
+                    for schema in &mut loaded.config.section_schemas {
+                        let prefix_glob = |p: &String| -> String {
+                            if p.starts_with('/') {
+                                p.clone()
+                            }
+                            // root-absolute — leave it
+                            else {
+                                format!("{}/{}", prefix, p)
+                            }
+                        };
+                        schema.paths = schema.paths.iter().map(prefix_glob).collect();
+                        schema.paths_exclude =
+                            schema.paths_exclude.iter().map(prefix_glob).collect();
+                    }
                 }
-            }
-            cfg
-        });
+                loaded
+            });
 
-        prefixed.fold(GlintConfig::default(), |acc, cfg| merge(acc, cfg))
+        prefixed.fold(GlintConfig::default(), |acc, loaded| {
+            merge_with_explicitness(acc, loaded.config, &loaded.explicit)
+        })
     }
 
     pub fn load_or_default(dir: &Path) -> Self {
@@ -643,44 +677,67 @@ impl GlintConfig {
     }
 }
 
+fn load_with_explicitness(path: &Path) -> Result<LoadedConfig> {
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("reading config file: {}", path.display()))?;
+    let config: GlintConfig = toml::from_str(&content)
+        .with_context(|| format!("parsing config file: {}", path.display()))?;
+    let raw: toml::Value = toml::from_str(&content)
+        .with_context(|| format!("parsing config file: {}", path.display()))?;
+    let explicit = ConfigExplicitness {
+        files_include: raw
+            .get("files")
+            .and_then(|files| files.get("include"))
+            .is_some(),
+        markdown_enabled: raw
+            .get("markdown")
+            .and_then(|markdown| markdown.get("enabled"))
+            .is_some(),
+    };
+    Ok(LoadedConfig { config, explicit })
+}
+
 /// Walk from `dir` up to `root_dir`, collecting every proof.toml found.
 /// Returns (origin_directory, config) pairs ordered nearest-first.
 ///
 /// The origin_directory is the directory where each proof.toml was found.
 /// It is used by resolve_for() to prefix section_schema paths so that a
 /// `languages/proof.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
-fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, GlintConfig)> {
-    let mut configs: Vec<(PathBuf, GlintConfig)> = Vec::new();
+fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, LoadedConfig)> {
+    let mut configs: Vec<(PathBuf, LoadedConfig)> = Vec::new();
     let mut current = dir.to_path_buf();
 
     loop {
-        if let Some(cfg) = try_load_config(&current) {
-            let is_root = cfg.files.root;
+        if let Some(loaded) = try_load_config(&current) {
+            let is_root = loaded.config.files.root;
 
             // Handle explicit `extends` — load and insert at lower priority
-            if let Some(ref parent_rel) = cfg.extends.clone() {
+            if let Some(ref parent_rel) = loaded.config.extends.clone() {
                 let parent_abs = current.join(parent_rel);
-                let parent_dir = parent_abs.parent()
-                    .unwrap_or(Path::new("."))
-                    .to_path_buf();
-                match GlintConfig::load(&parent_abs) {
-                    Ok(parent_cfg) => {
-                        configs.push((current.clone(), cfg));
-                        configs.push((parent_dir, parent_cfg));
+                let parent_dir = parent_abs.parent().unwrap_or(Path::new(".")).to_path_buf();
+                match load_with_explicitness(&parent_abs) {
+                    Ok(parent) => {
+                        configs.push((current.clone(), loaded));
+                        configs.push((parent_dir, parent));
                     }
                     Err(e) => {
                         eprintln!("proof: warning: extends {:?} failed: {}", parent_abs, e);
-                        configs.push((current.clone(), cfg));
+                        configs.push((current.clone(), loaded));
                     }
                 }
+                break;
             } else {
-                configs.push((current.clone(), cfg));
+                configs.push((current.clone(), loaded));
             }
 
-            if is_root { break; }
+            if is_root {
+                break;
+            }
         }
 
-        if current == root_dir { break; }
+        if current == root_dir {
+            break;
+        }
 
         match current.parent() {
             Some(p) => current = p.to_path_buf(),
@@ -691,11 +748,11 @@ fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, 
     configs
 }
 
-fn try_load_config(dir: &Path) -> Option<GlintConfig> {
+fn try_load_config(dir: &Path) -> Option<LoadedConfig> {
     for name in &["proof.toml", ".proof.toml"] {
         let path = dir.join(name);
         if path.exists() {
-            match GlintConfig::load(&path) {
+            match load_with_explicitness(&path) {
                 Ok(cfg) => return Some(cfg),
                 Err(e) => eprintln!("proof: warning: {}", e),
             }
@@ -711,18 +768,37 @@ fn try_load_config(dir: &Path) -> Option<GlintConfig> {
 ///   - Scalars (tolerance, max_h1, enabled) → child wins
 ///   - Absent optional scalars (None) → fall through to parent's value
 pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
+    // Public callers pass already-effective configs, so infer explicitness from
+    // non-default values. TOML-loaded cascades use load_with_explicitness() to
+    // preserve explicit defaults such as include = ["**/*.md"].
+    let explicit = ConfigExplicitness {
+        files_include: child.files.include != default_include(),
+        markdown_enabled: child.markdown.enabled != MarkdownConfig::default().enabled,
+    };
+    merge_with_explicitness(parent, child, &explicit)
+}
+
+fn merge_with_explicitness(
+    parent: GlintConfig,
+    child: GlintConfig,
+    explicit: &ConfigExplicitness,
+) -> GlintConfig {
     GlintConfig {
         extends: child.extends,
-        meta: if child.meta.name.is_some() { child.meta } else { parent.meta },
-        files: merge_files(parent.files, child.files),
-        ascii_box: child.ascii_box,   // scalars: child wins entirely
+        meta: if child.meta.name.is_some() {
+            child.meta
+        } else {
+            parent.meta
+        },
+        files: merge_files(parent.files, child.files, explicit),
+        ascii_box: child.ascii_box, // scalars: child wins entirely
         ascii_barchart: child.ascii_barchart,
         ascii_char: child.ascii_char,
         ascii_tree: child.ascii_tree,
         ascii_flow: child.ascii_flow,
         // markdown_table: child wins (schemas are per-directory, not additive)
         markdown_table: child.markdown_table,
-        markdown: merge_markdown(parent.markdown, child.markdown),
+        markdown: merge_markdown(parent.markdown, child.markdown, explicit),
         section_schemas: {
             let mut v = parent.section_schemas;
             v.extend(child.section_schemas);
@@ -740,20 +816,36 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
             v
         },
         // Compile targets: child wins if it declares any; otherwise inherit parent's
-        compile: if !child.compile.is_empty() { child.compile } else { parent.compile },
+        compile: if !child.compile.is_empty() {
+            child.compile
+        } else {
+            parent.compile
+        },
         // AI config: child wins if command is non-default, else parent
-        ai: if child.ai.command != AiConfig::default().command { child.ai } else { parent.ai },
+        ai: if child.ai.command != AiConfig::default().command {
+            child.ai
+        } else {
+            parent.ai
+        },
     }
 }
 
 /// Merge file selection configs.
-/// - `include`: child wins if it differs from the default (non-empty overrides parent)
+/// - `include`: child wins when explicitly set in TOML
 /// - `exclude`: additive — a child cannot un-exclude what the root excluded
 /// - `root`: either can mark the stop point
-fn merge_files(parent: FilesConfig, child: FilesConfig) -> FilesConfig {
+fn merge_files(
+    parent: FilesConfig,
+    child: FilesConfig,
+    explicit: &ConfigExplicitness,
+) -> FilesConfig {
     FilesConfig {
-        // Child's include overrides parent (it knows what files are in its subtree)
-        include: if !child.include.is_empty() { child.include } else { parent.include },
+        // Child's include overrides parent only when explicitly set.
+        include: if explicit.files_include {
+            child.include
+        } else {
+            parent.include
+        },
         // Exclude is additive: child adds more exclusions on top of parent's
         exclude: {
             let mut v = parent.exclude;
@@ -768,10 +860,18 @@ fn merge_files(parent: FilesConfig, child: FilesConfig) -> FilesConfig {
     }
 }
 
-fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConfig {
+fn merge_markdown(
+    parent: MarkdownConfig,
+    child: MarkdownConfig,
+    explicit: &ConfigExplicitness,
+) -> MarkdownConfig {
     MarkdownConfig {
-        // Child's enabled state wins
-        enabled: child.enabled || parent.enabled,
+        // Child can explicitly enable or disable; otherwise inherit parent.
+        enabled: if explicit.markdown_enabled {
+            child.enabled
+        } else {
+            parent.enabled
+        },
         // Scalar: child's explicit value wins; fall back to parent if child has None
         max_h1: child.max_h1.or(parent.max_h1),
         max_lines: child.max_lines.or(parent.max_lines),
@@ -815,13 +915,12 @@ fn merge_markdown(parent: MarkdownConfig, child: MarkdownConfig) -> MarkdownConf
     }
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // DaVinci — pinned figures with invariant protection
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A pinned figure entry in [[davinci]] of proof.toml.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DaVinciEntry {
     /// Stable identifier — used in diagnostics and reports
     pub id: String,
@@ -840,7 +939,7 @@ pub struct DaVinciEntry {
     pub invariants: Vec<Invariant>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ProtectionTier {
     #[default]
@@ -860,7 +959,7 @@ impl std::fmt::Display for ProtectionTier {
 }
 
 /// A single invariant rule on a pinned element.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Invariant {
     /// Rule name: box-width, contains-text, box-count, column-count,
     ///            row-count, equals, required-row-keys, all-boxes-same-width,

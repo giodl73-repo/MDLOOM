@@ -8,19 +8,32 @@
 
 use super::render::{ChartAttrs, ChartData};
 
-const BAR_FILL: char = '\u{2588}';   // █
+const BAR_FILL: char = '\u{2588}'; // █
 const BAR_EMPTY: char = ' ';
 
 pub fn render_bar_chart(data: &ChartData, attrs: &ChartAttrs) -> Vec<String> {
     let mut out = Vec::new();
 
     // ── Determine column widths
-    let label_w = data.0.iter().map(|p| display_width(&p.label)).max().unwrap_or(0);
+    let label_w = data
+        .0
+        .iter()
+        .map(|p| display_width(&p.label))
+        .max()
+        .unwrap_or(0);
     let max_value = attrs.max.unwrap_or_else(|| {
-        data.0.iter().map(|p| p.value).fold(f64::NEG_INFINITY, f64::max).max(0.0)
+        data.0
+            .iter()
+            .map(|p| p.value)
+            .fold(f64::NEG_INFINITY, f64::max)
+            .max(0.0)
     });
     let value_strs: Vec<String> = data.0.iter().map(|p| format_value(p.value)).collect();
-    let value_w = value_strs.iter().map(|s| s.chars().count()).max().unwrap_or(0);
+    let value_w = value_strs
+        .iter()
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0);
 
     // bar area = total - label - " │ " (3) - " " (1) - value
     let chrome = label_w + 3 + 1 + value_w;
@@ -45,7 +58,8 @@ pub fn render_bar_chart(data: &ChartData, attrs: &ChartAttrs) -> Vec<String> {
         };
         let filled = filled.min(bar_area);
         let label = pad_left(&point.label, label_w);
-        let bar: String = std::iter::repeat(BAR_FILL).take(filled)
+        let bar: String = std::iter::repeat(BAR_FILL)
+            .take(filled)
             .chain(std::iter::repeat(BAR_EMPTY).take(bar_area - filled))
             .collect();
         let value = pad_left_str(value_str, value_w);
@@ -56,7 +70,11 @@ pub fn render_bar_chart(data: &ChartData, attrs: &ChartAttrs) -> Vec<String> {
     if let Some(x) = &attrs.x_label {
         let baseline_indent = label_w + 3; // align with start of bars
         let dashes = "\u{2500}".repeat(bar_area);
-        out.push(format!("{}\u{2514}{}", " ".repeat(baseline_indent.saturating_sub(1)), dashes));
+        out.push(format!(
+            "{}\u{2514}{}",
+            " ".repeat(baseline_indent.saturating_sub(1)),
+            dashes
+        ));
         out.push(format!("{}{}", " ".repeat(baseline_indent), x));
     }
 
@@ -73,17 +91,27 @@ fn format_value(v: f64) -> String {
 
 fn pad_left(s: &str, w: usize) -> String {
     let dw = display_width(s);
-    if dw >= w { s.to_string() } else { format!("{}{}", s, " ".repeat(w - dw)) }
+    if dw >= w {
+        s.to_string()
+    } else {
+        format!("{}{}", s, " ".repeat(w - dw))
+    }
 }
 
 fn pad_left_str(s: &str, w: usize) -> String {
     let dw = s.chars().count();
-    if dw >= w { s.to_string() } else { format!("{}{}", " ".repeat(w - dw), s) }
+    if dw >= w {
+        s.to_string()
+    } else {
+        format!("{}{}", " ".repeat(w - dw), s)
+    }
 }
 
 fn center_in_width(s: &str, w: usize) -> String {
     let sw = display_width(s);
-    if sw >= w { return s.to_string(); }
+    if sw >= w {
+        return s.to_string();
+    }
     let pad = (w - sw) / 2;
     format!("{}{}", " ".repeat(pad), s)
 }
@@ -94,15 +122,27 @@ fn display_width(s: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::render::{ChartAttrs, ChartData, ChartKind, ChartPoint};
+    use super::*;
 
     fn cfg(width: usize) -> ChartAttrs {
-        ChartAttrs { kind: ChartKind::Bar, width, ..Default::default() }
+        ChartAttrs {
+            kind: ChartKind::Bar,
+            width,
+            ..Default::default()
+        }
     }
 
     fn pts(pairs: &[(&str, f64)]) -> ChartData {
-        ChartData(pairs.iter().map(|(l, v)| ChartPoint { label: l.to_string(), value: *v }).collect())
+        ChartData(
+            pairs
+                .iter()
+                .map(|(l, v)| ChartPoint {
+                    label: l.to_string(),
+                    value: *v,
+                })
+                .collect(),
+        )
     }
 
     #[test]
@@ -115,7 +155,12 @@ mod tests {
         // Alpha bar should be longer than Beta's
         let alpha_filled = lines[0].chars().filter(|&c| c == BAR_FILL).count();
         let beta_filled = lines[1].chars().filter(|&c| c == BAR_FILL).count();
-        assert!(alpha_filled > beta_filled, "Alpha={} Beta={}", alpha_filled, beta_filled);
+        assert!(
+            alpha_filled > beta_filled,
+            "Alpha={} Beta={}",
+            alpha_filled,
+            beta_filled
+        );
     }
 
     #[test]
@@ -127,7 +172,12 @@ mod tests {
         // With max=100, bars should be much shorter than full width
         for l in &lines {
             let filled = l.chars().filter(|&c| c == BAR_FILL).count();
-            assert!(filled < 10, "expected shrunk bar, got {} fills in {:?}", filled, l);
+            assert!(
+                filled < 10,
+                "expected shrunk bar, got {} fills in {:?}",
+                filled,
+                l
+            );
         }
     }
 
@@ -168,8 +218,8 @@ mod tests {
         let lines = render_bar_chart(&data, &attrs);
         // 1 row + baseline + caption
         assert_eq!(lines.len(), 3);
-        assert!(lines[1].contains('\u{2514}'));  // └ corner
-        assert!(lines[1].contains('\u{2500}'));  // ─ baseline
+        assert!(lines[1].contains('\u{2514}')); // └ corner
+        assert!(lines[1].contains('\u{2500}')); // ─ baseline
         assert!(lines[2].contains("Category"));
     }
 

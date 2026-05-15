@@ -2,7 +2,6 @@
 #[cfg(feature = "figure")]
 use image::GrayImage;
 
-
 // ─────────────────────────────────────────────────────────
 // DitherContext (only available with feature flag)
 // ─────────────────────────────────────────────────────────
@@ -34,13 +33,13 @@ impl<'a> DitherContext<'a> {
 #[cfg(feature = "figure")]
 pub fn dither(ctx: &DitherContext) -> Vec<String> {
     match ctx.opts.dither {
-        DitherMode::Density     => dither_density(ctx),
-        DitherMode::Block       => dither_block(ctx),
-        DitherMode::HalfBlock   => dither_half_block(ctx),
+        DitherMode::Density => dither_density(ctx),
+        DitherMode::Block => dither_block(ctx),
+        DitherMode::HalfBlock => dither_half_block(ctx),
         DitherMode::QuarterBlock => dither_block(ctx), // fallback to block for now
-        DitherMode::Braille     => dither_braille(ctx),
-        DitherMode::Binary      => dither_binary(ctx),
-        DitherMode::Edge        => dither_edge(ctx),
+        DitherMode::Braille => dither_braille(ctx),
+        DitherMode::Binary => dither_binary(ctx),
+        DitherMode::Edge => dither_edge(ctx),
     }
 }
 
@@ -54,7 +53,11 @@ fn luma(ctx: &DitherContext, x: u32, y: u32) -> u8 {
         return 0;
     }
     let v = ctx.gray.get_pixel(x, y)[0];
-    if ctx.opts.invert { 255 - v } else { v }
+    if ctx.opts.invert {
+        255 - v
+    } else {
+        v
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -66,13 +69,17 @@ const DENSITY_CHARS: &[char] = &[' ', '.', ':', '-', '=', '+', '*', '#', '%', '@
 
 #[cfg(feature = "figure")]
 pub fn dither_density(ctx: &DitherContext) -> Vec<String> {
-    (0..ctx.height).map(|y| {
-        (0..ctx.width).map(|x| {
-            let v = luma(ctx, x, y) as usize;
-            let idx = v * (DENSITY_CHARS.len() - 1) / 255;
-            DENSITY_CHARS[idx]
-        }).collect()
-    }).collect()
+    (0..ctx.height)
+        .map(|y| {
+            (0..ctx.width)
+                .map(|x| {
+                    let v = luma(ctx, x, y) as usize;
+                    let idx = v * (DENSITY_CHARS.len() - 1) / 255;
+                    DENSITY_CHARS[idx]
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -84,13 +91,17 @@ const BLOCK_CHARS: &[char] = &[' ', '░', '▒', '▓', '█'];
 
 #[cfg(feature = "figure")]
 pub fn dither_block(ctx: &DitherContext) -> Vec<String> {
-    (0..ctx.height).map(|y| {
-        (0..ctx.width).map(|x| {
-            let v = luma(ctx, x, y) as usize;
-            let idx = v * (BLOCK_CHARS.len() - 1) / 255;
-            BLOCK_CHARS[idx]
-        }).collect()
-    }).collect()
+    (0..ctx.height)
+        .map(|y| {
+            (0..ctx.width)
+                .map(|x| {
+                    let v = luma(ctx, x, y) as usize;
+                    let idx = v * (BLOCK_CHARS.len() - 1) / 255;
+                    BLOCK_CHARS[idx]
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -102,20 +113,28 @@ pub fn dither_block(ctx: &DitherContext) -> Vec<String> {
 pub fn dither_half_block(ctx: &DitherContext) -> Vec<String> {
     // Each output row consumes 2 image rows
     let out_height = (ctx.height + 1) / 2;
-    (0..out_height).map(|row| {
-        let y_top = row * 2;
-        let y_bot = row * 2 + 1;
-        (0..ctx.width).map(|x| {
-            let top = luma(ctx, x, y_top) >= 128;
-            let bot = if y_bot < ctx.height { luma(ctx, x, y_bot) >= 128 } else { false };
-            match (top, bot) {
-                (false, false) => ' ',
-                (true,  false) => '▀',
-                (false, true)  => '▄',
-                (true,  true)  => '█',
-            }
-        }).collect()
-    }).collect()
+    (0..out_height)
+        .map(|row| {
+            let y_top = row * 2;
+            let y_bot = row * 2 + 1;
+            (0..ctx.width)
+                .map(|x| {
+                    let top = luma(ctx, x, y_top) >= 128;
+                    let bot = if y_bot < ctx.height {
+                        luma(ctx, x, y_bot) >= 128
+                    } else {
+                        false
+                    };
+                    match (top, bot) {
+                        (false, false) => ' ',
+                        (true, false) => '▀',
+                        (false, true) => '▄',
+                        (true, true) => '█',
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -135,28 +154,32 @@ pub fn dither_braille(ctx: &DitherContext) -> Vec<String> {
     let out_h = (ctx.height + 3) / 4;
     let threshold = ctx.opts.threshold;
 
-    (0..out_h).map(|row| {
-        (0..out_w).map(|col| {
-            let px = col * 2;
-            let py = row * 4;
+    (0..out_h)
+        .map(|row| {
+            (0..out_w)
+                .map(|col| {
+                    let px = col * 2;
+                    let py = row * 4;
 
-            // Dot positions within the 2×4 cell
-            const DOT_X: [u32; 8] = [0, 0, 0, 1, 1, 1, 0, 1];
-            const DOT_Y: [u32; 8] = [0, 1, 2, 0, 1, 2, 3, 3];
+                    // Dot positions within the 2×4 cell
+                    const DOT_X: [u32; 8] = [0, 0, 0, 1, 1, 1, 0, 1];
+                    const DOT_Y: [u32; 8] = [0, 1, 2, 0, 1, 2, 3, 3];
 
-            let mut bits: u8 = 0;
-            for dot in 0..8u8 {
-                let x = px + DOT_X[dot as usize];
-                let y = py + DOT_Y[dot as usize];
-                if x < ctx.width && y < ctx.height && luma(ctx, x, y) >= threshold {
-                    bits |= 1 << dot;
-                }
-            }
+                    let mut bits: u8 = 0;
+                    for dot in 0..8u8 {
+                        let x = px + DOT_X[dot as usize];
+                        let y = py + DOT_Y[dot as usize];
+                        if x < ctx.width && y < ctx.height && luma(ctx, x, y) >= threshold {
+                            bits |= 1 << dot;
+                        }
+                    }
 
-            // U+2800 is the base braille pattern (all dots off)
-            char::from_u32(0x2800 + bits as u32).unwrap_or(' ')
-        }).collect()
-    }).collect()
+                    // U+2800 is the base braille pattern (all dots off)
+                    char::from_u32(0x2800 + bits as u32).unwrap_or(' ')
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -166,11 +189,19 @@ pub fn dither_braille(ctx: &DitherContext) -> Vec<String> {
 #[cfg(feature = "figure")]
 pub fn dither_binary(ctx: &DitherContext) -> Vec<String> {
     let threshold = ctx.opts.threshold;
-    (0..ctx.height).map(|y| {
-        (0..ctx.width).map(|x| {
-            if luma(ctx, x, y) >= threshold { '█' } else { ' ' }
-        }).collect()
-    }).collect()
+    (0..ctx.height)
+        .map(|y| {
+            (0..ctx.width)
+                .map(|x| {
+                    if luma(ctx, x, y) >= threshold {
+                        '█'
+                    } else {
+                        ' '
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -181,40 +212,57 @@ pub fn dither_binary(ctx: &DitherContext) -> Vec<String> {
 pub fn dither_edge(ctx: &DitherContext) -> Vec<String> {
     let threshold = ctx.opts.threshold as i32;
 
-    (0..ctx.height).map(|y| {
-        (0..ctx.width).map(|x| {
-            // 3×3 Sobel kernels
-            let get = |dx: i32, dy: i32| -> i32 {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx < 0 || ny < 0 || nx >= ctx.width as i32 || ny >= ctx.height as i32 {
-                    return 0;
-                }
-                luma(ctx, nx as u32, ny as u32) as i32
-            };
+    (0..ctx.height)
+        .map(|y| {
+            (0..ctx.width)
+                .map(|x| {
+                    // 3×3 Sobel kernels
+                    let get = |dx: i32, dy: i32| -> i32 {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+                        if nx < 0 || ny < 0 || nx >= ctx.width as i32 || ny >= ctx.height as i32 {
+                            return 0;
+                        }
+                        luma(ctx, nx as u32, ny as u32) as i32
+                    };
 
-            let gx = -get(-1,-1) + get(1,-1)
-                     - 2*get(-1,0) + 2*get(1,0)
-                     - get(-1,1)  + get(1,1);
-            let gy = -get(-1,-1) - 2*get(0,-1) - get(1,-1)
-                     + get(-1,1)  + 2*get(0,1)  + get(1,1);
+                    let gx = -get(-1, -1) + get(1, -1) - 2 * get(-1, 0) + 2 * get(1, 0)
+                        - get(-1, 1)
+                        + get(1, 1);
+                    let gy = -get(-1, -1) - 2 * get(0, -1) - get(1, -1)
+                        + get(-1, 1)
+                        + 2 * get(0, 1)
+                        + get(1, 1);
 
-            let mag = ((gx*gx + gy*gy) as f64).sqrt() as i32;
-            if mag < threshold {
-                return ' ';
-            }
+                    let mag = ((gx * gx + gy * gy) as f64).sqrt() as i32;
+                    if mag < threshold {
+                        return ' ';
+                    }
 
-            // Choose character based on angle
-            let angle = (gy as f64).atan2(gx as f64).to_degrees();
-            // Normalize to [0, 180)
-            let angle = ((angle % 180.0) + 180.0) % 180.0;
+                    // Choose character based on angle
+                    let angle = (gy as f64).atan2(gx as f64).to_degrees();
+                    // Normalize to [0, 180)
+                    let angle = ((angle % 180.0) + 180.0) % 180.0;
 
-            if angle < 22.5 || angle >= 157.5 { '─' }        // horizontal
-            else if angle < 67.5              { '╱' }         // diagonal /
-            else if angle < 112.5             { '│' }         // vertical
-            else                              { '╲' }         // diagonal \
-        }).collect()
-    }).collect()
+                    if angle < 22.5 || angle >= 157.5 {
+                        '─'
+                    }
+                    // horizontal
+                    else if angle < 67.5 {
+                        '╱'
+                    }
+                    // diagonal /
+                    else if angle < 112.5 {
+                        '│'
+                    }
+                    // vertical
+                    else {
+                        '╲'
+                    } // diagonal \
+                })
+                .collect()
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -227,7 +275,10 @@ mod tests {
     use image::{GrayImage, Luma};
 
     fn opts_with_dither(mode: DitherMode) -> ImportOptions {
-        ImportOptions { dither: mode, ..Default::default() }
+        ImportOptions {
+            dither: mode,
+            ..Default::default()
+        }
     }
 
     fn solid_gray(w: u32, h: u32, val: u8) -> GrayImage {
@@ -271,7 +322,11 @@ mod tests {
         let ctx = DitherContext::new(&img, &opts);
         let rows = dither_density(&ctx);
         for row in &rows {
-            assert!(row.chars().all(|c| c == ' '), "black image should be spaces: {:?}", row);
+            assert!(
+                row.chars().all(|c| c == ' '),
+                "black image should be spaces: {:?}",
+                row
+            );
         }
     }
 
@@ -282,7 +337,11 @@ mod tests {
         let ctx = DitherContext::new(&img, &opts);
         let rows = dither_density(&ctx);
         for row in &rows {
-            assert!(row.chars().all(|c| c == '@'), "white image should be @: {:?}", row);
+            assert!(
+                row.chars().all(|c| c == '@'),
+                "white image should be @: {:?}",
+                row
+            );
         }
     }
 
@@ -358,7 +417,8 @@ mod tests {
                 let cp = c as u32;
                 assert!(
                     c == ' ' || (0x2800..=0x28FF).contains(&cp),
-                    "unexpected braille char U+{:04X}", cp
+                    "unexpected braille char U+{:04X}",
+                    cp
                 );
             }
         }
@@ -381,18 +441,30 @@ mod tests {
     fn test_binary_dither_threshold_splits_black_white() {
         // All pixels at 200 with threshold 128 → all '█'
         let img = solid_gray(6, 4, 200);
-        let opts = ImportOptions { dither: DitherMode::Binary, threshold: 128, ..Default::default() };
+        let opts = ImportOptions {
+            dither: DitherMode::Binary,
+            threshold: 128,
+            ..Default::default()
+        };
         let ctx = DitherContext::new(&img, &opts);
         let rows = dither_binary(&ctx);
         for row in &rows {
-            assert!(row.chars().all(|c| c == '█'), "above threshold → █: {:?}", row);
+            assert!(
+                row.chars().all(|c| c == '█'),
+                "above threshold → █: {:?}",
+                row
+            );
         }
         // All pixels at 50 → all ' '
         let img2 = solid_gray(6, 4, 50);
         let ctx2 = DitherContext::new(&img2, &opts);
         let rows2 = dither_binary(&ctx2);
         for row in &rows2 {
-            assert!(row.chars().all(|c| c == ' '), "below threshold → space: {:?}", row);
+            assert!(
+                row.chars().all(|c| c == ' '),
+                "below threshold → space: {:?}",
+                row
+            );
         }
     }
 
@@ -401,15 +473,31 @@ mod tests {
     #[test]
     fn test_dither_invert_reverses_brightness() {
         let img = solid_gray(4, 4, 255);
-        let opts_normal = ImportOptions { dither: DitherMode::Block, invert: false, ..Default::default() };
-        let opts_invert = ImportOptions { dither: DitherMode::Block, invert: true, ..Default::default() };
+        let opts_normal = ImportOptions {
+            dither: DitherMode::Block,
+            invert: false,
+            ..Default::default()
+        };
+        let opts_invert = ImportOptions {
+            dither: DitherMode::Block,
+            invert: true,
+            ..Default::default()
+        };
         let ctx_n = DitherContext::new(&img, &opts_normal);
         let ctx_i = DitherContext::new(&img, &opts_invert);
         let rows_n = dither_block(&ctx_n);
         let rows_i = dither_block(&ctx_i);
         // White image normal → '█'; inverted → ' '
-        assert!(rows_n[0].chars().all(|c| c == '█'), "normal white: {:?}", rows_n[0]);
-        assert!(rows_i[0].chars().all(|c| c == ' '), "inverted white: {:?}", rows_i[0]);
+        assert!(
+            rows_n[0].chars().all(|c| c == '█'),
+            "normal white: {:?}",
+            rows_n[0]
+        );
+        assert!(
+            rows_i[0].chars().all(|c| c == ' '),
+            "inverted white: {:?}",
+            rows_i[0]
+        );
     }
 
     // ── edge ─────────────────────────────────────────────
@@ -424,17 +512,24 @@ mod tests {
                 img.put_pixel(x, y, Luma([v]));
             }
         }
-        let opts = ImportOptions { dither: DitherMode::Edge, threshold: 50, ..Default::default() };
+        let opts = ImportOptions {
+            dither: DitherMode::Edge,
+            threshold: 50,
+            ..Default::default()
+        };
         let ctx = DitherContext::new(&img, &opts);
         let rows = dither_edge(&ctx);
         assert_eq!(rows.len(), 10);
         // At the edge (x=9 or x=10), expect a non-space char in at least one row
         let has_edge_char = rows.iter().any(|row| {
-            row.chars().enumerate().any(|(i, c)| {
-                (i == 9 || i == 10) && c != ' '
-            })
+            row.chars()
+                .enumerate()
+                .any(|(i, c)| (i == 9 || i == 10) && c != ' ')
         });
-        assert!(has_edge_char, "should detect edge between dark and bright regions");
+        assert!(
+            has_edge_char,
+            "should detect edge between dark and bright regions"
+        );
     }
 }
 

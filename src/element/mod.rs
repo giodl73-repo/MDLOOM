@@ -22,12 +22,12 @@ pub enum ElementKind {
 impl ElementKind {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "value"    => Some(Self::Value),
-            "delta"    => Some(Self::Delta),
-            "sparkline"=> Some(Self::Sparkline),
+            "value" => Some(Self::Value),
+            "delta" => Some(Self::Delta),
+            "sparkline" => Some(Self::Sparkline),
             "mini-bar" => Some(Self::MiniBar),
-            "label"    => Some(Self::Label),
-            "badge"    => Some(Self::Badge),
+            "label" => Some(Self::Label),
+            "badge" => Some(Self::Badge),
             _ => None,
         }
     }
@@ -43,7 +43,7 @@ pub enum ElementAlign {
 impl ElementAlign {
     pub fn parse(s: &str) -> Self {
         match s {
-            "right"  => Self::Right,
+            "right" => Self::Right,
             "center" => Self::Center,
             _ => Self::Left,
         }
@@ -86,20 +86,27 @@ pub enum ElementData {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ElementError {
-    WidthExceeded { actual: usize, budget: usize },
-    WrongDataKind { expected: &'static str, got: &'static str },
+    WidthExceeded {
+        actual: usize,
+        budget: usize,
+    },
+    WrongDataKind {
+        expected: &'static str,
+        got: &'static str,
+    },
     ZeroWidth,
 }
 
 impl std::fmt::Display for ElementError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::WidthExceeded { actual, budget } =>
-                write!(f, "output width {} exceeds budget {}", actual, budget),
-            Self::WrongDataKind { expected, got } =>
-                write!(f, "expected {} data, got {}", expected, got),
-            Self::ZeroWidth =>
-                write!(f, "element width must be >= 1"),
+            Self::WidthExceeded { actual, budget } => {
+                write!(f, "output width {} exceeds budget {}", actual, budget)
+            }
+            Self::WrongDataKind { expected, got } => {
+                write!(f, "expected {} data, got {}", expected, got)
+            }
+            Self::ZeroWidth => write!(f, "element width must be >= 1"),
         }
     }
 }
@@ -117,15 +124,13 @@ pub fn render_element(data: &ElementData, cfg: &ElementConfig) -> Result<String,
     }
 
     let raw = match cfg.kind {
-        ElementKind::Value => {
-            match data {
-                ElementData::Text(s) => render_label_str(s, cfg),
-                _ => {
-                    let v = require_scalar(data, "value")?;
-                    value::render_value(v, cfg)
-                }
+        ElementKind::Value => match data {
+            ElementData::Text(s) => render_label_str(s, cfg),
+            _ => {
+                let v = require_scalar(data, "value")?;
+                value::render_value(v, cfg)
             }
-        }
+        },
         ElementKind::Delta => {
             let v = require_scalar(data, "delta")?;
             value::render_delta(v, cfg)
@@ -152,7 +157,10 @@ pub fn render_element(data: &ElementData, cfg: &ElementConfig) -> Result<String,
     // E-1: enforce exact width
     let w = visual_width(&raw);
     if w != cfg.width {
-        return Err(ElementError::WidthExceeded { actual: w, budget: cfg.width });
+        return Err(ElementError::WidthExceeded {
+            actual: w,
+            budget: cfg.width,
+        });
     }
     Ok(raw)
 }
@@ -166,8 +174,7 @@ fn render_label_str(s: &str, cfg: &ElementConfig) -> String {
     let sw = visual_width(s);
     if sw > w {
         // Truncate with ellipsis
-        truncate_to_width(s, w.saturating_sub(1))
-            + "…"
+        truncate_to_width(s, w.saturating_sub(1)) + "…"
     } else {
         align_in_width(s, sw, w, cfg.align)
     }
@@ -274,10 +281,12 @@ fn require_text(data: &ElementData, _kind: &'static str) -> Result<String, Eleme
     Ok(match data {
         ElementData::Text(s) => s.clone(),
         ElementData::Scalar(v) => v.to_string(),
-        ElementData::Series(_) => return Err(ElementError::WrongDataKind {
-            expected: "text",
-            got: "series",
-        }),
+        ElementData::Series(_) => {
+            return Err(ElementError::WrongDataKind {
+                expected: "text",
+                got: "series",
+            })
+        }
     })
 }
 
@@ -290,22 +299,49 @@ mod tests {
     use super::*;
 
     fn cfg_value(width: usize) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Value, width, ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Value,
+            width,
+            ..Default::default()
+        }
     }
     fn cfg_delta(width: usize) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Delta, width, format: "{:+.2}".to_string(), ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Delta,
+            width,
+            format: "{:+.2}".to_string(),
+            ..Default::default()
+        }
     }
     fn cfg_sparkline(width: usize) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Sparkline, width, ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Sparkline,
+            width,
+            ..Default::default()
+        }
     }
     fn cfg_mini_bar(width: usize, max: f64) -> ElementConfig {
-        ElementConfig { kind: ElementKind::MiniBar, width, max: Some(max), ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::MiniBar,
+            width,
+            max: Some(max),
+            ..Default::default()
+        }
     }
     fn cfg_label(width: usize, align: ElementAlign) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Label, width, align, ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Label,
+            width,
+            align,
+            ..Default::default()
+        }
     }
     fn cfg_badge(width: usize) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Badge, width, ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Badge,
+            width,
+            ..Default::default()
+        }
     }
 
     // ── E-1: exact width invariant ────────────────────────
@@ -337,7 +373,11 @@ mod tests {
 
     #[test]
     fn e1_label_exact_width() {
-        let out = render_element(&ElementData::Text("Hello".to_string()), &cfg_label(10, ElementAlign::Left)).unwrap();
+        let out = render_element(
+            &ElementData::Text("Hello".to_string()),
+            &cfg_label(10, ElementAlign::Left),
+        )
+        .unwrap();
         assert_eq!(visual_width(&out), 10, "output: {:?}", out);
     }
 
@@ -352,7 +392,10 @@ mod tests {
     #[test]
     fn value_integer_format() {
         let cfg = ElementConfig {
-            kind: ElementKind::Value, width: 4, format: "{}".to_string(), ..Default::default()
+            kind: ElementKind::Value,
+            width: 4,
+            format: "{}".to_string(),
+            ..Default::default()
         };
         let out = render_element(&ElementData::Scalar(138.0), &cfg).unwrap();
         assert!(out.contains("138"), "output: {:?}", out);
@@ -362,7 +405,8 @@ mod tests {
     #[test]
     fn value_one_decimal() {
         let cfg = ElementConfig {
-            kind: ElementKind::Value, width: 6,
+            kind: ElementKind::Value,
+            width: 6,
             format: "{:.1}".to_string(),
             align: ElementAlign::Right,
             ..Default::default()
@@ -375,7 +419,8 @@ mod tests {
     #[test]
     fn value_right_align() {
         let cfg = ElementConfig {
-            kind: ElementKind::Value, width: 8,
+            kind: ElementKind::Value,
+            width: 8,
             format: "{:.1}".to_string(),
             align: ElementAlign::Right,
             ..Default::default()
@@ -388,7 +433,8 @@ mod tests {
     #[test]
     fn value_center_align() {
         let cfg = ElementConfig {
-            kind: ElementKind::Value, width: 9,
+            kind: ElementKind::Value,
+            width: 9,
             format: "{}".to_string(),
             align: ElementAlign::Center,
             ..Default::default()
@@ -405,7 +451,11 @@ mod tests {
     fn delta_positive_sign() {
         let cfg = cfg_delta(6);
         let out = render_element(&ElementData::Scalar(0.19), &cfg).unwrap();
-        assert!(out.contains('+'), "positive delta must have + sign: {:?}", out);
+        assert!(
+            out.contains('+'),
+            "positive delta must have + sign: {:?}",
+            out
+        );
         assert_eq!(visual_width(&out), 6);
     }
 
@@ -414,14 +464,19 @@ mod tests {
         let cfg = cfg_delta(6);
         let out = render_element(&ElementData::Scalar(-4.1), &cfg).unwrap();
         // negative rendered by {:+.2} format produces '-'
-        assert!(out.contains('-'), "negative delta must have - sign: {:?}", out);
+        assert!(
+            out.contains('-'),
+            "negative delta must have - sign: {:?}",
+            out
+        );
         assert_eq!(visual_width(&out), 6);
     }
 
     #[test]
     fn delta_right_align_in_width() {
         let cfg = ElementConfig {
-            kind: ElementKind::Delta, width: 8,
+            kind: ElementKind::Delta,
+            width: 8,
             format: "{:+.2}".to_string(),
             align: ElementAlign::Right,
             ..Default::default()
@@ -457,7 +512,11 @@ mod tests {
         let series = vec![5.0, 5.0, 5.0, 5.0];
         let cfg = cfg_sparkline(4);
         let out = render_element(&ElementData::Series(series), &cfg).unwrap();
-        assert!(out.chars().all(|c| c == '▄'), "all-equal series should be ▄: {:?}", out);
+        assert!(
+            out.chars().all(|c| c == '▄'),
+            "all-equal series should be ▄: {:?}",
+            out
+        );
     }
 
     #[test]
@@ -493,7 +552,11 @@ mod tests {
         let out = render_element(&ElementData::Series(series), &cfg).unwrap();
         assert_eq!(visual_width(&out), 4);
         // single value: all same → all ▄ (mid-height per spec F76)
-        assert!(out.chars().all(|c| c == '▄'), "single value should be ▄: {:?}", out);
+        assert!(
+            out.chars().all(|c| c == '▄'),
+            "single value should be ▄: {:?}",
+            out
+        );
     }
 
     #[test]
@@ -545,14 +608,24 @@ mod tests {
         let out = render_element(&ElementData::Scalar(val), &cfg_mini_bar(width, max)).unwrap();
         let filled = out.chars().filter(|&c| c == '█').count();
         let expected = (val / max * width as f64).round() as usize;
-        assert!((filled as isize - expected as isize).abs() <= 1, "filled={} expected≈{}: {:?}", filled, expected, out);
+        assert!(
+            (filled as isize - expected as isize).abs() <= 1,
+            "filled={} expected≈{}: {:?}",
+            filled,
+            expected,
+            out
+        );
     }
 
     // ── label ────────────────────────────────────────────
 
     #[test]
     fn label_short_left_aligned_padded() {
-        let out = render_element(&ElementData::Text("Hi".to_string()), &cfg_label(8, ElementAlign::Left)).unwrap();
+        let out = render_element(
+            &ElementData::Text("Hi".to_string()),
+            &cfg_label(8, ElementAlign::Left),
+        )
+        .unwrap();
         assert!(out.starts_with("Hi"), "output: {:?}", out);
         assert!(out.ends_with("      "), "should be left-padded: {:?}", out);
         assert_eq!(visual_width(&out), 8);
@@ -561,15 +634,24 @@ mod tests {
     #[test]
     fn label_truncated_with_ellipsis() {
         let long = "Connor McDavid".to_string();
-        let out = render_element(&ElementData::Text(long), &cfg_label(8, ElementAlign::Left)).unwrap();
+        let out =
+            render_element(&ElementData::Text(long), &cfg_label(8, ElementAlign::Left)).unwrap();
         assert_eq!(visual_width(&out), 8, "output: {:?}", out);
         assert!(out.contains('…'), "should contain ellipsis: {:?}", out);
     }
 
     #[test]
     fn label_right_aligned() {
-        let out = render_element(&ElementData::Text("Hi".to_string()), &cfg_label(6, ElementAlign::Right)).unwrap();
-        assert!(out.starts_with("    "), "should be right-aligned: {:?}", out);
+        let out = render_element(
+            &ElementData::Text("Hi".to_string()),
+            &cfg_label(6, ElementAlign::Right),
+        )
+        .unwrap();
+        assert!(
+            out.starts_with("    "),
+            "should be right-aligned: {:?}",
+            out
+        );
         assert_eq!(visual_width(&out), 6);
     }
 
@@ -601,7 +683,13 @@ mod tests {
     fn e2_series_rejected_for_value() {
         let cfg = cfg_value(6);
         let err = render_element(&ElementData::Series(vec![1.0, 2.0]), &cfg).unwrap_err();
-        assert_eq!(err, ElementError::WrongDataKind { expected: "scalar", got: "series" });
+        assert_eq!(
+            err,
+            ElementError::WrongDataKind {
+                expected: "scalar",
+                got: "series"
+            }
+        );
     }
 
     // ── E-5: no_chrome output has no fence ────────────────
@@ -609,13 +697,19 @@ mod tests {
     #[test]
     fn e5_no_chrome_has_no_fence() {
         let cfg = ElementConfig {
-            kind: ElementKind::Label, width: 5, no_chrome: true,
+            kind: ElementKind::Label,
+            width: 5,
+            no_chrome: true,
             ..Default::default()
         };
         let out = render_element(&ElementData::Text("Hi".to_string()), &cfg).unwrap();
         // render_element always returns raw — no fence regardless of no_chrome
         assert!(!out.contains("```"), "should not contain fence: {:?}", out);
-        assert!(!out.contains("<!--"), "should not contain HTML comment: {:?}", out);
+        assert!(
+            !out.contains("<!--"),
+            "should not contain HTML comment: {:?}",
+            out
+        );
     }
 
     // ── E-6: center alignment tie-break ──────────────────
@@ -624,7 +718,10 @@ mod tests {
     fn e6_center_tie_break_extra_right() {
         // "Hi" (2) in width=7: pad=5, left=2, right=3
         let cfg = ElementConfig {
-            kind: ElementKind::Label, width: 7, align: ElementAlign::Center, ..Default::default()
+            kind: ElementKind::Label,
+            width: 7,
+            align: ElementAlign::Center,
+            ..Default::default()
         };
         let out = render_element(&ElementData::Text("Hi".to_string()), &cfg).unwrap();
         assert_eq!(visual_width(&out), 7);
@@ -636,7 +733,11 @@ mod tests {
 
     #[test]
     fn zero_width_returns_error() {
-        let cfg = ElementConfig { kind: ElementKind::Value, width: 0, ..Default::default() };
+        let cfg = ElementConfig {
+            kind: ElementKind::Value,
+            width: 0,
+            ..Default::default()
+        };
         let err = render_element(&ElementData::Scalar(1.0), &cfg).unwrap_err();
         assert_eq!(err, ElementError::ZeroWidth);
     }

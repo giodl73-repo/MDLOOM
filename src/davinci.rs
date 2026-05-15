@@ -4,7 +4,6 @@
 ///   1. Resolved via md:// URI using mdpath
 ///   2. Checked against all its invariants
 ///   3. Violations emitted as diagnostics with code `fig_invariant_violated`
-
 use crate::config::{DaVinciEntry, GlintConfig, Invariant, ProtectionTier};
 use crate::diagnostic::{Diagnostic, Severity};
 use mdpath::{parse as parse_uri, resolve as resolve_uri};
@@ -22,9 +21,13 @@ pub fn check_daVinci(config: &GlintConfig, root: &Path) -> Vec<Diagnostic> {
             Err(e) => {
                 diags.push(Diagnostic::warning(
                     PathBuf::from(&entry.uri),
-                    1, 1,
+                    1,
+                    1,
                     "fig_resolve_error",
-                    format!("DaVinci '{}' — cannot resolve {}: {}", entry.id, entry.uri, e),
+                    format!(
+                        "DaVinci '{}' — cannot resolve {}: {}",
+                        entry.id, entry.uri, e
+                    ),
                 ));
             }
         }
@@ -34,11 +37,9 @@ pub fn check_daVinci(config: &GlintConfig, root: &Path) -> Vec<Diagnostic> {
 }
 
 fn validate_entry(entry: &DaVinciEntry, root: &Path) -> Result<Vec<Diagnostic>, String> {
-    let parsed = parse_uri(&entry.uri)
-        .map_err(|e| format!("invalid URI: {}", e))?;
+    let parsed = parse_uri(&entry.uri).map_err(|e| format!("invalid URI: {}", e))?;
 
-    let element = resolve_uri(&parsed, root)
-        .map_err(|e| format!("{}", e))?;
+    let element = resolve_uri(&parsed, root).map_err(|e| format!("{}", e))?;
 
     let severity = match entry.protection {
         ProtectionTier::Warn => Severity::Warning,
@@ -127,13 +128,19 @@ fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
         "line-count" => {
             let count = lines.len();
             if let Some(min) = inv.min {
-                if count < min { return Some(format!("has {} lines, needs ≥ {}", count, min)); }
+                if count < min {
+                    return Some(format!("has {} lines, needs ≥ {}", count, min));
+                }
             }
             if let Some(max) = inv.max {
-                if count > max { return Some(format!("has {} lines, needs ≤ {}", count, max)); }
+                if count > max {
+                    return Some(format!("has {} lines, needs ≤ {}", count, max));
+                }
             }
             if let Some(exact) = inv.value {
-                if count != exact { return Some(format!("has {} lines, needs exactly {}", count, exact)); }
+                if count != exact {
+                    return Some(format!("has {} lines, needs exactly {}", count, exact));
+                }
             }
         }
         "box-width" => {
@@ -145,12 +152,18 @@ fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
             let min_width = *border_widths.iter().min().unwrap();
             if let Some(min) = inv.min {
                 if min_width < min {
-                    return Some(format!("narrowest box is {} chars, needs ≥ {}", min_width, min));
+                    return Some(format!(
+                        "narrowest box is {} chars, needs ≥ {}",
+                        min_width, min
+                    ));
                 }
             }
             if let Some(max) = inv.max {
                 if max_width > max {
-                    return Some(format!("widest box is {} chars, needs ≤ {}", max_width, max));
+                    return Some(format!(
+                        "widest box is {} chars, needs ≤ {}",
+                        max_width, max
+                    ));
                 }
             }
         }
@@ -162,10 +175,14 @@ fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
                 }
             }
             if let Some(min) = inv.min {
-                if count < min { return Some(format!("has {} boxes, needs ≥ {}", count, min)); }
+                if count < min {
+                    return Some(format!("has {} boxes, needs ≥ {}", count, min));
+                }
             }
             if let Some(max) = inv.max {
-                if count > max { return Some(format!("has {} boxes, needs ≤ {}", count, max)); }
+                if count > max {
+                    return Some(format!("has {} boxes, needs ≤ {}", count, max));
+                }
             }
         }
         "all-boxes-same-width" => {
@@ -224,10 +241,14 @@ fn evaluate_invariant_inner(inv: &Invariant, content: &str) -> Option<String> {
 }
 
 fn detect_border_widths(lines: &[&str]) -> Vec<usize> {
-    lines.iter()
+    lines
+        .iter()
         .filter(|l| {
             let t = l.trim();
-            matches!(t.chars().next(), Some('+') | Some('┌') | Some('└') | Some('╔') | Some('╚'))
+            matches!(
+                t.chars().next(),
+                Some('+') | Some('┌') | Some('└') | Some('╔') | Some('╚')
+            )
         })
         .map(|l| crate::layout::visual_width(l.trim()))
         .collect()
@@ -240,8 +261,13 @@ fn count_boxes(lines: &[&str]) -> usize {
 }
 
 fn detect_column_counts(lines: &[&str]) -> Vec<usize> {
-    lines.iter()
-        .filter(|l| (l.contains('│') || l.contains('|')) && !l.trim().starts_with('─') && !l.trim().starts_with('-'))
+    lines
+        .iter()
+        .filter(|l| {
+            (l.contains('│') || l.contains('|'))
+                && !l.trim().starts_with('─')
+                && !l.trim().starts_with('-')
+        })
         .map(|l| l.chars().filter(|c| matches!(c, '│' | '|')).count())
         .collect()
 }
@@ -255,9 +281,16 @@ mod tests {
         let inv = Invariant {
             rule: "contains-text".into(),
             text: Some("M:N multiplexing".into()),
-            min: None, max: None, value: None, values: None, tolerance: None,
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
         };
-        assert!(evaluate_invariant_inner(&inv, "GOROUTINE SCHEDULER — M:N multiplexing\n┌──┐").is_none());
+        assert!(
+            evaluate_invariant_inner(&inv, "GOROUTINE SCHEDULER — M:N multiplexing\n┌──┐")
+                .is_none()
+        );
     }
 
     #[test]
@@ -265,7 +298,11 @@ mod tests {
         let inv = Invariant {
             rule: "contains-text".into(),
             text: Some("missing text".into()),
-            min: None, max: None, value: None, values: None, tolerance: None,
+            min: None,
+            max: None,
+            value: None,
+            values: None,
+            tolerance: None,
         };
         assert!(evaluate_invariant_inner(&inv, "some content here").is_some());
     }
@@ -275,7 +312,12 @@ mod tests {
         let content = "┌──┐\n│  │\n└──┘\n┌──┐\n│  │\n└──┘";
         let inv = Invariant {
             rule: "box-count".into(),
-            text: None, min: None, max: None, value: Some(2), values: None, tolerance: None,
+            text: None,
+            min: None,
+            max: None,
+            value: Some(2),
+            values: None,
+            tolerance: None,
         };
         assert!(evaluate_invariant_inner(&inv, content).is_none());
     }
@@ -284,7 +326,10 @@ mod tests {
     fn required_row_keys_all_present() {
         let inv = Invariant {
             rule: "required-row-keys".into(),
-            text: None, min: None, max: None, value: None,
+            text: None,
+            min: None,
+            max: None,
+            value: None,
             values: Some(vec!["Binding".into(), "Typing".into()]),
             tolerance: None,
         };
@@ -296,25 +341,14 @@ mod tests {
     fn required_row_keys_missing() {
         let inv = Invariant {
             rule: "required-row-keys".into(),
-            text: None, min: None, max: None, value: None,
+            text: None,
+            min: None,
+            max: None,
+            value: None,
             values: Some(vec!["Binding".into(), "Missing Key".into()]),
             tolerance: None,
         };
         let content = "| Axis | Value |\n| Binding | Late |";
         assert!(evaluate_invariant_inner(&inv, content).is_some());
-    }
-
-    fn make_elem() -> mdpath::ResolvedElement {
-        mdpath::ResolvedElement {
-            uri: "md://test.md".into(),
-            file: std::path::PathBuf::from("test.md"),
-            line_start: 1,
-            line_end: 5,
-            content: String::new(),
-            label: None,
-            section_heading: None,
-            element_type: mdpath::uri::ElementType::Figure,
-            kind: None,
-        }
     }
 }

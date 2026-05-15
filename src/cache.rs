@@ -6,7 +6,6 @@
 ///
 /// All tiers live in `.proof/cache/` at the proof root.
 /// See design/THREE-TIER-CACHE.md for full spec.
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,9 +18,15 @@ pub fn cache_dir(root: &Path) -> PathBuf {
     root.join(".proof").join("cache")
 }
 
-fn parse_dir(root: &Path) -> PathBuf { cache_dir(root).join("parse") }
-fn resolve_dir(root: &Path) -> PathBuf { cache_dir(root).join("resolve") }
-fn compile_dir(root: &Path) -> PathBuf { cache_dir(root).join("compile") }
+fn parse_dir(root: &Path) -> PathBuf {
+    cache_dir(root).join("parse")
+}
+fn resolve_dir(root: &Path) -> PathBuf {
+    cache_dir(root).join("resolve")
+}
+fn compile_dir(root: &Path) -> PathBuf {
+    cache_dir(root).join("compile")
+}
 
 // ─────────────────────────────────────────────────────────
 // Hashing utilities
@@ -94,11 +99,7 @@ pub fn save_path_index(root: &Path, index: &PathIndex) {
 
 /// Get or compute the parse_key for a file.
 /// Uses mtime+size as a fast-path check before re-hashing.
-pub fn get_or_compute_parse_key(
-    file_path: &Path,
-    content: &str,
-    index: &mut PathIndex,
-) -> String {
+pub fn get_or_compute_parse_key(file_path: &Path, content: &str, index: &mut PathIndex) -> String {
     let rel = file_path.to_string_lossy().to_string();
     let content_hash = hash_file_content(content);
     let parse_key = compute_key(&[&content_hash, proof_version()]);
@@ -111,7 +112,8 @@ pub fn get_or_compute_parse_key(
     }
 
     // Update index
-    let mtime_ms = file_path.metadata()
+    let mtime_ms = file_path
+        .metadata()
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
@@ -119,12 +121,15 @@ pub fn get_or_compute_parse_key(
         .unwrap_or(0);
     let size = file_path.metadata().map(|m| m.len()).unwrap_or(0);
 
-    index.insert(rel, PathIndexEntry {
-        parse_key: parse_key.clone(),
-        mtime_ms,
-        size,
-        content_hash,
-    });
+    index.insert(
+        rel,
+        PathIndexEntry {
+            parse_key: parse_key.clone(),
+            mtime_ms,
+            size,
+            content_hash,
+        },
+    );
 
     parse_key
 }
@@ -148,12 +153,21 @@ pub struct CompileCacheEntry {
 /// `source_parse_key`: parse_key of the source document
 /// `resolve_keys`: parse_keys of all referenced data/figure files, in source order, NOT deduplicated
 /// `directive_attrs_json`: stable JSON of all directive attributes affecting output
-pub fn compile_key(source_parse_key: &str, resolve_keys: &[String], directive_attrs_json: &str) -> String {
+pub fn compile_key(
+    source_parse_key: &str,
+    resolve_keys: &[String],
+    directive_attrs_json: &str,
+) -> String {
     let mut parts: Vec<&str> = vec![source_parse_key, directive_attrs_json, proof_version()];
     let resolve_joined: String = resolve_keys.join("|");
     parts.push(&resolve_joined);
     // Re-borrow to avoid lifetime issues
-    compute_key(&[source_parse_key, &resolve_joined, directive_attrs_json, proof_version()])
+    compute_key(&[
+        source_parse_key,
+        &resolve_joined,
+        directive_attrs_json,
+        proof_version(),
+    ])
 }
 
 pub fn load_compile_cache(root: &Path, key: &str) -> Option<CompileCacheEntry> {
@@ -184,7 +198,8 @@ pub fn try_compile_cache_hit(
     index: &mut PathIndex,
 ) -> Option<String> {
     let source_parse_key = get_or_compute_parse_key(source_path, source_content, index);
-    let resolve_keys: Vec<String> = resolved_file_contents.iter()
+    let resolve_keys: Vec<String> = resolved_file_contents
+        .iter()
         .map(|(p, c)| {
             let path = root.join(p);
             get_or_compute_parse_key(&path, c, index)
@@ -208,7 +223,8 @@ pub fn store_compile_cache(
     index: &mut PathIndex,
 ) {
     let source_parse_key = get_or_compute_parse_key(source_path, source_content, index);
-    let resolve_keys: Vec<String> = resolved_file_contents.iter()
+    let resolve_keys: Vec<String> = resolved_file_contents
+        .iter()
         .map(|(p, c)| {
             let path = root.join(p);
             get_or_compute_parse_key(&path, c, index)
@@ -244,7 +260,7 @@ pub struct ResolveCacheEntry {
     pub resolve_key: String,
     pub uri: String,
     pub target_parse_key: String,
-    pub content: String,          // resolved figure content
+    pub content: String, // resolved figure content
     pub proof_version: String,
     pub created_at: u64,
 }
@@ -319,14 +335,19 @@ pub fn prune_cache(root: &Path, max_age_days: u64) -> usize {
     let cutoff = epoch_ms().saturating_sub(max_age_days * 24 * 3600 * 1000);
     let mut removed = 0;
     for tier_dir in [parse_dir(root), resolve_dir(root), compile_dir(root)] {
-        let Ok(entries) = std::fs::read_dir(&tier_dir) else { continue; };
+        let Ok(entries) = std::fs::read_dir(&tier_dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") { continue; }
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
             // Read created_at from the JSON
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if val.get("created_at")
+                    if val
+                        .get("created_at")
                         .and_then(|v| v.as_u64())
                         .map(|ts| ts < cutoff)
                         .unwrap_or(true)
@@ -344,7 +365,6 @@ pub fn prune_cache(root: &Path, max_age_days: u64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn compute_key_stable() {
@@ -374,12 +394,15 @@ mod tests {
         let root = dir.path();
         let _ = std::fs::create_dir_all(cache_dir(root));
         let mut index = PathIndex::new();
-        index.insert("foo.md".to_string(), PathIndexEntry {
-            parse_key: "abc".to_string(),
-            mtime_ms: 123,
-            size: 456,
-            content_hash: "def".to_string(),
-        });
+        index.insert(
+            "foo.md".to_string(),
+            PathIndexEntry {
+                parse_key: "abc".to_string(),
+                mtime_ms: 123,
+                size: 456,
+                content_hash: "def".to_string(),
+            },
+        );
         save_path_index(root, &index);
         let loaded = load_path_index(root);
         assert_eq!(loaded.get("foo.md").unwrap().parse_key, "abc");
@@ -451,7 +474,13 @@ mod tests {
         let target = dir.path().join("fig.md");
         std::fs::write(&target, "```\ncontent\n```").unwrap();
         let mut index = PathIndex::new();
-        let result = try_resolve_cache_hit(dir.path(), &target, "```\ncontent\n```", "md://fig.md#:0", &mut index);
+        let result = try_resolve_cache_hit(
+            dir.path(),
+            &target,
+            "```\ncontent\n```",
+            "md://fig.md#:0",
+            &mut index,
+        );
         assert!(result.is_none(), "fresh cache should be a miss");
     }
 
@@ -464,11 +493,28 @@ mod tests {
         let mut index = PathIndex::new();
 
         // Store
-        store_resolve_cache(dir.path(), &target, figure_content, "md://fig.md#:0", "resolved content", &mut index);
+        store_resolve_cache(
+            dir.path(),
+            &target,
+            figure_content,
+            "md://fig.md#:0",
+            "resolved content",
+            &mut index,
+        );
 
         // Hit
-        let hit = try_resolve_cache_hit(dir.path(), &target, figure_content, "md://fig.md#:0", &mut index);
-        assert_eq!(hit.as_deref(), Some("resolved content"), "should hit after store");
+        let hit = try_resolve_cache_hit(
+            dir.path(),
+            &target,
+            figure_content,
+            "md://fig.md#:0",
+            &mut index,
+        );
+        assert_eq!(
+            hit.as_deref(),
+            Some("resolved content"),
+            "should hit after store"
+        );
     }
 
     #[test]
@@ -479,7 +525,14 @@ mod tests {
 
         // Store with v1
         std::fs::write(&target, "v1").unwrap();
-        store_resolve_cache(dir.path(), &target, "v1", "md://fig.md#:0", "result v1", &mut index);
+        store_resolve_cache(
+            dir.path(),
+            &target,
+            "v1",
+            "md://fig.md#:0",
+            "result v1",
+            &mut index,
+        );
 
         // Try with v2 — different content → miss
         let hit = try_resolve_cache_hit(dir.path(), &target, "v2", "md://fig.md#:0", &mut index);

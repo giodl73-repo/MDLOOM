@@ -4,7 +4,6 @@
 /// for all non-dirtree tree kinds: org, taxonomy, dependency, outline, decision.
 ///
 /// Uses field mapping (explicit or auto-detected) rather than rigid column names.
-
 use crate::checks::ascii_tree::{Connector, TreeNode};
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
@@ -16,13 +15,13 @@ use std::collections::{HashMap, HashSet};
 /// Field mapping for tree source data.
 #[derive(Debug, Clone, Default)]
 pub struct FieldMap {
-    pub name: Option<String>,    // column/field that holds the node label
-    pub parent: Option<String>,  // column/field that holds the parent reference
-    pub label: Option<String>,   // optional display text (defaults to name)
-    pub level: Option<String>,   // for taxonomy: the classification level
-    pub yes_branch: Option<String>, // for decision: the "yes" target column
-    pub no_branch: Option<String>,  // for decision: the "no" target column
-    pub version: Option<String>, // for dependency: optional version column
+    pub name: Option<String>,        // column/field that holds the node label
+    pub parent: Option<String>,      // column/field that holds the parent reference
+    pub label: Option<String>,       // optional display text (defaults to name)
+    pub level: Option<String>,       // for taxonomy: the classification level
+    pub yes_branch: Option<String>,  // for decision: the "yes" target column
+    pub no_branch: Option<String>,   // for decision: the "no" target column
+    pub version: Option<String>,     // for dependency: optional version column
     pub root_marker: Option<String>, // value that marks root (default: —, -, null, empty)
 }
 
@@ -35,7 +34,9 @@ impl FieldMap {
         if let Some(ref marker) = self.root_marker {
             return trimmed.eq_ignore_ascii_case(marker);
         }
-        DEFAULT_ROOT_MARKERS.iter().any(|m| trimmed.eq_ignore_ascii_case(m))
+        DEFAULT_ROOT_MARKERS
+            .iter()
+            .any(|m| trimmed.eq_ignore_ascii_case(m))
     }
 }
 
@@ -43,21 +44,24 @@ impl FieldMap {
 // Auto-detection of field names
 // ─────────────────────────────────────────────────────────
 
-const ORG_NAME_CANDIDATES:   &[&str] = &["name", "employee", "person", "member", "who"];
+const ORG_NAME_CANDIDATES: &[&str] = &["name", "employee", "person", "member", "who"];
 const ORG_PARENT_CANDIDATES: &[&str] = &["parent", "manager", "reports_to", "superior", "boss"];
-const ORG_LABEL_CANDIDATES:  &[&str] = &["label", "title", "role", "position"];
+const ORG_LABEL_CANDIDATES: &[&str] = &["label", "title", "role", "position"];
 
-const TAX_NAME_CANDIDATES:   &[&str] = &["label", "name", "taxon", "term", "taxon_name"];
+const TAX_NAME_CANDIDATES: &[&str] = &["label", "name", "taxon", "term", "taxon_name"];
 const TAX_PARENT_CANDIDATES: &[&str] = &["parent", "parent_taxon", "belongs_to", "parent_name"];
-const TAX_LEVEL_CANDIDATES:  &[&str] = &["level", "rank", "classification", "tier"];
+const TAX_LEVEL_CANDIDATES: &[&str] = &["level", "rank", "classification", "tier"];
 
-const DEP_NAME_CANDIDATES:   &[&str] = &["package", "name", "module", "crate", "lib"];
+const DEP_NAME_CANDIDATES: &[&str] = &["package", "name", "module", "crate", "lib"];
 const DEP_PARENT_CANDIDATES: &[&str] = &["depends_on", "requires", "dependency", "uses", "parent"];
-const DEP_VER_CANDIDATES:    &[&str] = &["version", "ver", "semver"];
+const DEP_VER_CANDIDATES: &[&str] = &["version", "ver", "semver"];
 
-#[allow(dead_code)] const DEC_NODE_CANDIDATES: &[&str] = &["node", "condition", "question", "id", "step"];
-#[allow(dead_code)] const DEC_YES_CANDIDATES:  &[&str] = &["yes", "true", "yes_branch", "then", "if_yes"];
-#[allow(dead_code)] const DEC_NO_CANDIDATES:   &[&str] = &["no", "false", "no_branch", "else", "if_no"];
+#[allow(dead_code)]
+const DEC_NODE_CANDIDATES: &[&str] = &["node", "condition", "question", "id", "step"];
+#[allow(dead_code)]
+const DEC_YES_CANDIDATES: &[&str] = &["yes", "true", "yes_branch", "then", "if_yes"];
+#[allow(dead_code)]
+const DEC_NO_CANDIDATES: &[&str] = &["no", "false", "no_branch", "else", "if_no"];
 
 fn find_column<'a>(headers: &'a [String], candidates: &[&str]) -> Option<&'a str> {
     for candidate in candidates {
@@ -123,7 +127,7 @@ fn auto_detect_decision(headers: &[String], map: &mut FieldMap) {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) struct SourceRow {
+pub struct SourceRow {
     name: String,
     parent: String,     // empty if root
     label: String,      // may equal name if no label column
@@ -141,7 +145,8 @@ pub(crate) struct SourceRow {
 /// is a HashMap<header, cell_value>.
 pub fn parse_md_table(content: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
     // Skip preamble (headings, prose) — find the first pipe-table line
-    let lines: Vec<&str> = content.lines()
+    let lines: Vec<&str> = content
+        .lines()
         .map(|l| l.trim())
         .filter(|l| !l.is_empty() && l.starts_with('|'))
         .collect();
@@ -164,7 +169,9 @@ pub fn parse_md_table(content: &str) -> Result<(Vec<String>, Vec<HashMap<String,
     // Skip separator (line 1)
     let mut rows = Vec::new();
     for &line in &lines[2..] {
-        if !line.starts_with('|') { break; }
+        if !line.starts_with('|') {
+            break;
+        }
         let cells: Vec<String> = parse_table_row(line)
             .into_iter()
             .map(|c| c.trim().to_string())
@@ -192,10 +199,11 @@ fn parse_table_row(line: &str) -> Vec<String> {
 /// Parse a JSON array of objects into rows for tree generation.
 /// Uses serde_json which is already a proof dependency.
 pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
-    let value: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))?;
+    let value: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))?;
 
-    let arr = value.as_array()
+    let arr = value
+        .as_array()
         .ok_or_else(|| anyhow::anyhow!("JSON source must be an array of objects"))?;
 
     if arr.is_empty() {
@@ -203,17 +211,20 @@ pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<Stri
     }
 
     // Collect all keys from the first object as headers
-    let first = arr[0].as_object()
+    let first = arr[0]
+        .as_object()
         .ok_or_else(|| anyhow::anyhow!("JSON array elements must be objects"))?;
     let headers: Vec<String> = first.keys().map(|k| k.clone()).collect();
 
     let mut rows = Vec::new();
     for item in arr {
-        let obj = item.as_object()
+        let obj = item
+            .as_object()
             .ok_or_else(|| anyhow::anyhow!("JSON array element is not an object"))?;
         let mut row = HashMap::new();
         for header in &headers {
-            let val = obj.get(header)
+            let val = obj
+                .get(header)
                 .map(|v| match v {
                     serde_json::Value::String(s) => s.clone(),
                     serde_json::Value::Null => String::new(),
@@ -234,10 +245,7 @@ pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<Stri
 
 /// Build a list of TreeNodes in depth-first order from a flat list of (name, parent, label).
 /// Handles cycles (nodes whose parent doesn't exist are treated as orphans).
-pub fn build_dfs_tree(
-    rows: &[SourceRow],
-    map: &FieldMap,
-) -> Result<Vec<TreeNode>> {
+pub fn build_dfs_tree(rows: &[SourceRow], map: &FieldMap) -> Result<Vec<TreeNode>> {
     // Build adjacency: parent_name → [child_names]
     let mut children: HashMap<String, Vec<usize>> = HashMap::new();
     let mut roots: Vec<usize> = Vec::new();
@@ -259,7 +267,10 @@ pub fn build_dfs_tree(
         let mut seen = std::collections::HashSet::new();
         let mut synth = Vec::new();
         for row in rows {
-            if !row.parent.is_empty() && !map.is_root_marker(&row.parent) && !named.contains(&row.parent) {
+            if !row.parent.is_empty()
+                && !map.is_root_marker(&row.parent)
+                && !named.contains(&row.parent)
+            {
                 if seen.insert(row.parent.clone()) {
                     synth.push(row.parent.clone());
                 }
@@ -280,22 +291,49 @@ pub fn build_dfs_tree(
     // Emit explicit root rows
     for root_idx in &roots {
         let row = &rows[*root_idx];
-        let label = if row.label.is_empty() { row.name.clone() } else { row.label.clone() };
+        let label = if row.label.is_empty() {
+            row.name.clone()
+        } else {
+            row.label.clone()
+        };
         nodes.push(TreeNode {
-            line_no, indent_level: 0, connector: Connector::None, label, raw: String::new(),
+            line_no,
+            indent_level: 0,
+            connector: Connector::None,
+            label,
+            raw: String::new(),
         });
         line_no += 1;
-        dfs_children(&row.name, &children, rows, 1, &mut nodes, &mut line_no, &mut HashSet::new());
+        dfs_children(
+            &row.name,
+            &children,
+            rows,
+            1,
+            &mut nodes,
+            &mut line_no,
+            &mut HashSet::new(),
+        );
     }
 
     // Emit synthesized root nodes (category labels not present as named rows)
     for parent_name in &synthetic_roots {
         nodes.push(TreeNode {
-            line_no, indent_level: 0, connector: Connector::None,
-            label: parent_name.clone(), raw: String::new(),
+            line_no,
+            indent_level: 0,
+            connector: Connector::None,
+            label: parent_name.clone(),
+            raw: String::new(),
         });
         line_no += 1;
-        dfs_children(parent_name, &children, rows, 1, &mut nodes, &mut line_no, &mut HashSet::new());
+        dfs_children(
+            parent_name,
+            &children,
+            rows,
+            1,
+            &mut nodes,
+            &mut line_no,
+            &mut HashSet::new(),
+        );
     }
 
     Ok(nodes)
@@ -310,16 +348,22 @@ fn dfs_children(
     line_no: &mut usize,
     visited: &mut HashSet<String>,
 ) {
-    if visited.contains(parent_name) { return; } // cycle guard
+    if visited.contains(parent_name) {
+        return;
+    } // cycle guard
     visited.insert(parent_name.to_string());
 
-    let Some(child_indices) = children_map.get(parent_name) else { return };
+    let Some(child_indices) = children_map.get(parent_name) else {
+        return;
+    };
     let n = child_indices.len();
 
     for (i, &idx) in child_indices.iter().enumerate() {
         let row = &rows[idx];
         let is_last = i == n - 1;
-        let label = if row.label.is_empty() { row.name.clone() } else {
+        let label = if row.label.is_empty() {
+            row.name.clone()
+        } else {
             if row.version.is_empty() {
                 row.label.clone()
             } else {
@@ -336,13 +380,25 @@ fn dfs_children(
         nodes.push(TreeNode {
             line_no: *line_no,
             indent_level: level,
-            connector: if is_last { Connector::Corner } else { Connector::Tee },
+            connector: if is_last {
+                Connector::Corner
+            } else {
+                Connector::Tee
+            },
             label: display,
             raw: String::new(),
         });
         *line_no += 1;
 
-        dfs_children(&row.name, children_map, rows, level + 1, nodes, line_no, visited);
+        dfs_children(
+            &row.name,
+            children_map,
+            rows,
+            level + 1,
+            nodes,
+            line_no,
+            visited,
+        );
     }
 
     visited.remove(parent_name);
@@ -362,25 +418,39 @@ pub fn generate_org(
     let (headers, table_rows) = parse_source(content, format)?;
     auto_detect_org(&headers, map);
 
-    let name_col = map.name.as_deref()
-        .ok_or_else(|| anyhow::anyhow!("cannot detect name column — specify with name=\"ColName\""))?;
-    let parent_col = map.parent.as_deref()
-        .ok_or_else(|| anyhow::anyhow!("cannot detect parent column — specify with parent=\"ColName\""))?;
+    let name_col = map.name.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("cannot detect name column — specify with name=\"ColName\"")
+    })?;
+    let parent_col = map.parent.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("cannot detect parent column — specify with parent=\"ColName\"")
+    })?;
     let label_col = map.label.as_deref();
 
-    let rows: Vec<SourceRow> = table_rows.iter().map(|row| {
-        let name = row.get(name_col).cloned().unwrap_or_default();
-        let parent = row.get(parent_col).cloned().unwrap_or_default();
-        let title = label_col.and_then(|c| row.get(c)).cloned()
-            .filter(|s| !s.is_empty());
-        // Display as "Title: Name" when both title and name are available
-        let label = match &title {
-            Some(t) if t != &name => format!("{}: {}", t, name),
-            _ => name.clone(),
-        };
-        SourceRow { name, parent, label, version: String::new(), level: String::new(),
-                    yes_target: String::new(), no_target: String::new() }
-    }).collect();
+    let rows: Vec<SourceRow> = table_rows
+        .iter()
+        .map(|row| {
+            let name = row.get(name_col).cloned().unwrap_or_default();
+            let parent = row.get(parent_col).cloned().unwrap_or_default();
+            let title = label_col
+                .and_then(|c| row.get(c))
+                .cloned()
+                .filter(|s| !s.is_empty());
+            // Display as "Title: Name" when both title and name are available
+            let label = match &title {
+                Some(t) if t != &name => format!("{}: {}", t, name),
+                _ => name.clone(),
+            };
+            SourceRow {
+                name,
+                parent,
+                label,
+                version: String::new(),
+                level: String::new(),
+                yes_target: String::new(),
+                no_target: String::new(),
+            }
+        })
+        .collect();
 
     let nodes = build_dfs_tree(&rows, map)?;
     Ok(render_nodes(&nodes, indent_width))
@@ -396,19 +466,38 @@ pub fn generate_taxonomy(
     let (headers, table_rows) = parse_source(content, format)?;
     auto_detect_taxonomy(&headers, map);
 
-    let name_col = map.name.as_deref()
-        .ok_or_else(|| anyhow::anyhow!("cannot detect name column — specify with name=\"ColName\""))?;
-    let parent_col = map.parent.as_deref()
-        .ok_or_else(|| anyhow::anyhow!("cannot detect parent column — specify with parent=\"ColName\""))?;
+    let name_col = map.name.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("cannot detect name column — specify with name=\"ColName\"")
+    })?;
+    let parent_col = map.parent.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("cannot detect parent column — specify with parent=\"ColName\"")
+    })?;
     let level_col = map.level.as_deref();
 
-    let rows: Vec<SourceRow> = table_rows.iter().map(|row| {
-        let name = row.get(name_col).cloned().unwrap_or_default();
-        let parent = row.get(parent_col).cloned().unwrap_or_default();
-        let level = level_col.and_then(|c| row.get(c)).cloned().unwrap_or_default();
-        SourceRow { name: name.clone(), parent, label: if level.is_empty() { name } else { format!("{}: {}", level, name) },
-                    version: String::new(), level, yes_target: String::new(), no_target: String::new() }
-    }).collect();
+    let rows: Vec<SourceRow> = table_rows
+        .iter()
+        .map(|row| {
+            let name = row.get(name_col).cloned().unwrap_or_default();
+            let parent = row.get(parent_col).cloned().unwrap_or_default();
+            let level = level_col
+                .and_then(|c| row.get(c))
+                .cloned()
+                .unwrap_or_default();
+            SourceRow {
+                name: name.clone(),
+                parent,
+                label: if level.is_empty() {
+                    name
+                } else {
+                    format!("{}: {}", level, name)
+                },
+                version: String::new(),
+                level,
+                yes_target: String::new(),
+                no_target: String::new(),
+            }
+        })
+        .collect();
 
     let nodes = build_dfs_tree(&rows, map)?;
     Ok(render_nodes(&nodes, indent_width))
@@ -424,19 +513,36 @@ pub fn generate_dependency(
     let (headers, table_rows) = parse_source(content, format)?;
     auto_detect_dependency(&headers, map);
 
-    let name_col = map.name.as_deref()
+    let name_col = map
+        .name
+        .as_deref()
         .ok_or_else(|| anyhow::anyhow!("cannot detect package name column"))?;
-    let parent_col = map.parent.as_deref()
+    let parent_col = map
+        .parent
+        .as_deref()
         .ok_or_else(|| anyhow::anyhow!("cannot detect dependency column"))?;
     let ver_col = map.version.as_deref();
 
-    let rows: Vec<SourceRow> = table_rows.iter().map(|row| {
-        let name = row.get(name_col).cloned().unwrap_or_default();
-        let parent = row.get(parent_col).cloned().unwrap_or_default();
-        let version = ver_col.and_then(|c| row.get(c)).cloned().unwrap_or_default();
-        SourceRow { name: name.clone(), parent, label: name, version, level: String::new(),
-                    yes_target: String::new(), no_target: String::new() }
-    }).collect();
+    let rows: Vec<SourceRow> = table_rows
+        .iter()
+        .map(|row| {
+            let name = row.get(name_col).cloned().unwrap_or_default();
+            let parent = row.get(parent_col).cloned().unwrap_or_default();
+            let version = ver_col
+                .and_then(|c| row.get(c))
+                .cloned()
+                .unwrap_or_default();
+            SourceRow {
+                name: name.clone(),
+                parent,
+                label: name,
+                version,
+                level: String::new(),
+                yes_target: String::new(),
+                no_target: String::new(),
+            }
+        })
+        .collect();
 
     // DFS with deduplication tracking
     let nodes = build_dfs_tree_with_dedup(&rows, map)?;
@@ -468,15 +574,30 @@ fn build_dfs_tree_with_dedup(rows: &[SourceRow], map: &FieldMap) -> Result<Vec<T
 
     for root_idx in &roots {
         let row = &rows[*root_idx];
-        let display = if row.version.is_empty() { row.name.clone() }
-                      else { format!("{} {}", row.name, row.version) };
+        let display = if row.version.is_empty() {
+            row.name.clone()
+        } else {
+            format!("{} {}", row.name, row.version)
+        };
         first_seen.insert(row.name.clone(), line_no);
         nodes.push(TreeNode {
-            line_no, indent_level: 0, connector: Connector::None,
-            label: display, raw: String::new(),
+            line_no,
+            indent_level: 0,
+            connector: Connector::None,
+            label: display,
+            raw: String::new(),
         });
         line_no += 1;
-        dfs_dedup(&row.name, &children, rows, 1, &mut nodes, &mut line_no, &mut first_seen, &mut HashSet::new());
+        dfs_dedup(
+            &row.name,
+            &children,
+            rows,
+            1,
+            &mut nodes,
+            &mut line_no,
+            &mut first_seen,
+            &mut HashSet::new(),
+        );
     }
 
     Ok(nodes)
@@ -492,34 +613,57 @@ fn dfs_dedup(
     first_seen: &mut HashMap<String, usize>,
     visiting: &mut HashSet<String>,
 ) {
-    if visiting.contains(parent_name) { return; }
+    if visiting.contains(parent_name) {
+        return;
+    }
     visiting.insert(parent_name.to_string());
 
-    let Some(child_indices) = children_map.get(parent_name) else { return };
+    let Some(child_indices) = children_map.get(parent_name) else {
+        return;
+    };
     let n = child_indices.len();
 
     for (i, &idx) in child_indices.iter().enumerate() {
         let row = &rows[idx];
         let is_last = i == n - 1;
-        let connector = if is_last { Connector::Corner } else { Connector::Tee };
+        let connector = if is_last {
+            Connector::Corner
+        } else {
+            Connector::Tee
+        };
 
         let label = if let Some(&first_line) = first_seen.get(&row.name) {
             format!("{} (deduped ↑ {})", row.name, first_line)
         } else {
             first_seen.insert(row.name.clone(), *line_no);
-            if row.version.is_empty() { row.name.clone() }
-            else { format!("{} {}", row.name, row.version) }
+            if row.version.is_empty() {
+                row.name.clone()
+            } else {
+                format!("{} {}", row.name, row.version)
+            }
         };
 
         nodes.push(TreeNode {
-            line_no: *line_no, indent_level: level, connector,
-            label: label.clone(), raw: String::new(),
+            line_no: *line_no,
+            indent_level: level,
+            connector,
+            label: label.clone(),
+            raw: String::new(),
         });
         *line_no += 1;
 
         // Only recurse into non-deduped nodes
         if !label.contains("deduped") {
-            dfs_dedup(&row.name, children_map, rows, level + 1, nodes, line_no, first_seen, visiting);
+            dfs_dedup(
+                &row.name,
+                children_map,
+                rows,
+                level + 1,
+                nodes,
+                line_no,
+                first_seen,
+                visiting,
+            );
         }
     }
 
@@ -552,7 +696,7 @@ pub fn generate_outline(content: &str, indent_width: usize) -> Result<String> {
     for (i, (level, text)) in headings.iter().enumerate() {
         let depth = level - min_level;
         // Determine if this is the last sibling at this level
-        let is_last = !headings[i+1..].iter().any(|(l, _)| l <= level);
+        let is_last = !headings[i + 1..].iter().any(|(l, _)| l <= level);
         let connector = if depth == 0 {
             Connector::None
         } else if is_last {
@@ -561,8 +705,11 @@ pub fn generate_outline(content: &str, indent_width: usize) -> Result<String> {
             Connector::Tee
         };
         nodes.push(TreeNode {
-            line_no, indent_level: depth, connector,
-            label: text.clone(), raw: String::new(),
+            line_no,
+            indent_level: depth,
+            connector,
+            label: text.clone(),
+            raw: String::new(),
         });
         line_no += 1;
     }
@@ -582,7 +729,9 @@ pub fn render_nodes(nodes: &[TreeNode], indent_width: usize) -> String {
 
     for i in 0..n {
         let node = &nodes[i];
-        if node.connector == Connector::Continuation { continue; }
+        if node.connector == Connector::Continuation {
+            continue;
+        }
 
         let level = node.indent_level;
 
@@ -599,9 +748,13 @@ pub fn render_nodes(nodes: &[TreeNode], indent_width: usize) -> String {
                 let open = is_level_open(nodes, i, l);
                 if open {
                     p.push('│');
-                    for _ in 0..iw.saturating_sub(1) { p.push(' '); }
+                    for _ in 0..iw.saturating_sub(1) {
+                        p.push(' ');
+                    }
                 } else {
-                    for _ in 0..iw { p.push(' '); }
+                    for _ in 0..iw {
+                        p.push(' ');
+                    }
                 }
             }
             p
@@ -624,8 +777,12 @@ pub fn render_nodes(nodes: &[TreeNode], indent_width: usize) -> String {
 /// is a sibling at level `l` after `pos` without any node at level < `l` in between.
 fn is_level_open(nodes: &[TreeNode], pos: usize, l: usize) -> bool {
     for node in &nodes[pos + 1..] {
-        if node.connector == Connector::Continuation { continue; }
-        if node.indent_level < l { return false; } // left the branch
+        if node.connector == Connector::Continuation {
+            continue;
+        }
+        if node.indent_level < l {
+            return false;
+        } // left the branch
         if node.indent_level == l {
             return node.connector == Connector::Tee || node.connector == Connector::Corner;
         }
@@ -637,7 +794,10 @@ fn is_level_open(nodes: &[TreeNode], pos: usize, l: usize) -> bool {
 // Helper: parse source by format
 // ─────────────────────────────────────────────────────────
 
-fn parse_source(content: &str, format: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
+fn parse_source(
+    content: &str,
+    format: &str,
+) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
     match format {
         "json" => parse_json_source(content),
         _ => parse_md_table(content), // default: markdown table
@@ -719,18 +879,36 @@ mod tests {
         let result = generate_dependency(table, "table", &mut FieldMap::default(), 4).unwrap();
         assert!(result.contains("core"));
         // core appears as both a dep of lib and tool — second should be deduped
-        let deduped_count = result.matches("deduped").count();
+        let _deduped_count = result.matches("deduped").count();
         // core is the root, so it appears once. lib and tool both depend on it
         // but core is the root so all dependencies flow from it
-        assert!(deduped_count >= 0); // dedup only applies for repeated subtrees
+        assert!(result.contains("core")); // dedup only applies for repeated subtrees
     }
 
     #[test]
     fn test_render_nodes_basic() {
         let nodes = vec![
-            TreeNode { line_no: 1, indent_level: 0, connector: Connector::None, label: "root".into(), raw: String::new() },
-            TreeNode { line_no: 2, indent_level: 1, connector: Connector::Tee, label: "child-a".into(), raw: String::new() },
-            TreeNode { line_no: 3, indent_level: 1, connector: Connector::Corner, label: "child-b".into(), raw: String::new() },
+            TreeNode {
+                line_no: 1,
+                indent_level: 0,
+                connector: Connector::None,
+                label: "root".into(),
+                raw: String::new(),
+            },
+            TreeNode {
+                line_no: 2,
+                indent_level: 1,
+                connector: Connector::Tee,
+                label: "child-a".into(),
+                raw: String::new(),
+            },
+            TreeNode {
+                line_no: 3,
+                indent_level: 1,
+                connector: Connector::Corner,
+                label: "child-b".into(),
+                raw: String::new(),
+            },
         ];
         let rendered = render_nodes(&nodes, 4);
         assert!(rendered.contains("root"));

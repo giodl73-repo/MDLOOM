@@ -12,11 +12,9 @@
 ///
 /// Tables are detected OUTSIDE code blocks only.
 /// Separator cells must match: optional spaces + optional `:` + 3+ dashes + optional `:` + optional spaces
-
 use crate::checks::Check;
 use crate::config::{MarkdownTableConfig, TableSchema};
 use crate::diagnostic::Diagnostic;
-use std::collections::HashMap;
 use std::path::Path;
 
 pub struct MarkdownTableCheck {
@@ -24,7 +22,9 @@ pub struct MarkdownTableCheck {
 }
 
 impl Check for MarkdownTableCheck {
-    fn name(&self) -> &'static str { "markdown_table" }
+    fn name(&self) -> &'static str {
+        "markdown_table"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
         if !self.config.enabled {
@@ -46,22 +46,33 @@ impl Check for MarkdownTableCheck {
         for table in &tables {
             if self.config.check_empty_headers {
                 for (ci, header) in table.headers.iter().enumerate() {
+                    if ci == 0 && is_row_label_corner(table) {
+                        continue;
+                    }
                     if header.trim().is_empty() {
                         diags.push(Diagnostic::warning(
-                            path.to_path_buf(), table.line, ci + 1,
+                            path.to_path_buf(),
+                            table.line,
+                            ci + 1,
                             "md_table_empty_header",
-                            format!("column {} has an empty header — all columns should be named", ci + 1),
+                            format!(
+                                "column {} has an empty header — all columns should be named",
+                                ci + 1
+                            ),
                         ));
                     }
                 }
             }
             if self.config.max_columns > 0 && table.col_count() > self.config.max_columns {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), table.line, 1,
+                    path.to_path_buf(),
+                    table.line,
+                    1,
                     "md_table_too_wide",
                     format!(
                         "table has {} columns, exceeds max of {} — consider splitting or rotating",
-                        table.col_count(), self.config.max_columns
+                        table.col_count(),
+                        self.config.max_columns
                     ),
                 ));
             }
@@ -71,7 +82,9 @@ impl Check for MarkdownTableCheck {
         if let Some(min) = self.config.required_tables {
             if tables.len() < min {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), 1, 1,
+                    path.to_path_buf(),
+                    1,
+                    1,
                     "md_missing_table",
                     format!(
                         "file has {} pipe table{}, requires at least {}",
@@ -122,7 +135,8 @@ impl ParsedTable {
 
     /// All values in the first (key) column of body rows
     pub fn key_column_values(&self) -> Vec<&str> {
-        self.body_rows.iter()
+        self.body_rows
+            .iter()
             .filter_map(|row| row.first().map(|s| s.as_str()))
             .collect()
     }
@@ -183,7 +197,9 @@ pub fn parse_tables(lines: &[&str], in_code: &[bool]) -> Vec<ParsedTable> {
 /// True if this line looks like a table row (has at least 2 pipe chars).
 fn is_table_row(line: &str) -> bool {
     let trimmed = line.trim();
-    trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.chars().filter(|&c| c == '|').count() >= 2
+    trimmed.starts_with('|')
+        && trimmed.ends_with('|')
+        && trimmed.chars().filter(|&c| c == '|').count() >= 2
 }
 
 /// True if this row looks like a GFM separator row — used for DETECTION only.
@@ -191,7 +207,9 @@ fn is_table_row(line: &str) -> bool {
 /// the separator is malformed. Validation of minimum dash count happens separately.
 fn is_separator_row(line: &str) -> bool {
     let cells = parse_row(line);
-    if cells.is_empty() { return false; }
+    if cells.is_empty() {
+        return false;
+    }
     cells.iter().all(|cell| is_separator_cell_lenient(cell))
 }
 
@@ -199,7 +217,9 @@ fn is_separator_row(line: &str) -> bool {
 /// dashes, colons, and spaces — but does not enforce the ≥3 dash minimum.
 fn is_separator_cell_lenient(cell: &str) -> bool {
     let trimmed = cell.trim();
-    if trimmed.is_empty() { return false; }
+    if trimmed.is_empty() {
+        return false;
+    }
     let core = trimmed.trim_start_matches(':').trim_end_matches(':');
     let dashes = core.chars().filter(|&c| c == '-').count();
     dashes >= 1 && core.chars().all(|c| c == '-' || c == ' ')
@@ -223,11 +243,21 @@ fn is_separator_cell_strict(cell: &str, min_dashes: usize) -> bool {
 /// See: https://github.github.com/gfm/#tables (§4.10)
 fn parse_row(line: &str) -> Vec<String> {
     let trimmed = line.trim();
-    if trimmed.is_empty() { return Vec::new(); }
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
 
     // Identify the inner content (between outer pipe delimiters if present)
-    let inner = if trimmed.starts_with('|') { &trimmed[1..] } else { trimmed };
-    let inner = if inner.ends_with('|') { &inner[..inner.len()-1] } else { inner };
+    let inner = if trimmed.starts_with('|') {
+        &trimmed[1..]
+    } else {
+        trimmed
+    };
+    let inner = if inner.ends_with('|') {
+        &inner[..inner.len() - 1]
+    } else {
+        inner
+    };
 
     // Walk character-by-character, respecting:
     //   \| — escaped pipe, kept as content
@@ -289,12 +319,18 @@ fn validate_structure(
             let trimmed = cell.trim();
             let core = trimmed.trim_start_matches(':').trim_end_matches(':');
             let dashes = core.chars().filter(|&c| c == '-').count();
+            if ci == 0 && is_row_label_corner(table) && dashes >= 2 {
+                continue;
+            }
             diags.push(Diagnostic::warning(
-                path.to_path_buf(), table.line + 1, 1,
+                path.to_path_buf(),
+                table.line + 1,
+                1,
                 "md_table_separator_invalid",
                 format!(
                     "separator column {} has {} dash{} — need at least {}",
-                    ci + 1, dashes,
+                    ci + 1,
+                    dashes,
                     if dashes == 1 { "" } else { "es" },
                     config.min_separator_dashes
                 ),
@@ -306,12 +342,16 @@ fn validate_structure(
     let sep_cols = table.separator_cells.len();
     if sep_cols != expected_cols {
         diags.push(Diagnostic::error(
-            path.to_path_buf(), table.line + 1, 1,
+            path.to_path_buf(),
+            table.line + 1,
+            1,
             "md_table_col_mismatch",
             format!(
                 "separator has {} column{} but header has {} (line {})",
-                sep_cols, if sep_cols == 1 { "" } else { "s" },
-                expected_cols, table.line
+                sep_cols,
+                if sep_cols == 1 { "" } else { "s" },
+                expected_cols,
+                table.line
             ),
         ));
     }
@@ -325,11 +365,14 @@ fn validate_structure(
                 continue;
             }
             diags.push(Diagnostic::error(
-                path.to_path_buf(), table.line + 2 + ri, 1,
+                path.to_path_buf(),
+                table.line + 2 + ri,
+                1,
                 "md_table_col_mismatch",
                 format!(
                     "body row {} has {} column{} but header has {} — all rows must match",
-                    ri + 1, row.len(),
+                    ri + 1,
+                    row.len(),
                     if row.len() == 1 { "" } else { "s" },
                     expected_cols
                 ),
@@ -341,32 +384,52 @@ fn validate_structure(
     if config.check_cell_padding {
         let min = config.min_cell_padding;
         // Check header and body rows (separator is exempt — dashes, not prose)
-        let all_content_rows: Vec<(usize, &Vec<String>)> = std::iter::once((table.line, &table.headers))
-            .chain(table.body_rows.iter().enumerate().map(|(i, r)| (table.line + 2 + i, r)))
-            .collect();
+        let all_content_rows: Vec<(usize, &Vec<String>)> =
+            std::iter::once((table.line, &table.headers))
+                .chain(table.body_rows.iter().enumerate().filter_map(|(i, row)| {
+                    if row.len() == expected_cols {
+                        Some((table.line + 2 + i, row))
+                    } else {
+                        None
+                    }
+                }))
+                .collect();
 
         for (line_no, cells) in all_content_rows {
             for (ci, cell) in cells.iter().enumerate() {
-                let leading = cell.len() - cell.trim_start().len();
-                let trailing = cell.len() - cell.trim_end().len();
+                if !has_room_for_padding(cell, min) {
+                    continue;
+                }
+                let leading = leading_whitespace_count(cell);
+                let trailing = trailing_whitespace_count(cell);
                 if leading < min {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), line_no, 1,
+                        path.to_path_buf(),
+                        line_no,
+                        1,
                         "md_table_cell_padding",
                         format!(
                             "column {} missing left padding (found {} space{}, need {}): {:?}",
-                            ci + 1, leading, if leading == 1 { "" } else { "s" }, min,
+                            ci + 1,
+                            leading,
+                            if leading == 1 { "" } else { "s" },
+                            min,
                             cell.trim()
                         ),
                     ));
                 }
                 if trailing < min {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), line_no, 1,
+                        path.to_path_buf(),
+                        line_no,
+                        1,
                         "md_table_cell_padding",
                         format!(
                             "column {} missing right padding (found {} space{}, need {}): {:?}",
-                            ci + 1, trailing, if trailing == 1 { "" } else { "s" }, min,
+                            ci + 1,
+                            trailing,
+                            if trailing == 1 { "" } else { "s" },
+                            min,
                             cell.trim()
                         ),
                     ));
@@ -378,6 +441,33 @@ fn validate_structure(
     diags
 }
 
+fn is_row_label_corner(table: &ParsedTable) -> bool {
+    table.headers.first().is_some_and(|h| h.trim().is_empty())
+        && table.headers.iter().skip(1).any(|h| !h.trim().is_empty())
+        && table
+            .body_rows
+            .iter()
+            .any(|row| row.first().is_some_and(|cell| !cell.trim().is_empty()))
+}
+
+fn has_room_for_padding(cell: &str, min_pad: usize) -> bool {
+    let available = visual_width(cell);
+    let content = visual_width(cell.trim());
+    content + (min_pad * 2) <= available
+}
+
+fn leading_whitespace_count(s: &str) -> usize {
+    s.chars().take_while(|c| c.is_whitespace()).count()
+}
+
+fn trailing_whitespace_count(s: &str) -> usize {
+    s.chars().rev().take_while(|c| c.is_whitespace()).count()
+}
+
+fn visual_width(s: &str) -> usize {
+    unicode_width::UnicodeWidthStr::width(s)
+}
+
 // ─────────────────────────────────────────────────────────
 // Schema validation
 // ─────────────────────────────────────────────────────────
@@ -387,15 +477,12 @@ fn has_markdown_link(cell: &str) -> bool {
     cell.contains("](") && cell.contains('[')
 }
 
-fn validate_schema(
-    path: &Path,
-    tables: &[ParsedTable],
-    schema: &TableSchema,
-) -> Vec<Diagnostic> {
+fn validate_schema(path: &Path, tables: &[ParsedTable], schema: &TableSchema) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
 
     // Find tables matching this schema's heading context
-    let matching: Vec<&ParsedTable> = tables.iter()
+    let matching: Vec<&ParsedTable> = tables
+        .iter()
         .filter(|t| schema_matches_table(schema, t))
         .collect();
 
@@ -403,7 +490,9 @@ fn validate_schema(
     if matching.is_empty() {
         let location = schema.heading.as_deref().unwrap_or("(any heading)");
         diags.push(Diagnostic::warning(
-            path.to_path_buf(), 1, 1,
+            path.to_path_buf(),
+            1,
+            1,
             "md_missing_table",
             format!(
                 "no table found under \"{}\"; required by table schema",
@@ -424,11 +513,13 @@ fn validate_schema(
 fn schema_matches_table(schema: &TableSchema, table: &ParsedTable) -> bool {
     match &schema.heading {
         None => true, // schema applies to any table
-        Some(required_heading) => {
-            table.heading_context.as_deref()
-                .map(|h| h.trim_start_matches('#').trim() == required_heading.trim_start_matches('#').trim())
-                .unwrap_or(false)
-        }
+        Some(required_heading) => table
+            .heading_context
+            .as_deref()
+            .map(|h| {
+                h.trim_start_matches('#').trim() == required_heading.trim_start_matches('#').trim()
+            })
+            .unwrap_or(false),
     }
 }
 
@@ -445,13 +536,21 @@ fn validate_table_against_schema(
         let found = table.headers.iter().any(|h| h.trim() == req_col.as_str());
         if !found {
             diags.push(Diagnostic::warning(
-                path.to_path_buf(), table.line, 1,
+                path.to_path_buf(),
+                table.line,
+                1,
                 "md_table_schema",
                 format!(
                     "table under \"{}\" missing required column \"{}\"\n  \
                      headers found: [{}]",
-                    heading, req_col,
-                    table.headers.iter().map(|h| format!("{:?}", h.trim())).collect::<Vec<_>>().join(", ")
+                    heading,
+                    req_col,
+                    table
+                        .headers
+                        .iter()
+                        .map(|h| format!("{:?}", h.trim()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             ));
         }
@@ -459,17 +558,31 @@ fn validate_table_against_schema(
 
     // required_columns_any — at least one must be present
     if !schema.required_columns_any.is_empty() {
-        let found_any = schema.required_columns_any.iter()
+        let found_any = schema
+            .required_columns_any
+            .iter()
             .any(|req| table.headers.iter().any(|h| h.trim() == req.as_str()));
         if !found_any {
             diags.push(Diagnostic::warning(
-                path.to_path_buf(), table.line, 1,
+                path.to_path_buf(),
+                table.line,
+                1,
                 "md_table_schema",
                 format!(
                     "table under \"{}\" must have at least one of: [{}]\n  headers: [{}]",
                     heading,
-                    schema.required_columns_any.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>().join(", "),
-                    table.headers.iter().map(|h| format!("{:?}", h.trim())).collect::<Vec<_>>().join(", ")
+                    schema
+                        .required_columns_any
+                        .iter()
+                        .map(|s| format!("{:?}", s))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    table
+                        .headers
+                        .iter()
+                        .map(|h| format!("{:?}", h.trim()))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             ));
         }
@@ -479,11 +592,14 @@ fn validate_table_against_schema(
     if let Some(min_rows) = schema.min_body_rows {
         if table.body_rows.len() < min_rows {
             diags.push(Diagnostic::warning(
-                path.to_path_buf(), table.line, 1,
+                path.to_path_buf(),
+                table.line,
+                1,
                 "md_table_schema",
                 format!(
                     "table under \"{}\" has {} body row{}, requires at least {}",
-                    heading, table.body_rows.len(),
+                    heading,
+                    table.body_rows.len(),
                     if table.body_rows.len() == 1 { "" } else { "s" },
                     min_rows
                 ),
@@ -498,13 +614,20 @@ fn validate_table_against_schema(
             let found = key_vals.iter().any(|v| v.trim() == req_key.as_str());
             if !found {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), table.line, 1,
+                    path.to_path_buf(),
+                    table.line,
+                    1,
                     "md_table_schema",
                     format!(
                         "table under \"{}\" missing required row with key \"{}\"\n  \
                          first-column values: [{}]",
-                        heading, req_key,
-                        key_vals.iter().map(|v| format!("{:?}", v.trim())).collect::<Vec<_>>().join(", ")
+                        heading,
+                        req_key,
+                        key_vals
+                            .iter()
+                            .map(|v| format!("{:?}", v.trim()))
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 ));
             }
@@ -514,19 +637,29 @@ fn validate_table_against_schema(
     // Column allowed values
     for (col_name, allowed) in &schema.column_allowed_values {
         // Find the column index
-        let col_idx = table.headers.iter().position(|h| h.trim() == col_name.as_str());
+        let col_idx = table
+            .headers
+            .iter()
+            .position(|h| h.trim() == col_name.as_str());
         if let Some(idx) = col_idx {
             for (ri, row) in table.body_rows.iter().enumerate() {
                 if let Some(cell) = row.get(idx) {
                     let val = cell.trim();
                     if !allowed.iter().any(|a| a.as_str() == val) {
                         diags.push(Diagnostic::warning(
-                            path.to_path_buf(), table.line + 2 + ri, 1,
+                            path.to_path_buf(),
+                            table.line + 2 + ri,
+                            1,
                             "md_table_schema",
                             format!(
                                 "column \"{}\" value {:?} not in allowed set: [{}]",
-                                col_name, val,
-                                allowed.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>().join(", ")
+                                col_name,
+                                val,
+                                allowed
+                                    .iter()
+                                    .map(|s| format!("{:?}", s))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
                             ),
                         ));
                     }
@@ -537,7 +670,10 @@ fn validate_table_against_schema(
 
     // Link column validation
     for link_col_name in &schema.link_columns {
-        let col_idx = table.headers.iter().position(|h| h.trim() == link_col_name.as_str());
+        let col_idx = table
+            .headers
+            .iter()
+            .position(|h| h.trim() == link_col_name.as_str());
         if let Some(idx) = col_idx {
             for (ri, row) in table.body_rows.iter().enumerate() {
                 if let Some(cell) = row.get(idx) {
@@ -563,7 +699,10 @@ fn validate_table_against_schema(
     // verify_link_targets: check that link paths exist on disk
     if schema.verify_link_targets {
         for link_col_name in &schema.link_columns {
-            let col_idx = table.headers.iter().position(|h| h.trim() == link_col_name.as_str());
+            let col_idx = table
+                .headers
+                .iter()
+                .position(|h| h.trim() == link_col_name.as_str());
             if let Some(idx) = col_idx {
                 for (ri, row) in table.body_rows.iter().enumerate() {
                     if let Some(cell) = row.get(idx) {
@@ -620,13 +759,20 @@ fn code_block_mask(lines: &[&str]) -> Vec<bool> {
             if matches!(ch, Some('`') | Some('~')) {
                 let c = ch.unwrap();
                 let run = trimmed.chars().take_while(|&x| x == c).count();
-                if run >= 3 { in_block = true; fence_char = c; fence_len = run; }
+                if run >= 3 {
+                    in_block = true;
+                    fence_char = c;
+                    fence_len = run;
+                }
             }
         } else {
             let ch = trimmed.chars().next();
             if ch == Some(fence_char) {
                 let run = trimmed.chars().take_while(|&x| x == fence_char).count();
-                if run >= fence_len { in_block = false; continue; }
+                if run >= fence_len {
+                    in_block = false;
+                    continue;
+                }
             }
             mask[i] = true;
         }
@@ -638,9 +784,12 @@ fn code_block_mask(lines: &[&str]) -> Vec<bool> {
 mod tests {
     use super::*;
     use crate::config::{MarkdownTableConfig, TableSchema};
+    use std::collections::HashMap;
 
     fn default_check() -> MarkdownTableCheck {
-        MarkdownTableCheck { config: MarkdownTableConfig::default() }
+        MarkdownTableCheck {
+            config: MarkdownTableConfig::default(),
+        }
     }
 
     // ─── Structural ───
@@ -649,8 +798,15 @@ mod tests {
     fn perfect_table_zero_errors() {
         let content = "# Guide\n\n| Axis | Value |\n|------|-------|\n| Binding | Late |\n| Typing | Static |\n";
         let diags = default_check().check(Path::new("t.md"), content);
-        let errs: Vec<_> = diags.iter().filter(|d| matches!(d.severity, crate::diagnostic::Severity::Error)).collect();
-        assert!(errs.is_empty(), "perfect table must have zero errors: {:?}", diags.iter().map(|d| &d.message).collect::<Vec<_>>());
+        let errs: Vec<_> = diags
+            .iter()
+            .filter(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+            .collect();
+        assert!(
+            errs.is_empty(),
+            "perfect table must have zero errors: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -660,8 +816,10 @@ mod tests {
         let tables = parse_tables(&content.lines().collect::<Vec<_>>(), &[false, false, false]);
         assert_eq!(tables.len(), 1);
         let diags = default_check().check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_table_col_mismatch"),
-            "body col mismatch must be detected");
+        assert!(
+            diags.iter().any(|d| d.code == "md_table_col_mismatch"),
+            "body col mismatch must be detected"
+        );
     }
 
     #[test]
@@ -669,8 +827,24 @@ mod tests {
         // Only 2 dashes — need 3
         let content = "| A | B |\n|--|--|\n| x | y |\n";
         let diags = default_check().check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_table_separator_invalid"),
-            "short separator must be detected");
+        assert!(
+            diags.iter().any(|d| d.code == "md_table_separator_invalid"),
+            "short separator must be detected"
+        );
+    }
+
+    #[test]
+    fn blank_corner_header_comparison_matrix_is_allowed() {
+        let content =
+            "| | PPO | SAC |\n|--|-----|-----|\n| On/off-policy | On-policy | Off-policy |\n";
+        let diags = default_check().check(Path::new("t.md"), content);
+        assert!(
+            diags.iter().all(|d| {
+                d.code != "md_table_empty_header" && d.code != "md_table_separator_invalid"
+            }),
+            "blank top-left corner labels body rows in comparison matrices: {:?}",
+            diags
+        );
     }
 
     #[test]
@@ -680,7 +854,10 @@ mod tests {
         let lines: Vec<&str> = content.lines().collect();
         let mask = vec![false; lines.len()];
         let tables = parse_tables(&lines, &mask);
-        assert!(tables.is_empty(), "two pipe rows without separator must not be detected as a table");
+        assert!(
+            tables.is_empty(),
+            "two pipe rows without separator must not be detected as a table"
+        );
     }
 
     #[test]
@@ -689,7 +866,10 @@ mod tests {
         let lines: Vec<&str> = content.lines().collect();
         let mask = code_block_mask(&lines);
         let tables = parse_tables(&lines, &mask);
-        assert!(tables.is_empty(), "table inside code block must not be detected");
+        assert!(
+            tables.is_empty(),
+            "table inside code block must not be detected"
+        );
     }
 
     #[test]
@@ -697,16 +877,74 @@ mod tests {
         // Left, center, right aligned separators
         let content = "| A | B | C |\n|:---|:---:|---:|\n| a | b | c |\n";
         let diags = default_check().check(Path::new("t.md"), content);
-        assert!(!diags.iter().any(|d| d.code == "md_table_separator_invalid"),
-            "alignment colons must be valid");
+        assert!(
+            !diags.iter().any(|d| d.code == "md_table_separator_invalid"),
+            "alignment colons must be valid"
+        );
     }
 
     #[test]
     fn cell_padding_missing_detected() {
-        let content = "| A | B |\n|---|---|\n|no-space|no-space|\n";
+        let content = "| A | B |\n|---|---|\n|no-space  |no-space  |\n";
         let diags = default_check().check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_table_cell_padding"),
-            "missing cell padding must be warned");
+        assert!(
+            diags.iter().any(|d| d.code == "md_table_cell_padding"),
+            "missing cell padding must be warned"
+        );
+    }
+
+    #[test]
+    fn padding_skips_over_split_math_rows_ignored_by_structure() {
+        let content =
+            "| Task | Tool |\n|------|------|\n| Count orbits | Burnside: (1/|G|)Σ|Fix(g)| |\n";
+        let check = MarkdownTableCheck {
+            config: MarkdownTableConfig {
+                ignore_extra_body_cols: true,
+                ..Default::default()
+            },
+        };
+        let diags = check.check(Path::new("t.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "md_table_cell_padding"),
+            "ignored extra body columns should not still emit padding warnings: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn padding_allows_full_cells_with_no_room() {
+        let content = "| Short | Long |\n|-------|------|\n|tight|ok    |\n|bad  |no pad |\n";
+        let diags = default_check().check(Path::new("t.md"), content);
+        assert!(
+            diags.iter().all(|d| {
+                !(d.code == "md_table_cell_padding" && d.message.contains("\"tight\""))
+            }),
+            "full cells cannot add padding without widening table: {:?}",
+            diags
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| { d.code == "md_table_cell_padding" && d.message.contains("\"bad\"") }),
+            "cells with spare width should still warn: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn parse_row_handles_escaped_pipe_and_code_span() {
+        let row = r"| Type | `A|B` or A\|B | Notes |";
+        let cells = parse_row(row);
+        assert_eq!(cells.len(), 3);
+        assert_eq!(cells[1].trim(), r"`A|B` or A\|B");
+    }
+
+    #[test]
+    fn parse_row_handles_sql_concat_as_content_when_escaped_or_in_code() {
+        let row = r"| SQL | `first || last` | concat operator |";
+        let cells = parse_row(row);
+        assert_eq!(cells.len(), 3);
+        assert_eq!(cells[1].trim(), "`first || last`");
     }
 
     // ─── Required tables count ───
@@ -721,8 +959,10 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_missing_table"),
-            "must warn when required table count not met");
+        assert!(
+            diags.iter().any(|d| d.code == "md_missing_table"),
+            "must warn when required table count not met"
+        );
     }
 
     #[test]
@@ -735,15 +975,18 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(!diags.iter().any(|d| d.code == "md_missing_table"),
-            "must not warn when required table is present");
+        assert!(
+            !diags.iter().any(|d| d.code == "md_missing_table"),
+            "must not warn when required table is present"
+        );
     }
 
     // ─── Schema validation ───
 
     #[test]
     fn schema_required_column_detected() {
-        let content = "## Type System Snapshot\n\n| Wrong | Value |\n|-------|-------|\n| Binding | Late |\n";
+        let content =
+            "## Type System Snapshot\n\n| Wrong | Value |\n|-------|-------|\n| Binding | Late |\n";
         let check = MarkdownTableCheck {
             config: MarkdownTableConfig {
                 table_schemas: vec![TableSchema {
@@ -755,13 +998,16 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_table_schema"),
-            "missing required column 'Axis' must be flagged");
+        assert!(
+            diags.iter().any(|d| d.code == "md_table_schema"),
+            "missing required column 'Axis' must be flagged"
+        );
     }
 
     #[test]
     fn schema_required_row_key_detected() {
-        let content = "## Type System Snapshot\n\n| Axis | Value |\n|------|-------|\n| Binding | Late |\n";
+        let content =
+            "## Type System Snapshot\n\n| Axis | Value |\n|------|-------|\n| Binding | Late |\n";
         let check = MarkdownTableCheck {
             config: MarkdownTableConfig {
                 table_schemas: vec![TableSchema {
@@ -773,12 +1019,16 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.message.contains("Typing")),
-            "missing row key 'Typing' must be flagged");
+        assert!(
+            diags.iter().any(|d| d.message.contains("Typing")),
+            "missing row key 'Typing' must be flagged"
+        );
         // "Binding" appears in context listing of the "Typing" error — check specifically
         // that there's no diagnostic saying Binding itself is the MISSING key
-        assert!(!diags.iter().any(|d| d.message.contains("key \"Binding\"")),
-            "present row key 'Binding' must not be the missing key");
+        assert!(
+            !diags.iter().any(|d| d.message.contains("key \"Binding\"")),
+            "present row key 'Binding' must not be the missing key"
+        );
     }
 
     #[test]
@@ -796,8 +1046,10 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_missing_table"),
-            "must flag when no table found under required heading");
+        assert!(
+            diags.iter().any(|d| d.code == "md_missing_table"),
+            "must flag when no table found under required heading"
+        );
     }
 
     #[test]
@@ -814,8 +1066,12 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_table_schema" && d.message.contains("3")),
-            "must flag when body row count below minimum");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "md_table_schema" && d.message.contains("3")),
+            "must flag when body row count below minimum"
+        );
     }
 
     #[test]
@@ -827,7 +1083,14 @@ mod tests {
                     heading: Some("Status".to_string()),
                     column_allowed_values: {
                         let mut m = HashMap::new();
-                        m.insert("Status".to_string(), vec!["DONE".to_string(), "IN_PROGRESS".to_string(), "TODO".to_string()]);
+                        m.insert(
+                            "Status".to_string(),
+                            vec![
+                                "DONE".to_string(),
+                                "IN_PROGRESS".to_string(),
+                                "TODO".to_string(),
+                            ],
+                        );
                         m
                     },
                     ..Default::default()
@@ -836,11 +1099,15 @@ mod tests {
             },
         };
         let diags = check.check(Path::new("t.md"), content);
-        assert!(diags.iter().any(|d| d.message.contains("INVALID_STATUS")),
-            "invalid column value must be flagged");
+        assert!(
+            diags.iter().any(|d| d.message.contains("INVALID_STATUS")),
+            "invalid column value must be flagged"
+        );
         // DONE appears in the "not in allowed set" listing — check specifically
         // that no diagnostic says DONE is the invalid value itself
-        assert!(!diags.iter().any(|d| d.message.contains("value \"DONE\"")),
-            "valid value DONE must not itself be flagged as invalid");
+        assert!(
+            !diags.iter().any(|d| d.message.contains("value \"DONE\"")),
+            "valid value DONE must not itself be flagged as invalid"
+        );
     }
 }

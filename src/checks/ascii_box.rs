@@ -9,7 +9,6 @@
 ///   1. All rows in a box have the same visual width
 ///   2. Column separators (| │) align exactly with border junction chars (+ ┬ ┼ etc.)
 ///   3. Boxes are properly closed (every opened box has a bottom border)
-
 use crate::checks::Check;
 use crate::config::AsciiBoxConfig;
 use crate::diagnostic::{Diagnostic, RichContext};
@@ -22,7 +21,9 @@ pub struct AsciiBoxCheck {
 }
 
 impl Check for AsciiBoxCheck {
-    fn name(&self) -> &'static str { "ascii_box" }
+    fn name(&self) -> &'static str {
+        "ascii_box"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
         if !self.config.enabled {
@@ -49,7 +50,8 @@ impl Check for AsciiBoxCheck {
                     ));
                 }
                 let region = &lines[block.content_start..block.content_end];
-                let mut region_diags = check_boxes(path, region, block.content_start + 1, &self.config);
+                let mut region_diags =
+                    check_boxes(path, region, block.content_start + 1, &self.config);
                 diags.append(&mut region_diags);
             }
         } else {
@@ -174,14 +176,69 @@ fn is_border_fill(c: char) -> bool {
 
 /// True if char is a box-drawing junction/corner (appears in border lines).
 fn is_border_junction(c: char) -> bool {
-    matches!(c,
-        '+' |
-        '┌' | '┐' | '└' | '┘' |
-        '├' | '┤' | '┬' | '┴' | '┼' |
-        '╔' | '╗' | '╚' | '╝' |
-        '╠' | '╣' | '╦' | '╩' | '╬' |
-        '╭' | '╮' | '╯' | '╰'
+    matches!(
+        c,
+        '+' | '┌'
+            | '┐'
+            | '└'
+            | '┘'
+            | '├'
+            | '┤'
+            | '┬'
+            | '┴'
+            | '┼'
+            | '╔'
+            | '╗'
+            | '╚'
+            | '╝'
+            | '╠'
+            | '╣'
+            | '╦'
+            | '╩'
+            | '╬'
+            | '╭'
+            | '╮'
+            | '╯'
+            | '╰'
     )
+}
+
+fn is_unicode_border_line(line: &str) -> bool {
+    line.chars().any(|c| {
+        matches!(
+            c,
+            '─' | '━'
+                | '┌'
+                | '┐'
+                | '└'
+                | '┘'
+                | '├'
+                | '┤'
+                | '┬'
+                | '┴'
+                | '┼'
+                | '╔'
+                | '╗'
+                | '╚'
+                | '╝'
+                | '╠'
+                | '╣'
+                | '╦'
+                | '╩'
+                | '╬'
+                | '╭'
+                | '╮'
+                | '╯'
+                | '╰'
+        )
+    })
+}
+
+fn is_structural_top_junction(c: char, unicode_border: bool) -> bool {
+    if unicode_border && c == '+' {
+        return false;
+    }
+    is_border_junction(c) && !matches!(c, '┴' | '╩')
 }
 
 /// True if this line can open a box (has a top-left or top-joining corner).
@@ -194,7 +251,9 @@ fn is_border_junction(c: char) -> bool {
 /// generate hundreds of false width/column errors.
 fn can_open_box(line: &str) -> bool {
     let trimmed = line.trim_start();
-    if trimmed.is_empty() { return false; }
+    if trimmed.is_empty() {
+        return false;
+    }
     // A `+` is ambiguous — it can be both top and bottom. Allow it.
     // `|` or `│` as first char: partial border, allow it.
     // Otherwise: the first junction char must NOT be exclusively a bottom corner.
@@ -222,7 +281,9 @@ fn is_vertical(c: char) -> bool {
 /// `junction_count >= 2` check. Markdown tables never trigger this function.
 fn is_border_line(line: &str) -> bool {
     let trimmed = line.trim_start();
-    if trimmed.is_empty() { return false; }
+    if trimmed.is_empty() {
+        return false;
+    }
 
     // Allow `|` as a first char so partial borders (`|---+---+`) are detected,
     // but `|` is NOT a junction — it goes to other_count below.
@@ -236,10 +297,14 @@ fn is_border_line(line: &str) -> bool {
     let mut other_count = 0usize;
 
     for c in trimmed.chars() {
-        if is_border_junction(c) { junction_count += 1; }
-        else if is_border_fill(c) { fill_count += 1; }
-        else if c == ' ' { /* spacing inside cells — ok */ }
-        else { other_count += 1; } // includes `|`, letters, digits
+        if is_border_junction(c) {
+            junction_count += 1;
+        } else if is_border_fill(c) {
+            fill_count += 1;
+        } else if c == ' ' { /* spacing inside cells — ok */
+        } else {
+            other_count += 1;
+        } // includes `|`, letters, digits
     }
 
     // Two genuine corners/junctions required; fill chars must dominate prose
@@ -260,6 +325,32 @@ fn junction_columns(line: &str) -> Vec<usize> {
     cols
 }
 
+fn structural_top_columns(line: &str) -> Vec<usize> {
+    let unicode_border = is_unicode_border_line(line);
+    let mut cols = Vec::new();
+    let mut col_0 = 0usize;
+    for c in line.chars() {
+        if is_structural_top_junction(c, unicode_border) {
+            cols.push(col_0 + 1);
+        }
+        col_0 += char_advance(c, col_0, 4);
+    }
+    cols
+}
+
+fn remove_incoming_connector_columns(cols: &mut Vec<usize>, previous_line: Option<&str>) {
+    let Some(previous_line) = previous_line else {
+        return;
+    };
+    if cols.len() <= 2 {
+        return;
+    }
+    let incoming = vertical_columns(previous_line);
+    let first = *cols.first().unwrap();
+    let last = *cols.last().unwrap();
+    cols.retain(|col| *col == first || *col == last || !incoming.contains(col));
+}
+
 /// Extract visual column positions of vertical separator characters from a content line.
 /// Uses tab expansion (4-space tab stops) for consistent alignment with junction_columns.
 fn vertical_columns(line: &str) -> Vec<usize> {
@@ -275,9 +366,9 @@ fn vertical_columns(line: &str) -> Vec<usize> {
 }
 
 struct BoxRegion {
-    top_line: usize,     // 0-based within region
-    bottom_line: usize,  // 0-based within region, inclusive
-    expected_cols: Vec<usize>,  // 1-based visual columns from top border
+    top_line: usize,           // 0-based within region
+    bottom_line: usize,        // 0-based within region, inclusive
+    expected_cols: Vec<usize>, // 1-based visual columns from top border
     top_width: usize,
 }
 
@@ -287,7 +378,11 @@ fn find_boxes(lines: &[&str]) -> Vec<BoxRegion> {
 
     while i < lines.len() {
         if is_border_line(lines[i]) && can_open_box(lines[i]) {
-            let expected_cols = junction_columns(lines[i]);
+            let mut expected_cols = structural_top_columns(lines[i]);
+            remove_incoming_connector_columns(
+                &mut expected_cols,
+                i.checked_sub(1).map(|idx| lines[idx]),
+            );
             let top_width = visual_width(lines[i]);
             let top_line = i;
 
@@ -352,7 +447,11 @@ fn check_boxes(
                 box_opens_at: Some(abs_top),
                 border_line: Some(border_line.clone()),
                 expected_cols: Some(b.expected_cols.clone()),
-                actual_cols: if actual.is_empty() { None } else { Some(actual) },
+                actual_cols: if actual.is_empty() {
+                    None
+                } else {
+                    Some(actual)
+                },
                 lines: ctx_lines,
             }
         };
@@ -412,7 +511,7 @@ fn check_boxes(
                             ),
                         )
                         .with_rich(ctx)
-                .with_group(group_id.clone()),
+                        .with_group(group_id.clone()),
                     );
                 }
             }
@@ -462,22 +561,27 @@ fn check_boxes(
                             msg,
                         )
                         .with_rich(ctx)
-                .with_group(group_id.clone()),
+                        .with_group(group_id.clone()),
                     );
                 }
             }
         }
 
-        // Check bottom border junction columns match top
+        // Check bottom border junction columns preserve the top border columns
+        // only when the bottom border is carrying a comparable column structure.
+        // Spanning rows and spatial multi-box layouts often close with fewer
+        // junctions; content-row checks still catch real separator drift.
         let bottom_cols = junction_columns(lines[b.bottom_line]);
-        if bottom_cols != b.expected_cols {
-            let top_set: std::collections::HashSet<usize> =
-                b.expected_cols.iter().copied().collect();
-            let bot_set: std::collections::HashSet<usize> =
-                bottom_cols.iter().copied().collect();
-
-            for col in top_set.symmetric_difference(&bot_set) {
-                let in_top = b.expected_cols.contains(col);
+        if bottom_cols != b.expected_cols
+            && border_edges_match(&b.expected_cols, &bottom_cols)
+            && bottom_cols.len() == b.expected_cols.len()
+            && has_only_columnar_body(lines, b)
+        {
+            for col in b
+                .expected_cols
+                .iter()
+                .filter(|col| !bottom_cols.contains(col))
+            {
                 let ctx = box_context(abs_bottom, bottom_cols.clone());
                 diags.push(
                     Diagnostic::warning(
@@ -486,14 +590,12 @@ fn check_boxes(
                         *col,
                         "ascii_box_col",
                         format!(
-                            "bottom border junction at col {} {} match top border (line {})",
-                            col,
-                            if in_top { "does not" } else { "present in bottom but not top" },
-                            abs_top
+                            "bottom border missing junction at col {} from top border (line {})",
+                            col, abs_top
                         ),
                     )
                     .with_rich(ctx)
-                .with_group(group_id.clone()),
+                    .with_group(group_id.clone()),
                 );
             }
         }
@@ -502,26 +604,58 @@ fn check_boxes(
     diags
 }
 
+fn border_edges_match(top_cols: &[usize], bottom_cols: &[usize]) -> bool {
+    match (
+        top_cols.first(),
+        top_cols.last(),
+        bottom_cols.first(),
+        bottom_cols.last(),
+    ) {
+        (Some(top_left), Some(top_right), Some(bottom_left), Some(bottom_right)) => {
+            top_left == bottom_left && top_right == bottom_right
+        }
+        _ => false,
+    }
+}
+
+fn has_only_columnar_body(lines: &[&str], b: &BoxRegion) -> bool {
+    (b.top_line + 1..b.bottom_line).all(|row_idx| {
+        let line = lines[row_idx];
+        line.trim().is_empty() || !vertical_columns(line).is_empty()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn path() -> PathBuf { PathBuf::from("test.md") }
+    fn path() -> PathBuf {
+        PathBuf::from("test.md")
+    }
 
     #[test]
     fn perfect_box_no_errors() {
-        let content = "```\n+------+------+\n| foo  | bar  |\n| baz  | qux  |\n+------+------+\n```";
-        let check = AsciiBoxCheck { config: AsciiBoxConfig::default() };
+        let content =
+            "```\n+------+------+\n| foo  | bar  |\n| baz  | qux  |\n+------+------+\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
         let diags = check.check(&path(), content);
-        assert!(diags.is_empty(), "expected no diagnostics, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics, got: {:?}",
+            diags
+        );
     }
 
     #[test]
     fn width_mismatch_detected() {
         // Bottom row has one extra char
         let content = "```\n+------+------+\n| foo  | bar   |\n+------+------++\n```";
-        let check = AsciiBoxCheck { config: AsciiBoxConfig::default() };
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
         let diags = check.check(&path(), content);
         assert!(!diags.is_empty(), "expected width mismatch diagnostic");
     }
@@ -529,8 +663,11 @@ mod tests {
     #[test]
     fn column_misalignment_detected() {
         // Second content row has | shifted by 1
-        let content = "```\n+------+------+\n| foo  | bar  |\n|  baz |  qux |\n+------+------+\n```";
-        let check = AsciiBoxCheck { config: AsciiBoxConfig::default() };
+        let content =
+            "```\n+------+------+\n| foo  | bar  |\n|  baz |  qux |\n+------+------+\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
         let diags = check.check(&path(), content);
         // The second row's | at col 2 instead of 1 should be detected
         // (exact detection depends on whether col 1 is present)
@@ -540,8 +677,70 @@ mod tests {
     #[test]
     fn unicode_box_detected() {
         let content = "```\n┌──────┬──────┐\n│ foo  │ bar  │\n└──────┴──────┘\n```";
-        let check = AsciiBoxCheck { config: AsciiBoxConfig::default() };
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
         let diags = check.check(&path(), content);
-        assert!(diags.is_empty(), "expected no diagnostics for perfect unicode box, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics for perfect unicode box, got: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn top_border_connector_is_not_required_bottom_column() {
+        let content = "```\n   │\n┌──+────────┐\n│ Process   │\n│ step      │\n└───────────┘\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
+        let diags = check.check(&path(), content);
+        assert!(
+            diags.iter().all(|d| d.code != "ascii_box_col"),
+            "incoming connectors on a top border are not table columns: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn ascii_tree_branch_is_not_box_bottom_column_mismatch() {
+        let content = "```\n     +-------------+-------------+\n     |             |             |\n  Porifera    Ctenophora      Cnidaria\n     |             |             |\n     +------+-------+------+-----+\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
+        let diags = check.check(&path(), content);
+        assert!(
+            diags.iter().all(|d| d.code != "ascii_box_col"),
+            "tree branches are not box column separators: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn spanning_bottom_border_is_not_column_mismatch() {
+        let content = "```\n+------+--------+-----------+\n| AUD  | STAGE  | AUDIENCE  |\n+------+--------+-----------+\n|        AUDIENCE            |\n+----------------------------+\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
+        let diags = check.check(&path(), content);
+        assert!(
+            diags.iter().all(|d| d.code != "ascii_box_col"),
+            "spanning rows may close without internal bottom junctions: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn ported_flowchart_bottom_is_not_column_mismatch() {
+        let content = "```\n         |\n+--------+---------+\n|    MASTER BMS    |\n+--+-------+---+---+\n   |       |   |\n```";
+        let check = AsciiBoxCheck {
+            config: AsciiBoxConfig::default(),
+        };
+        let diags = check.check(&path(), content);
+        assert!(
+            diags.iter().all(|d| d.code != "ascii_box_col"),
+            "extra bottom ports are connector anchors, not missing columns: {:?}",
+            diags
+        );
     }
 }

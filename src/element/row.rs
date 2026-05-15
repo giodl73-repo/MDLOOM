@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::element::{ElementAlign, ElementConfig, ElementData, ElementKind, render_element};
+use crate::element::{render_element, ElementAlign, ElementConfig, ElementData, ElementKind};
 
 // ─────────────────────────────────────────────────────────
 // Public types
@@ -51,13 +51,23 @@ pub struct RowConfig {
 
 /// R-1: sum(widths) + sep_len * (n-1) = declared_width.
 /// Returns Some((found, expected)) on violation, None if valid or declared_width absent.
-pub fn validate_r1(elements: &[RowElement], separator_len: usize, declared_width: Option<usize>) -> Option<(usize, usize)> {
-    let Some(expected) = declared_width else { return None };
+pub fn validate_r1(
+    elements: &[RowElement],
+    separator_len: usize,
+    declared_width: Option<usize>,
+) -> Option<(usize, usize)> {
+    let Some(expected) = declared_width else {
+        return None;
+    };
     let n = elements.len();
     let sum_widths: usize = elements.iter().map(|e| e.width).sum();
     let sep_total = if n > 0 { separator_len * (n - 1) } else { 0 };
     let found = sum_widths + sep_total;
-    if found != expected { Some((found, expected)) } else { None }
+    if found != expected {
+        Some((found, expected))
+    } else {
+        None
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -66,10 +76,7 @@ pub fn validate_r1(elements: &[RowElement], separator_len: usize, declared_width
 
 /// Render one output line from one source data row.
 /// Returns Err if any field is missing or any element fails to render.
-pub fn render_row(
-    row_data: &HashMap<String, String>,
-    cfg: &RowConfig,
-) -> Result<String, String> {
+pub fn render_row(row_data: &HashMap<String, String>, cfg: &RowConfig) -> Result<String, String> {
     let mut parts: Vec<String> = Vec::with_capacity(cfg.elements.len());
 
     for elem in &cfg.elements {
@@ -80,10 +87,8 @@ pub fn render_row(
 
         let data = match elem.kind {
             ElementKind::Sparkline => {
-                let series: Result<Vec<f64>, _> = raw
-                    .split(',')
-                    .map(|s| s.trim().parse::<f64>())
-                    .collect();
+                let series: Result<Vec<f64>, _> =
+                    raw.split(',').map(|s| s.trim().parse::<f64>()).collect();
                 match series {
                     Ok(v) => ElementData::Series(v),
                     Err(_) => return Err(format!(
@@ -92,18 +97,16 @@ pub fn render_row(
                     )),
                 }
             }
-            ElementKind::Label | ElementKind::Badge => {
-                ElementData::Text(raw)
-            }
-            _ => {
-                match raw.parse::<f64>() {
-                    Ok(v) => ElementData::Scalar(v),
-                    Err(_) => return Err(format!(
+            ElementKind::Label | ElementKind::Badge => ElementData::Text(raw),
+            _ => match raw.parse::<f64>() {
+                Ok(v) => ElementData::Scalar(v),
+                Err(_) => {
+                    return Err(format!(
                         "element kind={:?} field {:?} requires numeric value; got {:?}",
                         elem.kind, elem.field, raw
-                    )),
+                    ))
                 }
-            }
+            },
         };
 
         let elem_cfg = elem.to_element_config();
@@ -173,7 +176,10 @@ mod tests {
     }
 
     fn make_row(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     fn cfg_with(elements: Vec<RowElement>, sep: &str, width: Option<usize>) -> RowConfig {
@@ -191,7 +197,11 @@ mod tests {
 
     #[test]
     fn render_row_three_elements_correct_total_width() {
-        let elems = vec![label_elem("name", 10), value_elem("pts", 6), mini_bar_elem("bar", 8, 200.0)];
+        let elems = vec![
+            label_elem("name", 10),
+            value_elem("pts", 6),
+            mini_bar_elem("bar", 8, 200.0),
+        ];
         let sep = " ";
         let total = 10 + 1 + 6 + 1 + 8; // 26
         let cfg = cfg_with(elems, sep, Some(total));
@@ -202,7 +212,11 @@ mod tests {
 
     #[test]
     fn render_row_label_plus_value_plus_mini_bar_column_offsets() {
-        let elems = vec![label_elem("name", 8), value_elem("pts", 5), mini_bar_elem("bar", 6, 200.0)];
+        let elems = vec![
+            label_elem("name", 8),
+            value_elem("pts", 5),
+            mini_bar_elem("bar", 6, 200.0),
+        ];
         let cfg = cfg_with(elems, " ", Some(8 + 1 + 5 + 1 + 6));
         let row = make_row(&[("name", "McDavid"), ("pts", "138"), ("bar", "100")]);
         let out = render_row(&row, &cfg).unwrap();
@@ -248,7 +262,11 @@ mod tests {
 
     #[test]
     fn validate_r1_correct_sum_no_error() {
-        let elems = vec![label_elem("n", 10), value_elem("p", 5), mini_bar_elem("b", 8, 200.0)];
+        let elems = vec![
+            label_elem("n", 10),
+            value_elem("p", 5),
+            mini_bar_elem("b", 8, 200.0),
+        ];
         // sep_len=1, n=3, total = 10+5+8 + 2 = 25
         let result = validate_r1(&elems, 1, Some(25));
         assert!(result.is_none(), "should be None for correct sum");
@@ -315,7 +333,11 @@ mod tests {
         let row = make_row(&[("name", "McDavid")]);
         let out = render_row(&row, &cfg).unwrap();
         assert!(!out.contains("```"), "should have no fence: {:?}", out);
-        assert!(!out.contains("<!--"), "should have no HTML comment: {:?}", out);
+        assert!(
+            !out.contains("<!--"),
+            "should have no HTML comment: {:?}",
+            out
+        );
     }
 
     // ── column pinning invariant ───────────────────────────
@@ -324,11 +346,7 @@ mod tests {
     fn column_pinning_element_n_starts_at_sum_of_prior_widths() {
         // 3 elements: widths 6, 8, 5; sep=" " (len=1)
         // offsets: 0, 7, 16
-        let elems = vec![
-            label_elem("a", 6),
-            label_elem("b", 8),
-            label_elem("c", 5),
-        ];
+        let elems = vec![label_elem("a", 6), label_elem("b", 8), label_elem("c", 5)];
         let cfg = cfg_with(elems, " ", None);
         let row = make_row(&[("a", "AAAAAA"), ("b", "BBBBBBBB"), ("c", "CCCCC")]);
         let out = render_row(&row, &cfg).unwrap();

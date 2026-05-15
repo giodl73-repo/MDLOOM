@@ -11,7 +11,6 @@
 ///   T-5  Root has no connector prefix
 ///   T-6  ├── and └── are followed by exactly one space then the label
 ///   T-12 A root with zero children is valid (leaf-root tree)
-
 use crate::checks::Check;
 use crate::config::AsciiTreeConfig;
 use crate::diagnostic::Diagnostic;
@@ -26,10 +25,14 @@ pub struct AsciiTreeCheck {
 }
 
 impl Check for AsciiTreeCheck {
-    fn name(&self) -> &'static str { "ascii_tree" }
+    fn name(&self) -> &'static str {
+        "ascii_tree"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
-        if !self.config.enabled { return vec![]; }
+        if !self.config.enabled {
+            return vec![];
+        }
 
         let file_lines: Vec<&str> = content.lines().collect();
         let mut diags = Vec::new();
@@ -58,11 +61,11 @@ pub enum Connector {
 
 #[derive(Debug, Clone)]
 pub struct TreeNode {
-    pub line_no: usize,        // 1-based in the original file
-    pub indent_level: usize,   // 0 = root
+    pub line_no: usize,      // 1-based in the original file
+    pub indent_level: usize, // 0 = root
     pub connector: Connector,
-    pub label: String,         // text after connector + space (empty for Continuation)
-    pub raw: String,           // original line
+    pub label: String, // text after connector + space (empty for Continuation)
+    pub raw: String,   // original line
 }
 
 // ─────────────────────────────────────────────────────────
@@ -71,10 +74,7 @@ pub struct TreeNode {
 
 /// Find all fenced code blocks with a tree info string.
 /// Returns (start, end) ranges of content lines (excluding the fence delimiters).
-pub(crate) fn detect_tree_blocks(
-    lines: &[&str],
-    config: &AsciiTreeConfig,
-) -> Vec<(usize, usize)> {
+pub(crate) fn detect_tree_blocks(lines: &[&str], config: &AsciiTreeConfig) -> Vec<(usize, usize)> {
     let mut blocks = Vec::new();
     let mut i = 0;
 
@@ -85,7 +85,9 @@ pub(crate) fn detect_tree_blocks(
             let mut j = content_start;
             while j < lines.len() {
                 let t = lines[j].trim();
-                if t == "```" || t == "~~~" { break; }
+                if t == "```" || t == "~~~" {
+                    break;
+                }
                 j += 1;
             }
             if j > content_start {
@@ -103,11 +105,16 @@ pub(crate) fn detect_tree_blocks(
 fn is_tree_fence_open(trimmed: &str, config: &AsciiTreeConfig) -> bool {
     // Matches: ```dirtree, ```tree, ```org, ```taxonomy etc.
     // config.kind = None means accept any tree kind.
-    let Some(rest) = trimmed.strip_prefix("```").or_else(|| trimmed.strip_prefix("~~~")) else {
+    let Some(rest) = trimmed
+        .strip_prefix("```")
+        .or_else(|| trimmed.strip_prefix("~~~"))
+    else {
         return false;
     };
     let info = rest.trim();
-    if info.is_empty() { return false; }
+    if info.is_empty() {
+        return false;
+    }
     match &config.kind {
         Some(k) => info == k.as_str() || info.starts_with(&format!("{} ", k)),
         None => is_tree_info_string(info),
@@ -129,26 +136,34 @@ fn is_tree_info_string(info: &str) -> bool {
 /// `line_offset` is the 1-based line number of `lines[0]` in the original file.
 pub(crate) fn parse_tree_block(lines: &[&str], line_offset: usize) -> Vec<TreeNode> {
     let indent_width = detect_indent_width(lines);
-    lines.iter().enumerate().map(|(i, &line)| {
-        let line_no = line_offset + i;
-        let (indent_level, connector, label) = classify_line(line, indent_width);
-        TreeNode {
-            line_no,
-            indent_level,
-            connector,
-            label,
-            raw: line.to_string(),
-        }
-    }).collect()
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, &line)| {
+            let line_no = line_offset + i;
+            let (indent_level, connector, label) = classify_line(line, indent_width);
+            TreeNode {
+                line_no,
+                indent_level,
+                connector,
+                label,
+                raw: line.to_string(),
+            }
+        })
+        .collect()
 }
 
 /// Detect the consistent indent width from the first indented line.
 /// Falls back to 4 if none found.
 pub(crate) fn detect_indent_width(lines: &[&str]) -> usize {
     for line in lines {
-        if line.is_empty() || !line.starts_with(' ') { continue; }
+        if line.is_empty() || !line.starts_with(' ') {
+            continue;
+        }
         let spaces = line.len() - line.trim_start().len();
-        if spaces > 0 && spaces <= 8 { return spaces; }
+        if spaces > 0 && spaces <= 8 {
+            return spaces;
+        }
     }
     4
 }
@@ -177,19 +192,29 @@ pub(crate) fn classify_line(line: &str, indent_width: usize) -> (usize, Connecto
             let spaces = after.chars().take(iw - 1).all(|c| c == ' ');
             if spaces && after.len() >= iw - 1 {
                 Some(pipe_bytes + (iw - 1))
-            } else { None }
+            } else {
+                None
+            }
         } else if remaining.starts_with('|') {
             let after = &remaining[1..];
             let spaces = after.chars().take(iw - 1).all(|c| c == ' ');
-            if spaces && after.len() >= iw - 1 { Some(iw) } else { None }
-        } else { None };
+            if spaces && after.len() >= iw - 1 {
+                Some(iw)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Check for a blank prefix group: `iw` spaces
         let blank_prefix = if remaining.starts_with(&" ".repeat(iw)) {
             // But only if what follows is also a tree structure (not just indented content)
             // We check if after the spaces there's still tree chars
             Some(iw)
-        } else { None };
+        } else {
+            None
+        };
 
         if let Some(skip) = pipe_prefix {
             pos += skip;
@@ -197,9 +222,12 @@ pub(crate) fn classify_line(line: &str, indent_width: usize) -> (usize, Connecto
         } else if let Some(skip) = blank_prefix {
             // Verify this isn't just a labelled line at level 0 with leading spaces
             let after_skip = &line[pos + skip..];
-            if after_skip.starts_with("├──") || after_skip.starts_with("└──")
-                || after_skip.starts_with("+--") || after_skip.starts_with("`--")
-                || after_skip.starts_with('│') || after_skip.starts_with('|')
+            if after_skip.starts_with("├──")
+                || after_skip.starts_with("└──")
+                || after_skip.starts_with("+--")
+                || after_skip.starts_with("`--")
+                || after_skip.starts_with('│')
+                || after_skip.starts_with('|')
             {
                 pos += skip;
                 level += 1;
@@ -216,17 +244,29 @@ pub(crate) fn classify_line(line: &str, indent_width: usize) -> (usize, Connecto
     // A line whose entire content was consumed as prefix groups is a bare continuation
     // (e.g., "│   " with no child connector — visual separator line)
     if rest.trim().is_empty() && level > 0 {
-        return (level.saturating_sub(1), Connector::Continuation, String::new());
+        return (
+            level.saturating_sub(1),
+            Connector::Continuation,
+            String::new(),
+        );
     }
 
     // Detect connector
     if rest.starts_with("├──") || rest.starts_with("+--") {
         let label_start = skip_connector_prefix(rest, "tee");
-        return (level, Connector::Tee, rest[label_start..].trim().to_string());
+        return (
+            level,
+            Connector::Tee,
+            rest[label_start..].trim().to_string(),
+        );
     }
     if rest.starts_with("└──") || rest.starts_with("`--") {
         let label_start = skip_connector_prefix(rest, "corner");
-        return (level, Connector::Corner, rest[label_start..].trim().to_string());
+        return (
+            level,
+            Connector::Corner,
+            rest[label_start..].trim().to_string(),
+        );
     }
     if rest.starts_with('│') || rest.starts_with('|') {
         // Remaining bare pipe = continuation line with no child on this line
@@ -241,14 +281,22 @@ fn skip_connector_prefix(s: &str, kind: &str) -> usize {
     // Skip past ├── or └── (3-byte Unicode each char) + optional space
     let connector_len = match kind {
         "tee" => {
-            if s.starts_with("├──") { "├──".len() }
-            else if s.starts_with("+--") { 3 }
-            else { "├─".len() }
+            if s.starts_with("├──") {
+                "├──".len()
+            } else if s.starts_with("+--") {
+                3
+            } else {
+                "├─".len()
+            }
         }
         "corner" => {
-            if s.starts_with("└──") { "└──".len() }
-            else if s.starts_with("`--") { 3 }
-            else { "└─".len() }
+            if s.starts_with("└──") {
+                "└──".len()
+            } else if s.starts_with("`--") {
+                3
+            } else {
+                "└─".len()
+            }
         }
         _ => 0,
     };
@@ -276,7 +324,11 @@ pub(crate) fn validate_tree(
     diags.extend(validate_t4_t12(nodes, path));
 
     // dirtree-specific (only when kind is dirtree or unspecified)
-    let is_dirtree = config.kind.as_deref().map(|k| k == "dirtree").unwrap_or(true);
+    let is_dirtree = config
+        .kind
+        .as_deref()
+        .map(|k| k == "dirtree")
+        .unwrap_or(true);
     if is_dirtree {
         if config.check_dir_slash {
             diags.extend(validate_t7(nodes, path));
@@ -302,13 +354,19 @@ fn validate_t1(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
             let mut j = i + 1;
             while j < n {
                 let next = &nodes[j];
-                if next.connector == Connector::Continuation { j += 1; continue; }
-                if next.indent_level < corner_level { break; } // gone up, no violation
+                if next.connector == Connector::Continuation {
+                    j += 1;
+                    continue;
+                }
+                if next.indent_level < corner_level {
+                    break;
+                } // gone up, no violation
                 if next.indent_level == corner_level {
                     if next.connector == Connector::Tee {
                         diags.push(Diagnostic::error(
                             path.to_path_buf(),
-                            next.line_no, 1,
+                            next.line_no,
+                            1,
                             "tree_connector",
                             format!(
                                 "├── at line {} follows └── at line {} at the same indent level — \
@@ -333,13 +391,16 @@ fn validate_t2(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
     // For each Continuation node, verify it's at the right indent level
     // (same level as the deepest active branch above it)
     for node in nodes {
-        if node.connector != Connector::Continuation { continue; }
+        if node.connector != Connector::Continuation {
+            continue;
+        }
         // Continuation at depth D means there's an active branch at depth D
         // We check that the level is non-zero (a continuation at level 0 is orphaned)
         if node.indent_level == 0 {
             diags.push(Diagnostic::warning(
                 path.to_path_buf(),
-                node.line_no, 1,
+                node.line_no,
+                1,
                 "tree_orphan",
                 "│ continuation line at indent level 0 has no parent (T-2)".to_string(),
             ));
@@ -355,7 +416,9 @@ fn validate_t3(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
     // whose leading spaces don't divide evenly by indent_width.
     for node in nodes {
         let leading_spaces = node.raw.len() - node.raw.trim_start_matches(' ').len();
-        if node.indent_level == 0 && leading_spaces == 0 { continue; }
+        if node.indent_level == 0 && leading_spaces == 0 {
+            continue;
+        }
         // The raw leading spaces should equal indent_level * indent_width
         // (or indent_level * indent_width + offset for continuation lines).
         // Only flag if the detected level is fractional (would indicate irregular indentation).
@@ -379,9 +442,8 @@ fn validate_t4_t12(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
             continue;
         }
         // Check if this node has any children (a node at level+1 follows it)
-        let has_child = nodes[i+1..].iter().any(|next| {
-            next.connector != Connector::Continuation
-                && next.indent_level == node.indent_level + 1
+        let has_child = nodes[i + 1..].iter().any(|next| {
+            next.connector != Connector::Continuation && next.indent_level == node.indent_level + 1
         });
         // Not having children is fine for leaf nodes. T-4 only fires if a Continuation
         // suggests children exist but none do. We skip strict T-4 for Wave 1 — it
@@ -396,7 +458,10 @@ fn validate_t4_t12(nodes: &[TreeNode], _path: &Path) -> Vec<Diagnostic> {
 fn validate_t5(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     // Find the first substantive node (skip leading Continuation lines)
-    if let Some(first) = nodes.iter().find(|n| n.connector != Connector::Continuation) {
+    if let Some(first) = nodes
+        .iter()
+        .find(|n| n.connector != Connector::Continuation)
+    {
         if first.connector == Connector::Tee || first.connector == Connector::Corner {
             diags.push(Diagnostic::error(
                 path.to_path_buf(),
@@ -443,7 +508,9 @@ fn validate_t6(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
 fn validate_t7(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for node in nodes {
-        if node.connector == Connector::Continuation || node.label.is_empty() { continue; }
+        if node.connector == Connector::Continuation || node.label.is_empty() {
+            continue;
+        }
         let label = &node.label;
         // Strip trailing annotation (e.g. "src/ — entry point" → "src/")
         let name = label.split(" — ").next().unwrap_or(label).trim();
@@ -456,9 +523,14 @@ fn validate_t7(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
         // Skip ambiguous cases silently
         if ends_slash && looks_like_file {
             diags.push(Diagnostic::warning(
-                path.to_path_buf(), node.line_no, 1,
+                path.to_path_buf(),
+                node.line_no,
+                1,
                 "tree_dir_slash",
-                format!("{:?} ends with / but looks like a file (has extension) (T-7)", name),
+                format!(
+                    "{:?} ends with / but looks like a file (has extension) (T-7)",
+                    name
+                ),
             ));
         }
         // We don't flag files-without-slash because we can't distinguish dirs without /
@@ -479,19 +551,27 @@ fn validate_t8(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
     let mut parent_stack: Vec<usize> = vec![0]; // line_no of parent at each level
 
     for node in nodes {
-        if node.connector == Connector::Continuation || node.label.is_empty() { continue; }
+        if node.connector == Connector::Continuation || node.label.is_empty() {
+            continue;
+        }
 
         // Update parent stack
         let level = node.indent_level;
         while parent_stack.len() <= level {
             parent_stack.push(0);
         }
-        let parent_line = if level == 0 { 0 } else { parent_stack[level - 1] };
+        let parent_line = if level == 0 {
+            0
+        } else {
+            parent_stack[level - 1]
+        };
 
         let key = (parent_line, node.label.clone());
         if let Some(&first_line) = seen.get(&key) {
             diags.push(Diagnostic::error(
-                path.to_path_buf(), node.line_no, 1,
+                path.to_path_buf(),
+                node.line_no,
+                1,
                 "tree_duplicate",
                 format!(
                     "duplicate entry {:?} at line {} — first seen at line {} (T-8)",
@@ -600,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_classify_continuation() {
-        let (level, conn, _) = classify_line("│   ", 4);
+        let (_level, conn, _) = classify_line("│   ", 4);
         assert_eq!(conn, Connector::Continuation);
     }
 
@@ -696,9 +776,8 @@ mod tests {
 
     #[test]
     fn test_deep_tree_valid() {
-        let content = tree_block(
-            "src/\n├── checks/\n│   ├── ascii_box.rs\n│   └── mod.rs\n└── main.rs"
-        );
+        let content =
+            tree_block("src/\n├── checks/\n│   ├── ascii_box.rs\n│   └── mod.rs\n└── main.rs");
         assert_eq!(check_str(&content).len(), 0);
     }
 

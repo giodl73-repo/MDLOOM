@@ -9,14 +9,13 @@
 ///
 /// Output: a draft-plan.json the AI can read and annotate inline, then
 /// `proof fix --plan draft-plan.json` applies it.
-
 use crate::diagnostic::Diagnostic;
 use crate::fix::is_pattern_b;
-use unicode_width::UnicodeWidthChar;
 use crate::fix::{Confidence, DiagnosticRef, Edit, Fix, FixPlan, PlanSummary};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use unicode_width::UnicodeWidthChar;
 
 /// A group of related diagnostics from the same source object.
 /// The AI makes one decision per group (not per line).
@@ -79,8 +78,8 @@ pub struct DraftPlan {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct DraftSummary {
     pub total_groups: usize,
-    pub auto_fixable: usize,    // groups where all fixes are deterministic
-    pub needs_review: usize,    // groups where AI must make a decision
+    pub auto_fixable: usize, // groups where all fixes are deterministic
+    pub needs_review: usize, // groups where AI must make a decision
     pub files_affected: usize,
 }
 
@@ -93,7 +92,9 @@ impl DraftPlan {
 
         for group in &self.groups {
             for draft_fix in &group.fixes {
-                if draft_fix.new_string.is_empty() { continue; }
+                if draft_fix.new_string.is_empty() {
+                    continue;
+                }
                 fixes.push(Fix {
                     id: format!("fix-{:03}", fix_id),
                     file: group.file.clone(),
@@ -106,8 +107,11 @@ impl DraftPlan {
                         new_string: draft_fix.new_string.clone(),
                     },
                     diagnostic: DiagnosticRef {
-                        code: group.diagnostics.first()
-                            .map(|d| d.code.clone()).unwrap_or_default(),
+                        code: group
+                            .diagnostics
+                            .first()
+                            .map(|d| d.code.clone())
+                            .unwrap_or_default(),
                         line: group.diagnostics.first().map(|d| d.line).unwrap_or(0),
                         col: group.diagnostics.first().map(|d| d.col).unwrap_or(0),
                     },
@@ -123,10 +127,23 @@ impl DraftPlan {
             source_report: "draft-plan.json".to_string(),
             summary: PlanSummary {
                 total_fixes: total,
-                high_confidence: fixes.iter().filter(|f| f.confidence == Confidence::High).count(),
-                medium_confidence: fixes.iter().filter(|f| f.confidence == Confidence::Medium).count(),
-                low_confidence: fixes.iter().filter(|f| f.confidence == Confidence::Low).count(),
-                files_affected: fixes.iter().map(|f| &f.file).collect::<std::collections::HashSet<_>>().len(),
+                high_confidence: fixes
+                    .iter()
+                    .filter(|f| f.confidence == Confidence::High)
+                    .count(),
+                medium_confidence: fixes
+                    .iter()
+                    .filter(|f| f.confidence == Confidence::Medium)
+                    .count(),
+                low_confidence: fixes
+                    .iter()
+                    .filter(|f| f.confidence == Confidence::Low)
+                    .count(),
+                files_affected: fixes
+                    .iter()
+                    .map(|f| &f.file)
+                    .collect::<std::collections::HashSet<_>>()
+                    .len(),
             },
             fixes,
         }
@@ -144,9 +161,14 @@ pub fn build_draft_plan(diagnostics: &[Diagnostic], root: &Path) -> Result<Draft
     let mut groups: HashMap<(PathBuf, String), Vec<&Diagnostic>> = HashMap::new();
 
     for diag in diagnostics {
-        let key_id = diag.group_id.clone()
+        let key_id = diag
+            .group_id
+            .clone()
             .unwrap_or_else(|| format!("{}-l{}", diag.code, diag.span.line));
-        groups.entry((diag.file.clone(), key_id)).or_default().push(diag);
+        groups
+            .entry((diag.file.clone(), key_id))
+            .or_default()
+            .push(diag);
     }
 
     // Sort groups: by file, then by first diagnostic line
@@ -181,9 +203,16 @@ pub fn build_draft_plan(diagnostics: &[Diagnostic], root: &Path) -> Result<Draft
         fix_groups.push(group);
     }
 
-    let auto_fixable = fix_groups.iter().filter(|g| g.fixes.iter().all(|f| f.auto)).count();
+    let auto_fixable = fix_groups
+        .iter()
+        .filter(|g| g.fixes.iter().all(|f| f.auto))
+        .count();
     let needs_review = fix_groups.len() - auto_fixable;
-    let files_affected = fix_groups.iter().map(|g| &g.file).collect::<std::collections::HashSet<_>>().len();
+    let files_affected = fix_groups
+        .iter()
+        .map(|g| &g.file)
+        .collect::<std::collections::HashSet<_>>()
+        .len();
 
     Ok(DraftPlan {
         schema_version: "1".to_string(),
@@ -205,7 +234,9 @@ fn build_group(
     _root: &Path,
 ) -> Result<FixGroup> {
     let first = diags[0];
-    let group_id = first.group_id.clone()
+    let group_id = first
+        .group_id
+        .clone()
         .unwrap_or_else(|| format!("{}-l{}", first.code, first.span.line));
 
     // Collect unique lines that need fixing
@@ -216,7 +247,8 @@ fn build_group(
     // Build draft fixes for each unique line
     let mut fixes = Vec::new();
     for &line_no in &unique_lines {
-        let old_string = file_lines.get(line_no.saturating_sub(1))
+        let old_string = file_lines
+            .get(line_no.saturating_sub(1))
             .cloned()
             .unwrap_or_default();
 
@@ -224,39 +256,62 @@ fn build_group(
         let (new_string, auto) = compute_auto_fix(diags, line_no, &old_string);
 
         // Include rich context from the first diagnostic on this line (if available)
-        let context = diags.iter()
+        let context = diags
+            .iter()
             .find(|d| d.span.line == line_no && d.rich.is_some())
             .and_then(|d| serde_json::to_value(d.rich.as_ref()?).ok());
 
         let pattern_b = is_pattern_b(&old_string);
-        fixes.push(DraftFix { line: line_no, old_string, new_string, auto, pattern_b, context });
+        fixes.push(DraftFix {
+            line: line_no,
+            old_string,
+            new_string,
+            auto,
+            pattern_b,
+            context,
+        });
     }
 
     // Build description from diagnostics
-    let codes: Vec<&str> = diags.iter().map(|d| d.code).collect::<std::collections::HashSet<_>>()
-        .into_iter().collect();
+    let codes: Vec<&str> = diags
+        .iter()
+        .map(|d| d.code)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     let first_msg = &first.message;
     let description = if diags.len() == 1 {
         first_msg.clone()
     } else {
-        format!("{} errors ({}) starting at line {}", diags.len(), codes.join(", "), first.span.line)
+        format!(
+            "{} errors ({}) starting at line {}",
+            diags.len(),
+            codes.join(", "),
+            first.span.line
+        )
     };
 
     // Pre-fill confidence for fully-auto groups
     let all_auto = fixes.iter().all(|f| f.auto);
     let (decision, confidence) = if all_auto {
-        ("AUTO: fix computed deterministically".to_string(), Some(Confidence::High))
+        (
+            "AUTO: fix computed deterministically".to_string(),
+            Some(Confidence::High),
+        )
     } else {
         (String::new(), None) // AI fills these in
     };
 
-    let diag_summaries: Vec<DiagSummary> = diags.iter().map(|d| DiagSummary {
-        code: d.code.to_string(),
-        line: d.span.line,
-        col: d.span.col,
-        severity: d.severity.to_string(),
-        message: d.message.clone(),
-    }).collect();
+    let diag_summaries: Vec<DiagSummary> = diags
+        .iter()
+        .map(|d| DiagSummary {
+            code: d.code.to_string(),
+            line: d.span.line,
+            col: d.span.col,
+            severity: d.severity.to_string(),
+            message: d.message.clone(),
+        })
+        .collect();
 
     Ok(FixGroup {
         group_id,
@@ -273,14 +328,18 @@ fn build_group(
 /// Returns (new_string, auto=true) if deterministic, ("", false) if AI needed.
 fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> (String, bool) {
     // Collect codes affecting this line
-    let codes_on_line: Vec<&str> = diags.iter()
+    let codes_on_line: Vec<&str> = diags
+        .iter()
         .filter(|d| d.span.line == line_no)
         .map(|d| d.code)
         .collect();
 
     // --- Deterministic: table separator too short ---
     // "separator column N has M dashes — need at least 3"
-    if codes_on_line.iter().any(|&c| c == "md_table_separator_invalid") {
+    if codes_on_line
+        .iter()
+        .any(|&c| c == "md_table_separator_invalid")
+    {
         if let Some(fixed) = fix_table_separator(old_string) {
             return (fixed, true);
         }
@@ -299,7 +358,8 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // For ±1: add or remove a trailing space in the last cell before closing │/|
     if codes_on_line.iter().any(|&c| c == "ascii_box_width") {
         // Only handle ±1 cases — larger diffs need AI judgment
-        let all_width_diags: Vec<&&Diagnostic> = diags.iter()
+        let all_width_diags: Vec<&&Diagnostic> = diags
+            .iter()
             .filter(|d| d.span.line == line_no && d.code == "ascii_box_width")
             .collect();
         // Get the diff from the first width diagnostic
@@ -314,7 +374,9 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // "cell N missing right padding" or "cell N missing left padding"
     // These rows have content butting against │ with 0 spaces. Add 1 space.
     if codes_on_line.iter().any(|&c| c == "ascii_cell_padding")
-        && !codes_on_line.iter().any(|&c| c == "ascii_box_width" || c == "ascii_box_col")
+        && !codes_on_line
+            .iter()
+            .any(|&c| c == "ascii_box_width" || c == "ascii_box_col")
     {
         if let Some(fixed) = fix_box_cell_padding(old_string) {
             return (fixed, true);
@@ -330,7 +392,8 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     if codes_on_line.iter().any(|&c| c == "ascii_box_col")
         && !codes_on_line.iter().any(|&c| c == "ascii_box_width")
     {
-        let col_diag = diags.iter()
+        let col_diag = diags
+            .iter()
             .find(|d| d.span.line == line_no && d.code == "ascii_box_col");
         if let Some(diag) = col_diag {
             if let Some(ctx) = &diag.rich {
@@ -346,7 +409,10 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // --- Deterministic: bar chart scale (proportionality) ---
     // Parse "expected ~N chars" from the message
     if codes_on_line.iter().any(|&c| c == "ascii_barchart_scale") {
-        for diag in diags.iter().filter(|d| d.span.line == line_no && d.code == "ascii_barchart_scale") {
+        for diag in diags
+            .iter()
+            .filter(|d| d.span.line == line_no && d.code == "ascii_barchart_scale")
+        {
             if let Some(fixed) = fix_barchart_scale(old_string, &diag.message) {
                 return (fixed, true);
             }
@@ -374,9 +440,11 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
 /// `|--|--|` → `|---|---|`
 fn fix_table_separator(line: &str) -> Option<String> {
     let trimmed = line.trim();
-    if !trimmed.starts_with('|') || !trimmed.ends_with('|') { return None; }
+    if !trimmed.starts_with('|') || !trimmed.ends_with('|') {
+        return None;
+    }
 
-    let inner = &trimmed[1..trimmed.len()-1];
+    let inner = &trimmed[1..trimmed.len() - 1];
     let mut fixed_cells: Vec<String> = Vec::new();
 
     for cell in inner.split('|') {
@@ -398,7 +466,12 @@ fn fix_table_separator(line: &str) -> Option<String> {
             // Preserve original spacing
             let leading = cell.len() - cell.trim_start().len();
             let trailing = cell.len() - cell.trim_end().len();
-            fixed_cells.push(format!("{}{}{}", " ".repeat(leading), normalized, " ".repeat(trailing)));
+            fixed_cells.push(format!(
+                "{}{}{}",
+                " ".repeat(leading),
+                normalized,
+                " ".repeat(trailing)
+            ));
         } else {
             fixed_cells.push(cell.to_string());
         }
@@ -406,7 +479,11 @@ fn fix_table_separator(line: &str) -> Option<String> {
 
     // Reconstruct the leading indentation
     let leading_spaces = line.len() - line.trim_start().len();
-    Some(format!("{}|{}|", " ".repeat(leading_spaces), fixed_cells.join("|")))
+    Some(format!(
+        "{}|{}|",
+        " ".repeat(leading_spaces),
+        fixed_cells.join("|")
+    ))
 }
 
 /// Fix a bar chart row's bar width to be proportional.
@@ -439,7 +516,8 @@ fn fix_barchart_scale(line: &str, message: &str) -> Option<String> {
     // Adjust whitespace gap to keep value at same visual column
     let after_trimmed = after.trim_start();
     let gap_chars = after.chars().take_while(|c| c.is_whitespace()).count();
-    let new_gap = (gap_chars as isize + old_bar_char_count as isize - expected_n as isize).max(1) as usize;
+    let new_gap =
+        (gap_chars as isize + old_bar_char_count as isize - expected_n as isize).max(1) as usize;
     let new_after = format!("{}{}", " ".repeat(new_gap), after_trimmed);
 
     Some(format!("{}{}{}", before, new_bar, new_after))
@@ -449,23 +527,41 @@ fn fix_barchart_scale(line: &str, message: &str) -> Option<String> {
 /// Correctly handles \|, backtick code spans, and operator sequences.
 fn fix_table_cell_padding(line: &str) -> Option<String> {
     let trimmed = line.trim();
-    if !trimmed.starts_with('|') || !trimmed.ends_with('|') { return None; }
+    if !trimmed.starts_with('|') || !trimmed.ends_with('|') {
+        return None;
+    }
 
     let cells = parse_table_cells(trimmed);
-    if cells.is_empty() { return None; }
+    if cells.is_empty() {
+        return None;
+    }
 
     let mut any_fixed = false;
-    let fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
-        let content = cell.trim();
-        if content.is_empty() { return cell; }
-        let leading = cell.len() - cell.trim_start().len();
-        let trailing = cell.len() - cell.trim_end().len();
-        if leading >= 1 && trailing >= 1 { return cell; }
-        any_fixed = true;
-        format!("{}{}{}", " ".repeat(leading.max(1)), content, " ".repeat(trailing.max(1)))
-    }).collect();
+    let fixed_cells: Vec<String> = cells
+        .into_iter()
+        .map(|cell| {
+            let content = cell.trim();
+            if content.is_empty() {
+                return cell;
+            }
+            let leading = cell.len() - cell.trim_start().len();
+            let trailing = cell.len() - cell.trim_end().len();
+            if leading >= 1 && trailing >= 1 {
+                return cell;
+            }
+            any_fixed = true;
+            format!(
+                "{}{}{}",
+                " ".repeat(leading.max(1)),
+                content,
+                " ".repeat(trailing.max(1))
+            )
+        })
+        .collect();
 
-    if !any_fixed { return None; }
+    if !any_fixed {
+        return None;
+    }
 
     let indent = line.len() - line.trim_start().len();
     Some(format!("{}|{}|", " ".repeat(indent), fixed_cells.join("|")))
@@ -484,7 +580,9 @@ fn fix_table_cell_padding(line: &str) -> Option<String> {
 /// The dirname for file links is extracted from the first directory-like cell
 /// in the same row (the Directory column typically comes first).
 fn fix_missing_table_link(table_row: &str) -> Option<String> {
-    if !table_row.starts_with('|') { return None; }
+    if !table_row.starts_with('|') {
+        return None;
+    }
 
     let cells = parse_table_cells(table_row);
 
@@ -531,61 +629,79 @@ fn fix_missing_table_link(table_row: &str) -> Option<String> {
     });
 
     let mut any_fixed = false;
-    let fixed_cells: Vec<String> = cells.into_iter().map(|cell| {
-        let raw = cell.trim();
-        if raw.is_empty() { return cell; }
-        if has_markdown_link_in_cell(raw) { return cell; } // already linked
+    let fixed_cells: Vec<String> = cells
+        .into_iter()
+        .map(|cell| {
+            let raw = cell.trim();
+            if raw.is_empty() {
+                return cell;
+            }
+            if has_markdown_link_in_cell(raw) {
+                return cell;
+            } // already linked
 
-        // Unwrap backtick code span if present: `content` → content
-        let (inner, had_backtick) = if raw.starts_with('`') && raw.ends_with('`') && raw.len() > 2 {
-            (&raw[1..raw.len()-1], true)
-        } else {
-            (raw, false)
-        };
-        let _ = had_backtick; // consumed; the link replaces the backtick wrapper
+            // Unwrap backtick code span if present: `content` → content
+            let (inner, had_backtick) =
+                if raw.starts_with('`') && raw.ends_with('`') && raw.len() > 2 {
+                    (&raw[1..raw.len() - 1], true)
+                } else {
+                    (raw, false)
+                };
+            let _ = had_backtick; // consumed; the link replaces the backtick wrapper
 
-        let leading = cell.len() - cell.trim_start().len();
-        let trailing = cell.len() - cell.trim_end().len();
+            let leading = cell.len() - cell.trim_start().len();
+            let trailing = cell.len() - cell.trim_end().len();
 
-        // Pattern 1: directory name (ends with /, no spaces)
-        if inner.ends_with('/') && !inner.contains(' ') {
-            let dir = inner.trim_end_matches('/');
-            any_fixed = true;
-            return format!(
-                "{}[{}/](../{}/00-OVERVIEW.md){}",
-                " ".repeat(leading), dir, dir, " ".repeat(trailing)
-            );
-        }
+            // Pattern 1: directory name (ends with /, no spaces)
+            if inner.ends_with('/') && !inner.contains(' ') {
+                let dir = inner.trim_end_matches('/');
+                any_fixed = true;
+                return format!(
+                    "{}[{}/](../{}/00-OVERVIEW.md){}",
+                    " ".repeat(leading),
+                    dir,
+                    dir,
+                    " ".repeat(trailing)
+                );
+            }
 
-        // Pattern 2: backtick-wrapped "filename.md" possibly with " — description" after
-        // Also handles "`01-FILE.md` — description" where inner is just "01-FILE.md"
-        // and Pattern 3: bare "01-FILE.md — description"
-        let (check_inner, description) = if let Some(dash_pos) = inner.find(" — ") {
-            (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
-        } else if let Some(dash_pos) = inner.find(" - ") {
-            (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
-        } else {
-            (inner, None)
-        };
+            // Pattern 2: backtick-wrapped "filename.md" possibly with " — description" after
+            // Also handles "`01-FILE.md` — description" where inner is just "01-FILE.md"
+            // and Pattern 3: bare "01-FILE.md — description"
+            let (check_inner, description) = if let Some(dash_pos) = inner.find(" — ") {
+                (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
+            } else if let Some(dash_pos) = inner.find(" - ") {
+                (&inner[..dash_pos], Some(inner[dash_pos..].to_string()))
+            } else {
+                (inner, None)
+            };
 
-        // Strip backticks from check_inner before filename detection
-        // handles: `01-FILE.md` — description (where check_inner = "`01-FILE.md`")
-        let check_inner = check_inner.trim_matches('`');
+            // Strip backticks from check_inner before filename detection
+            // handles: `01-FILE.md` — description (where check_inner = "`01-FILE.md`")
+            let check_inner = check_inner.trim_matches('`');
 
-        // Detect if check_inner is a filename.md
-        if check_inner.ends_with(".md") && !check_inner.contains(' ') {
-            let fname = check_inner;
-            let dirname = parent_dir.as_deref().unwrap_or("DIRNAME");
-            let desc = description.as_deref().unwrap_or("");
-            any_fixed = true;
-            let link = format!("[{}](../{}/{}){}", fname, dirname, fname, desc);
-            return format!("{} {} {}", " ".repeat(leading.saturating_sub(1)), link, " ".repeat(trailing.saturating_sub(1)));
-        }
+            // Detect if check_inner is a filename.md
+            if check_inner.ends_with(".md") && !check_inner.contains(' ') {
+                let fname = check_inner;
+                let dirname = parent_dir.as_deref().unwrap_or("DIRNAME");
+                let desc = description.as_deref().unwrap_or("");
+                any_fixed = true;
+                let link = format!("[{}](../{}/{}){}", fname, dirname, fname, desc);
+                return format!(
+                    "{} {} {}",
+                    " ".repeat(leading.saturating_sub(1)),
+                    link,
+                    " ".repeat(trailing.saturating_sub(1))
+                );
+            }
 
-        cell
-    }).collect();
+            cell
+        })
+        .collect();
 
-    if !any_fixed { return None; }
+    if !any_fixed {
+        return None;
+    }
 
     let indent = table_row.len() - table_row.trim_start().len();
     Some(format!("{}|{}|", " ".repeat(indent), fixed_cells.join("|")))
@@ -597,8 +713,16 @@ fn has_markdown_link_in_cell(cell: &str) -> bool {
 
 fn parse_table_cells(line: &str) -> Vec<String> {
     let trimmed = line.trim();
-    let inner = if trimmed.starts_with('|') { &trimmed[1..] } else { trimmed };
-    let inner = if inner.ends_with('|') { &inner[..inner.len()-1] } else { inner };
+    let inner = if trimmed.starts_with('|') {
+        &trimmed[1..]
+    } else {
+        trimmed
+    };
+    let inner = if inner.ends_with('|') {
+        &inner[..inner.len() - 1]
+    } else {
+        inner
+    };
 
     let mut cells = Vec::new();
     let mut current = String::new();
@@ -608,11 +732,21 @@ fn parse_table_cells(line: &str) -> Vec<String> {
     while let Some(c) = chars.next() {
         match c {
             '\\' if chars.peek() == Some(&'|') => {
-                current.push('\\'); current.push('|'); chars.next();
+                current.push('\\');
+                current.push('|');
+                chars.next();
             }
-            '`' => { in_code = !in_code; current.push(c); }
-            '|' if !in_code => { cells.push(current.clone()); current = String::new(); }
-            other => { current.push(other); }
+            '`' => {
+                in_code = !in_code;
+                current.push(c);
+            }
+            '|' if !in_code => {
+                cells.push(current.clone());
+                current = String::new();
+            }
+            other => {
+                current.push(other);
+            }
         }
     }
     cells.push(current);
@@ -628,16 +762,22 @@ fn parse_table_cells(line: &str) -> Vec<String> {
 fn fix_box_cell_padding(line: &str) -> Option<String> {
     let trimmed = line.trim_end();
     let last_char = trimmed.chars().last()?;
-    if last_char != '│' && last_char != '|' { return None; }
+    if last_char != '│' && last_char != '|' {
+        return None;
+    }
 
     // Check if content is flush against the closing bar (no space before it)
     let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
-    if without_last.ends_with(' ') { return None; } // already has padding
+    if without_last.ends_with(' ') {
+        return None;
+    } // already has padding
 
     // Only handle single-column box rows (one opening + one closing bar)
     // to avoid corrupting multi-column layouts
     let bar_count = trimmed.chars().filter(|&c| c == '│' || c == '|').count();
-    if bar_count != 2 { return None; }
+    if bar_count != 2 {
+        return None;
+    }
 
     Some(format!("{} {}", without_last, last_char))
 }
@@ -646,12 +786,16 @@ fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
     // Parse "row width N ≠ box width M"
     let (actual, expected) = parse_width_diff(message)?;
     let diff = actual.abs_diff(expected);
-    if diff > 4 { return None; } // only handle small offsets
+    if diff > 4 {
+        return None;
+    } // only handle small offsets
 
     // Find the closing vertical bar (│ or |) at the end of the line
     let trimmed = line.trim_end();
     let last_char = trimmed.chars().last()?;
-    if last_char != '│' && last_char != '|' { return None; }
+    if last_char != '│' && last_char != '|' {
+        return None;
+    }
 
     let without_last = &trimmed[..trimmed.len() - last_char.len_utf8()];
 
@@ -681,19 +825,30 @@ fn fix_box_width_one(line: &str, message: &str) -> Option<String> {
 /// Handles up to ±4 drift (single column off). Larger drifts need AI judgment.
 fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -> Option<String> {
     // Find ALL mismatches where drift ≤ 4, sorted by actual column (leftmost first)
-    let mut mismatches: Vec<(usize, usize)> = expected_cols.iter()
+    let mut mismatches: Vec<(usize, usize)> = expected_cols
+        .iter()
         .filter_map(|&exp| {
             let closest = actual_cols.iter().min_by_key(|&&a| a.abs_diff(exp))?;
             let drift = closest.abs_diff(exp);
-            if drift <= 4 { Some((exp, *closest)) } else { None }
+            if drift <= 4 {
+                Some((exp, *closest))
+            } else {
+                None
+            }
         })
         .collect();
     mismatches.sort_by_key(|&(_, act)| act); // leftmost actual column first
 
-    if mismatches.is_empty() { return None; }
+    if mismatches.is_empty() {
+        return None;
+    }
 
     // All mismatches have the same drift direction?
-    let first_dir = if mismatches[0].0 > mismatches[0].1 { 1i32 } else { -1i32 };
+    let first_dir = if mismatches[0].0 > mismatches[0].1 {
+        1i32
+    } else {
+        -1i32
+    };
     let all_same_dir = mismatches.iter().all(|&(exp, act)| {
         let dir = if exp > act { 1i32 } else { -1i32 };
         dir == first_dir
@@ -701,7 +856,9 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
 
     // If all columns are off in the same direction, fixing the leftmost cascades.
     // If they diverge (some left, some right), AI judgment needed.
-    if !all_same_dir { return None; }
+    if !all_same_dir {
+        return None;
+    }
 
     // Fix ONLY the leftmost misaligned │ — cascades to all subsequent positions
     let (exp_first, act_first) = mismatches[0];
@@ -724,7 +881,9 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
 
         if is_vertical && !fixed && cur_col_1 == act_first {
             if need_insert {
-                for _ in 0..drift { result.push(' '); }
+                for _ in 0..drift {
+                    result.push(' ');
+                }
             } else if need_remove {
                 // Remove up to `drift` trailing spaces from result
                 let mut removed = 0;
@@ -732,14 +891,19 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
                     result.pop();
                     removed += 1;
                 }
-                if removed < drift { return None; } // not enough spaces to remove
+                if removed < drift {
+                    return None;
+                } // not enough spaces to remove
             }
             fixed = true;
         }
 
         result.push(c);
         let char_width = match c {
-            '\t' => { let ns = ((col_0 / 4) + 1) * 4; ns - col_0 }
+            '\t' => {
+                let ns = ((col_0 / 4) + 1) * 4;
+                ns - col_0
+            }
             _ => c.width().unwrap_or(1),
         };
         col_0 += char_width;
@@ -747,7 +911,11 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
     }
 
     let new_line: String = result.into_iter().collect();
-    if new_line == line { None } else { Some(new_line) }
+    if new_line == line {
+        None
+    } else {
+        Some(new_line)
+    }
 }
 
 /// Parse "row width N ≠ box width M" or "bottom border width N ≠ top border width M"
@@ -755,7 +923,9 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
 fn parse_width_diff(message: &str) -> Option<(usize, usize)> {
     // Pattern: "... width N ≠ ... width M ..."
     let parts: Vec<&str> = message.split("width").collect();
-    if parts.len() < 3 { return None; }
+    if parts.len() < 3 {
+        return None;
+    }
     let actual: usize = parts[1].trim().split_whitespace().next()?.parse().ok()?;
     let expected: usize = parts[2].trim().split_whitespace().next()?.parse().ok()?;
     Some((actual, expected))
@@ -789,11 +959,18 @@ mod tests {
         let result = fix_barchart_scale(line, msg);
         assert!(result.is_some(), "should produce a fix");
         let fixed = result.unwrap();
-        let bar_len = fixed.chars().take_while(|_| true)
-            .skip_while(|&c| c != '█').take_while(|&c| c == '█').count();
+        let _bar_len = fixed
+            .chars()
+            .take_while(|_| true)
+            .skip_while(|&c| c != '█')
+            .take_while(|&c| c == '█')
+            .count();
         // bar length in the fixed version might not be exact due to char boundary,
         // but the bar should be longer than original 13
-        assert!(fixed.contains("█████████████████"), "bar should be extended");
+        assert!(
+            fixed.contains("█████████████████"),
+            "bar should be extended"
+        );
     }
 
     #[test]

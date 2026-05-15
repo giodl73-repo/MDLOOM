@@ -28,15 +28,15 @@ impl ShapeMask {
 
 pub fn enforce_minimum_size(kind: &ShapeKind, width: u32) -> Result<(), String> {
     let (min, name) = match kind {
-        ShapeKind::Octagon     => (14, "octagon"),
-        ShapeKind::Circle      => (10, "circle"),
-        ShapeKind::Shield      => (12, "shield"),
-        ShapeKind::Star        => (8,  "star"),
-        ShapeKind::Heart       => (8,  "heart"),
-        ShapeKind::Diamond     => (6,  "diamond"),
-        ShapeKind::Hexagon     => (10, "hexagon"),
-        ShapeKind::Pentagon    => (10, "pentagon"),
-        ShapeKind::RoundedRect => (6,  "rounded-rect"),
+        ShapeKind::Octagon => (14, "octagon"),
+        ShapeKind::Circle => (10, "circle"),
+        ShapeKind::Shield => (12, "shield"),
+        ShapeKind::Star => (8, "star"),
+        ShapeKind::Heart => (8, "heart"),
+        ShapeKind::Diamond => (6, "diamond"),
+        ShapeKind::Hexagon => (10, "hexagon"),
+        ShapeKind::Pentagon => (10, "pentagon"),
+        ShapeKind::RoundedRect => (6, "rounded-rect"),
     };
     if width < min {
         Err(format!(
@@ -61,21 +61,25 @@ pub fn build_mask(kind: &ShapeKind, width: u32, height: u32) -> ShapeMask {
             let nx = (x as f64 + 0.5) / width as f64 * 2.0 - 1.0;
             let ny = (y as f64 + 0.5) / height as f64 * 2.0 - 1.0;
             let inside = match kind {
-                ShapeKind::Circle      => inside_circle(nx, ny),
-                ShapeKind::Octagon     => inside_octagon(nx, ny),
-                ShapeKind::Shield      => inside_shield(nx, ny),
-                ShapeKind::Star        => inside_star(nx, ny, 5),
-                ShapeKind::Heart       => inside_heart(nx, ny),
-                ShapeKind::Diamond     => inside_diamond(nx, ny),
-                ShapeKind::Hexagon     => inside_hexagon(nx, ny),
-                ShapeKind::Pentagon    => inside_regular_polygon(nx, ny, 5),
+                ShapeKind::Circle => inside_circle(nx, ny),
+                ShapeKind::Octagon => inside_octagon(nx, ny),
+                ShapeKind::Shield => inside_shield(nx, ny),
+                ShapeKind::Star => inside_star(nx, ny, 5),
+                ShapeKind::Heart => inside_heart(nx, ny),
+                ShapeKind::Diamond => inside_diamond(nx, ny),
+                ShapeKind::Hexagon => inside_hexagon(nx, ny),
+                ShapeKind::Pentagon => inside_regular_polygon(nx, ny, 5),
                 ShapeKind::RoundedRect => inside_rounded_rect(nx, ny, 0.25),
             };
             pixels[(y * width + x) as usize] = inside;
         }
     }
 
-    ShapeMask { width, height, pixels }
+    ShapeMask {
+        width,
+        height,
+        pixels,
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -109,7 +113,9 @@ fn inside_shield(nx: f64, ny: f64) -> bool {
 fn inside_star(nx: f64, ny: f64, points: u32) -> bool {
     // Star polygon: alternating inner (0.4) and outer (1.0) radii
     let r = (nx * nx + ny * ny).sqrt();
-    if r > 1.0 { return false; }
+    if r > 1.0 {
+        return false;
+    }
     let angle = ny.atan2(nx); // [-π, π]
     let sector_angle = std::f64::consts::PI / points as f64;
     let sector = ((angle + std::f64::consts::PI) / sector_angle) as u32 % 2;
@@ -129,8 +135,8 @@ fn inside_heart(nx: f64, ny: f64) -> bool {
     // Heart: (x²+y²−1)³ < x²y³
     let x = nx * 0.9;
     let y = -ny * 0.9; // flip so y increases downward in image coords
-    let lhs = (x*x + y*y - 1.0).powi(3);
-    let rhs = x*x * y*y*y;
+    let lhs = (x * x + y * y - 1.0).powi(3);
+    let rhs = x * x * y * y * y;
     lhs < rhs
 }
 
@@ -148,7 +154,9 @@ fn inside_hexagon(nx: f64, ny: f64) -> bool {
 fn inside_regular_polygon(nx: f64, ny: f64, sides: u32) -> bool {
     // Regular polygon via inscribed-radius test
     let r = (nx * nx + ny * ny).sqrt();
-    if r > 1.0 { return false; }
+    if r > 1.0 {
+        return false;
+    }
     let angle = ny.atan2(nx);
     let sector = (2.0 * std::f64::consts::PI) / sides as f64;
     let offset = angle.rem_euclid(sector) - sector / 2.0;
@@ -249,7 +257,10 @@ mod tests {
         let count = mask.pixels.iter().filter(|&&b| b).count();
         assert!(count > 0, "octagon mask should have non-zero coverage");
         // Octagon should cover less than full rectangle
-        assert!(count < (20 * 10) as usize, "octagon should not fill entire frame");
+        assert!(
+            count < (20 * 10) as usize,
+            "octagon should not fill entire frame"
+        );
     }
 
     #[test]
@@ -290,6 +301,10 @@ mod tests {
         // Corner pixels outside circle should be 0 (background)
         assert_eq!(result.get_pixel(0, 0)[0], 0, "corner should be background");
         // Center pixel inside circle should retain original value
-        assert_eq!(result.get_pixel(10, 10)[0], 200, "center should retain value");
+        assert_eq!(
+            result.get_pixel(10, 10)[0],
+            200,
+            "center should retain value"
+        );
     }
 }

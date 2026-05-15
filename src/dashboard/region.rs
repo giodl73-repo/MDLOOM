@@ -5,7 +5,6 @@
 /// - Literal content lines (everything else — rendered verbatim)
 ///
 /// No nested fences. The proof:region fence IS the container.
-
 use crate::dashboard::canvas::Canvas;
 #[allow(unused_imports)]
 use unicode_width::UnicodeWidthChar;
@@ -32,7 +31,11 @@ pub fn parse_regions(yaml_value: &str) -> Vec<RegionGeometry> {
         // Pattern: "name: { x: N, y: N, width: N, height: N }"
         if let Some((name, rest)) = line.split_once(':') {
             let name = name.trim().trim_matches('"').to_string();
-            let rest = rest.trim().trim_start_matches('{').trim_end_matches('}').trim();
+            let rest = rest
+                .trim()
+                .trim_start_matches('{')
+                .trim_end_matches('}')
+                .trim();
             let mut x = 0usize;
             let mut y = 0usize;
             let mut width = 0usize;
@@ -52,7 +55,13 @@ pub fn parse_regions(yaml_value: &str) -> Vec<RegionGeometry> {
                 }
             }
             if !name.is_empty() && width > 0 && height > 0 {
-                regions.push(RegionGeometry { name, x, y, width, height });
+                regions.push(RegionGeometry {
+                    name,
+                    x,
+                    y,
+                    width,
+                    height,
+                });
             }
         }
     }
@@ -84,7 +93,11 @@ pub fn validate_regions(
                 code: "DASHBOARD-001",
                 message: format!(
                     "region {:?}: x({}) + width({}) = {} exceeds canvas width {}",
-                    r.name, r.x, r.width, r.x + r.width, canvas_width
+                    r.name,
+                    r.x,
+                    r.width,
+                    r.x + r.width,
+                    canvas_width
                 ),
             });
         }
@@ -93,7 +106,11 @@ pub fn validate_regions(
                 code: "DASHBOARD-002",
                 message: format!(
                     "region {:?}: y({}) + height({}) = {} exceeds canvas height {}",
-                    r.name, r.y, r.height, r.y + r.height, canvas_height
+                    r.name,
+                    r.y,
+                    r.height,
+                    r.y + r.height,
+                    canvas_height
                 ),
             });
         }
@@ -109,10 +126,7 @@ pub fn validate_regions(
             if overlap_x && overlap_y {
                 errors.push(DashboardError {
                     code: "DASHBOARD-003",
-                    message: format!(
-                        "regions {:?} and {:?} overlap",
-                        a.name, b.name
-                    ),
+                    message: format!("regions {:?} and {:?} overlap", a.name, b.name),
                 });
             }
         }
@@ -129,8 +143,8 @@ pub fn validate_regions(
 /// Directive lines start with one of the proof: directive keywords.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegionLine<'a> {
-    Directive(&'a str),  // proof:element, proof:tree, proof:chart, proof:row
-    Literal(&'a str),    // plain text — rendered verbatim
+    Directive(&'a str), // proof:element, proof:tree, proof:chart, proof:row
+    Literal(&'a str),   // plain text — rendered verbatim
 }
 
 pub fn classify_region_line(line: &str) -> RegionLine<'_> {
@@ -197,12 +211,17 @@ pub fn render_region_into_canvas(
 
     // Pad each line to region width using visual_width (not char count),
     // then paste onto canvas. canvas.paste() also uses visual width internally.
-    let padded: Vec<String> = output_lines.iter().map(|l| {
-        let mut s = l.clone();
-        let w = crate::layout::visual_width(&s);
-        if w < region.width { s.push_str(&" ".repeat(region.width - w)); }
-        s
-    }).collect();
+    let padded: Vec<String> = output_lines
+        .iter()
+        .map(|l| {
+            let mut s = l.clone();
+            let w = crate::layout::visual_width(&s);
+            if w < region.width {
+                s.push_str(&" ".repeat(region.width - w));
+            }
+            s
+        })
+        .collect();
 
     let as_str: Vec<&str> = padded.iter().map(|s| s.as_str()).collect();
     canvas.paste(region.x, region.y, &as_str);
@@ -212,7 +231,7 @@ pub fn render_region_into_canvas(
 
 fn clip_to_width(s: &str, width: usize) -> String {
     // Clip by visual_width, not char count, to handle wide chars correctly.
-    
+
     let mut result = String::new();
     let mut w = 0usize;
     for ch in s.chars() {
@@ -240,7 +259,11 @@ pub struct DashboardMeta {
 
 impl Default for DashboardMeta {
     fn default() -> Self {
-        DashboardMeta { width: 120, height: 40, title: String::new() }
+        DashboardMeta {
+            width: 120,
+            height: 40,
+            title: String::new(),
+        }
     }
 }
 
@@ -263,8 +286,13 @@ pub fn parse_dashboard_frontmatter(yaml: &str) -> (DashboardMeta, Vec<RegionGeom
 
     for line in yaml.lines() {
         let trimmed = line.trim();
-        if trimmed == "dashboard:" { in_dashboard = true; continue; }
-        if !in_dashboard { continue; }
+        if trimmed == "dashboard:" {
+            in_dashboard = true;
+            continue;
+        }
+        if !in_dashboard {
+            continue;
+        }
 
         let indent = line.len() - line.trim_start().len();
 
@@ -275,8 +303,12 @@ pub fn parse_dashboard_frontmatter(yaml: &str) -> (DashboardMeta, Vec<RegionGeom
 
         if in_regions {
             // Collect all indented region lines
-            if indent >= 4 { regions_yaml.push_str(line); regions_yaml.push('\n'); }
-            else { in_regions = false; }
+            if indent >= 4 {
+                regions_yaml.push_str(line);
+                regions_yaml.push('\n');
+            } else {
+                in_regions = false;
+            }
             continue;
         }
 
@@ -284,9 +316,9 @@ pub fn parse_dashboard_frontmatter(yaml: &str) -> (DashboardMeta, Vec<RegionGeom
         if let Some((k, v)) = trimmed.split_once(':') {
             let v = v.trim().trim_matches('"');
             match k.trim() {
-                "width"  => meta.width  = v.parse().unwrap_or(120),
+                "width" => meta.width = v.parse().unwrap_or(120),
                 "height" => meta.height = v.parse().unwrap_or(40),
-                "title"  => meta.title  = v.to_string(),
+                "title" => meta.title = v.to_string(),
                 _ => {}
             }
         }
@@ -312,7 +344,10 @@ pub fn compile_dashboard(
     // Validate geometry first
     let geo_errors = validate_regions(regions, meta.width, meta.height);
     all_errors.extend(geo_errors);
-    if all_errors.iter().any(|e| e.code.starts_with("DASHBOARD-00")) {
+    if all_errors
+        .iter()
+        .any(|e| e.code.starts_with("DASHBOARD-00"))
+    {
         // Return empty canvas on geometry error
         return (canvas.render(), all_errors);
     }
@@ -351,20 +386,38 @@ mod tests {
 
     #[test]
     fn validate_regions_in_bounds() {
-        let r = vec![RegionGeometry { name: "a".into(), x: 0, y: 0, width: 40, height: 20 }];
+        let r = vec![RegionGeometry {
+            name: "a".into(),
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 20,
+        }];
         assert!(validate_regions(&r, 120, 40).is_empty());
     }
 
     #[test]
     fn validate_regions_out_of_bounds_x() {
-        let r = vec![RegionGeometry { name: "a".into(), x: 100, y: 0, width: 40, height: 10 }];
+        let r = vec![RegionGeometry {
+            name: "a".into(),
+            x: 100,
+            y: 0,
+            width: 40,
+            height: 10,
+        }];
         let errs = validate_regions(&r, 120, 40);
         assert!(errs.iter().any(|e| e.code == "DASHBOARD-001"));
     }
 
     #[test]
     fn validate_regions_out_of_bounds_y() {
-        let r = vec![RegionGeometry { name: "a".into(), x: 0, y: 35, width: 40, height: 10 }];
+        let r = vec![RegionGeometry {
+            name: "a".into(),
+            x: 0,
+            y: 35,
+            width: 40,
+            height: 10,
+        }];
         let errs = validate_regions(&r, 120, 40);
         assert!(errs.iter().any(|e| e.code == "DASHBOARD-002"));
     }
@@ -372,8 +425,20 @@ mod tests {
     #[test]
     fn validate_regions_overlap() {
         let r = vec![
-            RegionGeometry { name: "a".into(), x: 0, y: 0, width: 60, height: 20 },
-            RegionGeometry { name: "b".into(), x: 40, y: 0, width: 60, height: 20 }, // overlaps a
+            RegionGeometry {
+                name: "a".into(),
+                x: 0,
+                y: 0,
+                width: 60,
+                height: 20,
+            },
+            RegionGeometry {
+                name: "b".into(),
+                x: 40,
+                y: 0,
+                width: 60,
+                height: 20,
+            }, // overlaps a
         ];
         let errs = validate_regions(&r, 120, 40);
         assert!(errs.iter().any(|e| e.code == "DASHBOARD-003"));
@@ -382,30 +447,67 @@ mod tests {
     #[test]
     fn validate_adjacent_regions_no_overlap() {
         let r = vec![
-            RegionGeometry { name: "a".into(), x: 0, y: 0, width: 40, height: 20 },
-            RegionGeometry { name: "b".into(), x: 40, y: 0, width: 40, height: 20 }, // adjacent, not overlapping
+            RegionGeometry {
+                name: "a".into(),
+                x: 0,
+                y: 0,
+                width: 40,
+                height: 20,
+            },
+            RegionGeometry {
+                name: "b".into(),
+                x: 40,
+                y: 0,
+                width: 40,
+                height: 20,
+            }, // adjacent, not overlapping
         ];
         assert!(validate_regions(&r, 80, 20).is_empty());
     }
 
     #[test]
     fn classify_directive_line() {
-        assert_eq!(classify_region_line("proof:element kind=value"), RegionLine::Directive("proof:element kind=value"));
-        assert_eq!(classify_region_line("  proof:tree kind=org"), RegionLine::Directive("proof:tree kind=org"));
+        assert_eq!(
+            classify_region_line("proof:element kind=value"),
+            RegionLine::Directive("proof:element kind=value")
+        );
+        assert_eq!(
+            classify_region_line("  proof:tree kind=org"),
+            RegionLine::Directive("proof:tree kind=org")
+        );
     }
 
     #[test]
     fn classify_literal_line() {
-        assert!(matches!(classify_region_line("Hello world"), RegionLine::Literal("Hello world")));
+        assert!(matches!(
+            classify_region_line("Hello world"),
+            RegionLine::Literal("Hello world")
+        ));
         assert!(matches!(classify_region_line(""), RegionLine::Literal("")));
     }
 
     #[test]
     fn compile_dashboard_two_regions() {
-        let meta = DashboardMeta { width: 20, height: 4, title: "Test".into() };
+        let meta = DashboardMeta {
+            width: 20,
+            height: 4,
+            title: "Test".into(),
+        };
         let regions = vec![
-            RegionGeometry { name: "top".into(), x: 0, y: 0, width: 20, height: 2 },
-            RegionGeometry { name: "bottom".into(), x: 0, y: 2, width: 20, height: 2 },
+            RegionGeometry {
+                name: "top".into(),
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 2,
+            },
+            RegionGeometry {
+                name: "bottom".into(),
+                x: 0,
+                y: 2,
+                width: 20,
+                height: 2,
+            },
         ];
         let mut contents = HashMap::new();
         contents.insert("top".into(), vec!["HEADER LINE".to_string()]);
@@ -421,10 +523,23 @@ mod tests {
 
     #[test]
     fn compile_dashboard_overflow_emits_005() {
-        let meta = DashboardMeta { width: 20, height: 2, title: String::new() };
-        let regions = vec![RegionGeometry { name: "r".into(), x: 0, y: 0, width: 20, height: 2 }];
+        let meta = DashboardMeta {
+            width: 20,
+            height: 2,
+            title: String::new(),
+        };
+        let regions = vec![RegionGeometry {
+            name: "r".into(),
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 2,
+        }];
         let mut contents = HashMap::new();
-        contents.insert("r".into(), vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+        contents.insert(
+            "r".into(),
+            vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        );
         let (_, errors) = compile_dashboard(&meta, &regions, &contents);
         assert!(errors.iter().any(|e| e.code == "DASHBOARD-005"));
     }

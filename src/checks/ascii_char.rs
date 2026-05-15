@@ -16,7 +16,6 @@
 ///   Fullwidth (F): Fullwidth ASCII variants (Ａ, Ｂ, …) — 2 columns
 ///
 /// See: specs/unicode-east-asian-width.md, specs/gfm-code-blocks.md
-
 use crate::checks::Check;
 use crate::config::AsciiCharConfig;
 use crate::diagnostic::Diagnostic;
@@ -28,7 +27,9 @@ pub struct AsciiCharCheck {
 }
 
 impl Check for AsciiCharCheck {
-    fn name(&self) -> &'static str { "ascii_char" }
+    fn name(&self) -> &'static str {
+        "ascii_char"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
         if !self.config.enabled {
@@ -57,14 +58,12 @@ impl Check for AsciiCharCheck {
                             // error_on_wide = true (default): error here too, catching
                             //   cases where CJK appears in contexts without box checking.
                             // error_on_wide = false: suppress — rely on ascii_box_width
-                            //   to catch actual misalignment. Use this when CJK content
-                            //   is intentional (e.g. world-languages guides).
-                            let make_diag = if self.config.error_on_wide {
-                                Diagnostic::error
-                            } else {
-                                Diagnostic::warning
-                            };
-                            diags.push(make_diag(
+                            //   to catch actual misalignment. Use this when wide content
+                            //   is intentional (e.g. language guides or emoji status lists).
+                            if !self.config.error_on_wide {
+                                continue;
+                            }
+                            diags.push(Diagnostic::error(
                                 path.to_path_buf(),
                                 abs_line,
                                 col_1,
@@ -170,7 +169,9 @@ mod tests {
     use super::*;
 
     fn check_default() -> AsciiCharCheck {
-        AsciiCharCheck { config: AsciiCharConfig::default() }
+        AsciiCharCheck {
+            config: AsciiCharConfig::default(),
+        }
     }
 
     #[test]
@@ -178,10 +179,15 @@ mod tests {
         // 中 is Wide (W), U+4E2D, 2 columns
         let content = "```\n+------+\n| 中文 |\n+------+\n```";
         let diags = check_default().check(Path::new("test.md"), content);
-        let errs: Vec<_> = diags.iter().filter(|d| d.severity == crate::diagnostic::Severity::Error).collect();
+        let errs: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == crate::diagnostic::Severity::Error)
+            .collect();
         assert!(!errs.is_empty(), "CJK chars must be reported as errors");
-        assert!(errs.iter().all(|d| d.code == "ascii_char_range"),
-            "code must be ascii_char_range");
+        assert!(
+            errs.iter().all(|d| d.code == "ascii_char_range"),
+            "code must be ascii_char_range"
+        );
     }
 
     #[test]
@@ -189,8 +195,30 @@ mod tests {
         // Ａ is Fullwidth (F), U+FF21, 2 columns
         let content = "```\n+------+\n| Ａ   |\n+------+\n```";
         let diags = check_default().check(Path::new("test.md"), content);
-        let errs: Vec<_> = diags.iter().filter(|d| d.code == "ascii_char_range" && d.severity == crate::diagnostic::Severity::Error).collect();
+        let errs: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.code == "ascii_char_range" && d.severity == crate::diagnostic::Severity::Error
+            })
+            .collect();
         assert!(!errs.is_empty(), "fullwidth Latin must be error");
+    }
+
+    #[test]
+    fn error_on_wide_false_suppresses_intentional_wide_chars() {
+        let content = "```\n✅ pass\n日本語 example\n```";
+        let check = AsciiCharCheck {
+            config: AsciiCharConfig {
+                error_on_wide: false,
+                ..AsciiCharConfig::default()
+            },
+        };
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags.iter().all(|d| d.code != "ascii_char_range"),
+            "error_on_wide=false should suppress wide-char diagnostics, got: {:?}",
+            diags
+        );
     }
 
     #[test]
@@ -198,16 +226,25 @@ mod tests {
         // Box drawing (┌─┐│└) are in the safe range
         let content = "```\n┌──────┐\n│ text │\n└──────┘\n```";
         let diags = check_default().check(Path::new("test.md"), content);
-        let char_errs: Vec<_> = diags.iter().filter(|d| d.code == "ascii_char_range").collect();
-        assert!(char_errs.is_empty(), "box drawing chars must be safe, got: {:?}",
-            char_errs.iter().map(|d| &d.message).collect::<Vec<_>>());
+        let char_errs: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "ascii_char_range")
+            .collect();
+        assert!(
+            char_errs.is_empty(),
+            "box drawing chars must be safe, got: {:?}",
+            char_errs.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]
     fn arrows_are_safe() {
         let content = "```\n→ ← ↑ ↓ ▶ ◀ ▲ ▼\n```";
         let diags = check_default().check(Path::new("test.md"), content);
-        let char_errs: Vec<_> = diags.iter().filter(|d| d.code == "ascii_char_range").collect();
+        let char_errs: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "ascii_char_range")
+            .collect();
         assert!(char_errs.is_empty(), "arrow chars must be safe");
     }
 
@@ -216,8 +253,10 @@ mod tests {
         // CJK outside a code block — should NOT fire (only checks inside fences)
         let content = "# Title with 中文\n\nProse with 日本語 text.\n";
         let diags = check_default().check(Path::new("test.md"), content);
-        assert!(diags.is_empty(),
-            "chars outside code blocks must not be checked");
+        assert!(
+            diags.is_empty(),
+            "chars outside code blocks must not be checked"
+        );
     }
 
     #[test]
@@ -236,8 +275,8 @@ mod tests {
         assert!(is_alignment_safe('→'));
         assert!(is_alignment_safe('▶'));
         // NOT safe
-        assert!(!is_alignment_safe('中'));  // CJK
-        assert!(!is_alignment_safe('Ａ'));  // Fullwidth Latin
-        assert!(!is_alignment_safe('α'));   // Greek (outside safe range)
+        assert!(!is_alignment_safe('中')); // CJK
+        assert!(!is_alignment_safe('Ａ')); // Fullwidth Latin
+        assert!(!is_alignment_safe('α')); // Greek (outside safe range)
     }
 }

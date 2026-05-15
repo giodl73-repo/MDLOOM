@@ -26,10 +26,10 @@
 
 #[derive(Debug, Clone)]
 pub struct BulletConfig {
-    pub level_chars: [char; 4],   // chars for levels 1, 2, 3, 4+
-    pub indent_width: usize,      // spaces per level (default: 2)
-    pub max_bullets: usize,       // SLIDE-001 threshold (default: 4 — 30-second rule)
-    pub max_depth: usize,         // SLIDE-007 threshold (default: 4)
+    pub level_chars: [char; 4], // chars for levels 1, 2, 3, 4+
+    pub indent_width: usize,    // spaces per level (default: 2)
+    pub max_bullets: usize,     // SLIDE-001 threshold (default: 4 — 30-second rule)
+    pub max_depth: usize,       // SLIDE-007 threshold (default: 4)
 }
 
 impl Default for BulletConfig {
@@ -74,8 +74,10 @@ pub fn render_bullets(
 
         let trimmed = raw_line.trim();
         let leading = raw_line.len() - raw_line.trim_start().len();
-        let is_bullet = trimmed.starts_with("- ") || trimmed.starts_with("* ")
-            || trimmed == "-" || trimmed == "*";
+        let is_bullet = trimmed.starts_with("- ")
+            || trimmed.starts_with("* ")
+            || trimmed == "-"
+            || trimmed == "*";
 
         // Continuation paragraph: indented prose under a bullet (no `-`/`*` marker).
         // Requires a preceding bullet — without one, falls through to bullet handling.
@@ -91,7 +93,10 @@ pub fn render_bullets(
         if level > config.max_depth {
             warnings.push(BulletWarning {
                 code: "SLIDE-007",
-                message: format!("bullet depth {} exceeds max_depth {}", level, config.max_depth),
+                message: format!(
+                    "bullet depth {} exceeds max_depth {}",
+                    level, config.max_depth
+                ),
             });
         }
 
@@ -185,7 +190,11 @@ fn word_wrap_hanging(s: &str, hanging: usize, width: usize) -> Vec<String> {
     // We treat the whole first line as tokens
     for word in s.split(' ') {
         let word_w = visual_width(word);
-        let max_w = if first && result.is_empty() { width } else { cont_width };
+        let max_w = if first && result.is_empty() {
+            width
+        } else {
+            cont_width
+        };
         if current.is_empty() {
             current.push_str(word);
             current_w = word_w;
@@ -281,15 +290,20 @@ pub fn render_bullets_pages(
     }
 
     // Collect (step, raw_line): blank lines get step 0 (always included for spacing)
-    let tagged: Vec<(usize, &str)> = text.lines()
+    let tagged: Vec<(usize, &str)> = text
+        .lines()
         .map(|line| {
-            if line.trim().is_empty() { (0, line) }
-            else { parse_reveal_step(line) }
+            if line.trim().is_empty() {
+                (0, line)
+            } else {
+                parse_reveal_step(line)
+            }
         })
         .collect();
 
     // Sorted distinct steps (≥ 1)
-    let mut steps: Vec<usize> = tagged.iter()
+    let mut steps: Vec<usize> = tagged
+        .iter()
         .filter_map(|&(s, _)| if s >= 1 { Some(s) } else { None })
         .collect();
     steps.sort_unstable();
@@ -330,19 +344,30 @@ mod tests {
     fn level_2_uses_open_circle() {
         let cfg = BulletConfig::default();
         let (lines, _) = render_bullets("- Top\n  - Nested", 80, &cfg);
-        assert!(lines[1].contains('◦'), "level 2 should use ◦: {:?}", lines[1]);
+        assert!(
+            lines[1].contains('◦'),
+            "level 2 should use ◦: {:?}",
+            lines[1]
+        );
     }
 
     #[test]
     fn level_3_uses_right_arrow() {
         let cfg = BulletConfig::default();
         let (lines, _) = render_bullets("- Top\n  - Mid\n    - Deep", 80, &cfg);
-        assert!(lines[2].contains('▸'), "level 3 should use ▸: {:?}", lines[2]);
+        assert!(
+            lines[2].contains('▸'),
+            "level 3 should use ▸: {:?}",
+            lines[2]
+        );
     }
 
     #[test]
     fn max_bullets_warning() {
-        let cfg = BulletConfig { max_bullets: 2, ..Default::default() };
+        let cfg = BulletConfig {
+            max_bullets: 2,
+            ..Default::default()
+        };
         let text = "- A\n- B\n- C";
         let (_, warns) = render_bullets(text, 80, &cfg);
         assert!(warns.iter().any(|w| w.code == "SLIDE-001"));
@@ -350,7 +375,10 @@ mod tests {
 
     #[test]
     fn max_depth_warning() {
-        let cfg = BulletConfig { max_depth: 2, ..Default::default() };
+        let cfg = BulletConfig {
+            max_depth: 2,
+            ..Default::default()
+        };
         let text = "- A\n  - B\n    - C"; // level 3 > max_depth 2
         let (_, warns) = render_bullets(text, 80, &cfg);
         assert!(warns.iter().any(|w| w.code == "SLIDE-007"));
@@ -375,8 +403,11 @@ mod tests {
         assert!(lines[0].contains('●'), "first line should have bullet char");
         // No line should exceed width
         for line in &lines {
-            assert!(line.chars().count() <= 40,
-                "line {:?} exceeds width 40", line);
+            assert!(
+                line.chars().count() <= 40,
+                "line {:?} exceeds width 40",
+                line
+            );
         }
     }
 
@@ -388,8 +419,11 @@ mod tests {
         if lines.len() > 1 {
             // Continuation line should be indented to align past the bullet
             // "● " = 2 chars, so continuation has 2 spaces indent
-            assert!(lines[1].starts_with("  "),
-                "continuation line should have hanging indent: {:?}", lines[1]);
+            assert!(
+                lines[1].starts_with("  "),
+                "continuation line should have hanging indent: {:?}",
+                lines[1]
+            );
         }
     }
 
@@ -401,8 +435,10 @@ mod tests {
         // Should have the top bullet + nested bullet (possibly wrapped)
         assert!(lines.len() >= 2);
         // The nested bullet line should contain ◦
-        assert!(lines.iter().any(|l| l.contains('◦')),
-            "nested bullet should use ◦ char");
+        assert!(
+            lines.iter().any(|l| l.contains('◦')),
+            "nested bullet should use ◦ char"
+        );
     }
 
     #[test]
@@ -429,12 +465,17 @@ mod tests {
 
     #[test]
     fn continuation_does_not_count_as_bullet() {
-        let cfg = BulletConfig { max_bullets: 1, ..Default::default() };
+        let cfg = BulletConfig {
+            max_bullets: 1,
+            ..Default::default()
+        };
         let text = "- One\n    Continuation";
         let (_, warns) = render_bullets(text, 80, &cfg);
         // Only one real bullet — continuation should not trigger SLIDE-001.
-        assert!(!warns.iter().any(|w| w.code == "SLIDE-001"),
-            "continuation prose must not count toward max_bullets");
+        assert!(
+            !warns.iter().any(|w| w.code == "SLIDE-001"),
+            "continuation prose must not count toward max_bullets"
+        );
     }
 
     #[test]
@@ -451,16 +492,27 @@ mod tests {
     #[test]
     fn continuation_paragraph_wraps_with_aligned_indent() {
         let cfg = BulletConfig::default();
-        let text = "- Bullet\n    This continuation paragraph is long enough to wrap onto a second line";
+        let text =
+            "- Bullet\n    This continuation paragraph is long enough to wrap onto a second line";
         let (lines, _) = render_bullets(text, 30, &cfg);
         eprintln!("DEBUG lines: {:#?}", lines);
-        assert!(lines.len() >= 3, "continuation should wrap into multiple lines: {:?}", lines);
+        assert!(
+            lines.len() >= 3,
+            "continuation should wrap into multiple lines: {:?}",
+            lines
+        );
         // Every continuation line must start with the bullet's content-column indent ("  ").
         for line in &lines[1..] {
-            assert!(line.starts_with("  "),
-                "continuation/wrap line must align to bullet content column: {:?}", line);
-            assert!(!line.contains('●'),
-                "continuation lines must not have a bullet glyph: {:?}", line);
+            assert!(
+                line.starts_with("  "),
+                "continuation/wrap line must align to bullet content column: {:?}",
+                line
+            );
+            assert!(
+                !line.contains('●'),
+                "continuation lines must not have a bullet glyph: {:?}",
+                line
+            );
         }
     }
 
@@ -545,7 +597,10 @@ mod tests {
         let (pages, _) = render_bullets_pages(text, 80, &cfg);
         let p1 = pages[0].join("\n");
         assert!(p1.contains("Always"), "page 1 should have step-1 bullet");
-        assert!(!p1.contains("Step 2"), "page 1 should NOT have step-2 bullet");
+        assert!(
+            !p1.contains("Step 2"),
+            "page 1 should NOT have step-2 bullet"
+        );
     }
 
     #[test]
@@ -577,21 +632,26 @@ mod tests {
         let (pages, _) = render_bullets_pages(text, 80, &cfg);
         assert_eq!(pages.len(), 2);
         // Page 1 should have the blank line (spacing preserved)
-        assert!(pages[0].iter().any(|l| l.trim().is_empty()),
-            "blank lines should be present on all pages");
+        assert!(
+            pages[0].iter().any(|l| l.trim().is_empty()),
+            "blank lines should be present on all pages"
+        );
     }
 
     #[test]
     fn reveal_three_steps_incremental() {
-        let cfg = BulletConfig { max_bullets: 10, ..BulletConfig::default() };
+        let cfg = BulletConfig {
+            max_bullets: 10,
+            ..BulletConfig::default()
+        };
         let text = "- One\n[2] - Two\n[3] - Three";
         let (pages, _) = render_bullets_pages(text, 80, &cfg);
         assert_eq!(pages.len(), 3);
         let p1 = pages[0].join("\n");
         let p2 = pages[1].join("\n");
         let p3 = pages[2].join("\n");
-        assert!( p1.contains("One") && !p1.contains("Two") && !p1.contains("Three"));
-        assert!( p2.contains("One") &&  p2.contains("Two") && !p2.contains("Three"));
-        assert!( p3.contains("One") &&  p3.contains("Two") &&  p3.contains("Three"));
+        assert!(p1.contains("One") && !p1.contains("Two") && !p1.contains("Three"));
+        assert!(p2.contains("One") && p2.contains("Two") && !p2.contains("Three"));
+        assert!(p3.contains("One") && p3.contains("Two") && p3.contains("Three"));
     }
 }

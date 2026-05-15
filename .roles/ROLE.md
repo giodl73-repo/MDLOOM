@@ -1,9 +1,10 @@
 # proof Review Roles
 
-Twelve perspectives on proof — the markdown quality assurance and compilation system.
+Thirteen perspectives on proof — the markdown quality assurance, compiler, and
+typesetting system.
 Each role has a pointed view and pulls against at least one other.
 
-## The Twelve Roles
+## The Thirteen Roles
 
 ```
 ─── Code / correctness roles ────────────────────────────────────────────
@@ -16,6 +17,7 @@ BENCH    Test & Performance          ─── Coverage, benchmarks, regression 
 SOURCE   Source/Target Document      ─── Include system, compile pipeline, author UX
 COMPOSE  Layout & Composition        ─── Visual arrangement, frame alignment, gap math
 CACHE    Cache Correctness           ─── Key computation, invalidation, snapshot integrity
+BACKFILL Reverse Adoption            ─── Existing .md migration, round-trip fidelity, cutover safety
 
 ─── Domain / publishing roles ───────────────────────────────────────────
 
@@ -36,11 +38,12 @@ When roles conflict, earlier roles govern:
 5. **SIGNAL**  — a tool with too much noise gets ignored
 6. **SCHEMA**  — rule design governs what gets caught
 7. **COMPOSE** — visual output must be correct but is less critical than data correctness
-8. **BENCH**   — performance matters but correctness comes first
-9. **BOOK**    — corpus-scale concerns come after individual correctness
-10. **PRESS**  — authoring experience matters after the tool works correctly
-11. **STAGE**  — presentation conventions after document correctness
-12. **PANEL**  — dashboard aesthetics after functional correctness
+8. **BACKFILL** — migration must not lose existing corpus content
+9. **BENCH**   — performance matters but correctness comes first
+10. **BOOK**   — corpus-scale concerns come after individual correctness
+11. **PRESS**  — authoring experience matters after the tool works correctly
+12. **STAGE**  — presentation conventions after document correctness
+13. **PANEL**  — dashboard aesthetics after functional correctness
 
 ## Core Tensions
 
@@ -56,6 +59,8 @@ When roles conflict, earlier roles govern:
 | SOURCE | COMPOSE | simple directive syntax vs. expressive layout attributes |
 | SIGNAL | PIXEL | filtering false positives risks hiding real errors |
 | BENCH | PARSE | parallelism introduces non-determinism risk PARSE must police |
+| BACKFILL | SOURCE | preserving existing markdown literally vs. promoting it into cleaner source directives |
+| BACKFILL | SIGNAL | reporting every uncertain extraction vs. keeping migration reports actionable |
 
 ### Domain / publishing tensions
 
@@ -83,6 +88,8 @@ Invoke any role when reviewing:
 | Layout engine | COMPOSE + PARSE |
 | Cache implementation | CACHE + BENCH |
 | Compile pipeline | SOURCE + CACHE + SIGNAL |
+| Backfill / reverse migration | BACKFILL + SOURCE + BOOK + SIGNAL |
+| Artifact cutover plans | BACKFILL + BOOK + BENCH |
 | Performance work | BENCH + PARSE + CACHE |
 | New directive syntax | PRESS + SOURCE + PARSE |
 | Dashboard features | PANEL + COMPOSE |

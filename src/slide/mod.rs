@@ -4,18 +4,22 @@ pub mod inline;
 pub mod layout;
 pub mod parser;
 
+pub use bullets::{
+    has_reveal_markers, parse_reveal_step, render_bullets, render_bullets_pages, BulletConfig,
+    BulletWarning,
+};
 pub use canvas::SlideCanvas;
-pub use bullets::{render_bullets, BulletConfig, BulletWarning,
-                  parse_reveal_step, has_reveal_markers, render_bullets_pages};
-pub use inline::{render_quote, render_centered, render_right, render_ol,
-                 render_stat, render_callout, render_divider, CalloutStyle, DividerStyle};
-pub use layout::{render_slide, render_slide_with_warnings, render_slide_with_warnings_in_deck,
-                 render_slide_pages,
-                 render_title, render_title_content,
-                 render_two_column, render_section, render_agenda, render_stats, render_blank,
-                 collect_section_titles, apply_theme,
-                 center_in_width, render_body_lines, render_body_lines_with_warnings,
-                 render_body_lines_pages};
+pub use inline::{
+    render_callout, render_centered, render_divider, render_ol, render_quote, render_right,
+    render_stat, CalloutStyle, DividerStyle,
+};
+pub use layout::{
+    apply_theme, center_in_width, collect_section_titles, render_agenda, render_blank,
+    render_body_lines, render_body_lines_pages, render_body_lines_with_warnings, render_section,
+    render_slide, render_slide_pages, render_slide_with_warnings,
+    render_slide_with_warnings_in_deck, render_stats, render_title, render_title_content,
+    render_two_column,
+};
 pub use parser::{parse_slide_doc, SlideError};
 
 // ─────────────────────────────────────────────────────────
@@ -35,7 +39,9 @@ pub enum FooterMode {
 }
 
 impl Default for FooterMode {
-    fn default() -> Self { FooterMode::Off }
+    fn default() -> Self {
+        FooterMode::Off
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -68,7 +74,7 @@ impl Default for SlideMeta {
             show_numbers: false,
             progress_bar: false,
             font_width: 1,
-            max_bullets: 4,   // 30-second rule — see bullets.rs SLIDE-001
+            max_bullets: 4, // 30-second rule — see bullets.rs SLIDE-001
             max_depth: 4,
             footer: FooterMode::Off,
             author: None,
@@ -102,7 +108,9 @@ pub struct Slide {
 pub enum SlideLayout {
     Title,
     TitleContent,
-    TwoColumn { ratio: (u8, u8) },
+    TwoColumn {
+        ratio: (u8, u8),
+    },
     Section,
     /// Auto-generated agenda built from every `Section` slide's title in deck order.
     /// The slide's own body content is ignored; the bullet list comes from the deck.

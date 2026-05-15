@@ -11,7 +11,7 @@ pub enum ChartKind {
 impl ChartKind {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "bar"  => Some(Self::Bar),
+            "bar" => Some(Self::Bar),
             "line" => Some(Self::Line),
             _ => None,
         }
@@ -72,7 +72,7 @@ pub fn render_chart(data: &ChartData, attrs: &ChartAttrs) -> Result<Vec<String>,
         });
     }
     let lines = match attrs.kind {
-        ChartKind::Bar  => bar::render_bar_chart(data, attrs),
+        ChartKind::Bar => bar::render_bar_chart(data, attrs),
         ChartKind::Line => line::render_line_chart(data, attrs),
     };
     Ok(lines)
@@ -86,13 +86,18 @@ pub fn parse_inline_body(body: &str) -> Result<ChartData, (usize, String)> {
     let mut points = Vec::new();
     for (i, raw) in body.lines().enumerate() {
         let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
         let (label, val_str) = match line.rfind(':') {
             Some(idx) => (line[..idx].trim().to_string(), line[idx + 1..].trim()),
             None => return Err((i, format!("expected `label: value`, got {:?}", line))),
         };
         let value: f64 = val_str.parse().map_err(|_| {
-            (i, format!("invalid number {:?} for label {:?}", val_str, label))
+            (
+                i,
+                format!("invalid number {:?} for label {:?}", val_str, label),
+            )
         })?;
         points.push(ChartPoint { label, value });
     }

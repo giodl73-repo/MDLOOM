@@ -26,8 +26,8 @@
 //! outside `proof:` fences are intentionally skipped — they may be examples,
 //! not real references.
 
-use mdpath::{ElementType, MdUri};
 use mdpath::uri::Selector;
+use mdpath::{ElementType, MdUri};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -63,7 +63,9 @@ pub fn find_dependents(target_uri: &str, root: &Path) -> Vec<Dependency> {
             Some(n) => n,
             None => continue,
         };
-        if !name.ends_with(".source.md") { continue; }
+        if !name.ends_with(".source.md") {
+            continue;
+        }
 
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
@@ -73,19 +75,12 @@ pub fn find_dependents(target_uri: &str, root: &Path) -> Vec<Dependency> {
         scan_source_file(path, &content, &target, &mut deps);
     }
 
-    deps.sort_by(|a, b| {
-        a.source_file.cmp(&b.source_file).then(a.line.cmp(&b.line))
-    });
+    deps.sort_by(|a, b| a.source_file.cmp(&b.source_file).then(a.line.cmp(&b.line)));
     deps
 }
 
 /// Scan one `.source.md` file for references that match `target`.
-fn scan_source_file(
-    path: &Path,
-    content: &str,
-    target: &MdUri,
-    deps: &mut Vec<Dependency>,
-) {
+fn scan_source_file(path: &Path, content: &str, target: &MdUri, deps: &mut Vec<Dependency>) {
     let lines: Vec<&str> = content.lines().collect();
     let mut in_proof_fence = false;
     let mut in_other_fence = false;
@@ -112,8 +107,7 @@ fn scan_source_file(
 
         if in_proof_fence {
             let is_standalone_uri = trimmed.starts_with("md://");
-            let has_source_attr = trimmed.contains("source=md://")
-                || trimmed.contains("uri=md://");
+            let has_source_attr = trimmed.contains("source=md://") || trimmed.contains("uri=md://");
             if is_standalone_uri || has_source_attr {
                 collect_matches_from_text(trimmed, i + 1, path, target, deps);
             }
@@ -155,7 +149,9 @@ fn collect_matches_from_text(
         }
 
         remaining = &remaining[pos + uri_end..];
-        if remaining.is_empty() { break; }
+        if remaining.is_empty() {
+            break;
+        }
         remaining = &remaining[1..];
     }
 }
@@ -199,7 +195,9 @@ fn paths_equivalent(a: &str, b: &str) -> bool {
 }
 
 fn heading_path_prefix_matches(target: &[String], candidate: &[String]) -> bool {
-    if target.len() > candidate.len() { return false; }
+    if target.len() > candidate.len() {
+        return false;
+    }
     target.iter().zip(candidate.iter()).all(|(a, b)| a == b)
 }
 
@@ -288,7 +286,10 @@ mod tests {
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());
-        assert!(deps.is_empty(), "exact selector should not match different index");
+        assert!(
+            deps.is_empty(),
+            "exact selector should not match different index"
+        );
     }
 
     #[test]
@@ -302,7 +303,10 @@ mod tests {
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());
-        assert!(deps.is_empty(), "compiled .md (no .source.md suffix) must be skipped");
+        assert!(
+            deps.is_empty(),
+            "compiled .md (no .source.md suffix) must be skipped"
+        );
     }
 
     #[test]
@@ -316,7 +320,10 @@ mod tests {
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());
-        assert!(deps.is_empty(), "URIs in non-proof fences are examples, not refs");
+        assert!(
+            deps.is_empty(),
+            "URIs in non-proof fences are examples, not refs"
+        );
     }
 
     #[test]
@@ -331,7 +338,10 @@ mod tests {
 
         let deps = find_dependents("md://data.md", dir.path());
         assert_eq!(deps.len(), 1);
-        assert_eq!(deps[0].line, 1, "info-string URI should report opening fence line");
+        assert_eq!(
+            deps[0].line, 1,
+            "info-string URI should report opening fence line"
+        );
     }
 
     #[test]
@@ -354,7 +364,10 @@ mod tests {
         assert!(deps[0].source_file.ends_with("a.source.md"));
         assert!(deps[1].source_file.ends_with("a.source.md"));
         assert!(deps[2].source_file.ends_with("b.source.md"));
-        assert!(deps[0].line < deps[1].line, "lines within a file must be ascending");
+        assert!(
+            deps[0].line < deps[1].line,
+            "lines within a file must be ascending"
+        );
     }
 
     #[test]

@@ -64,7 +64,10 @@ pub fn unused_diagnostics(root: &Path) -> Vec<Diagnostic> {
                 1,
                 1,
                 "unused_figure",
-                format!("Figure '{}' is not referenced by any source document.", display),
+                format!(
+                    "Figure '{}' is not referenced by any source document.",
+                    display
+                ),
             )
         })
         .collect()
@@ -109,7 +112,9 @@ fn collect_referenced_paths(root: &Path) -> HashSet<String> {
             Some(n) => n,
             None => continue,
         };
-        if !name.ends_with(".source.md") { continue; }
+        if !name.ends_with(".source.md") {
+            continue;
+        }
 
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
@@ -172,7 +177,9 @@ fn extract_uri_paths(text: &str, set: &mut HashSet<String>) {
             set.insert(path.replace('\\', "/"));
         }
         let advance = pos + 5 + end;
-        if advance >= remaining.len() { break; }
+        if advance >= remaining.len() {
+            break;
+        }
         remaining = &remaining[advance..];
     }
 }
@@ -184,18 +191,40 @@ fn is_figure_candidate(path: &Path) -> bool {
         None => return false,
     };
 
-    if !name.ends_with(".md") { return false; }
-    if name.ends_with(".source.md") { return false; }
+    if !name.ends_with(".md") {
+        return false;
+    }
+    if name.ends_with(".source.md") {
+        return false;
+    }
 
     let is_structural = matches!(
         name,
-        "README.md" | "CHANGELOG.md" | "LICENSE.md" | "CONTRIBUTING.md"
-        | "CLAUDE.md" | "MEMORY.md" | "TRACKER.md" | "BILL-OF-MATERIALS.md"
-        | "VOLUMES.md" | "EXPANSION.md" | "REVIEW.md" | "FOREWORD.md"
-        | "COLOPHON.md" | "PROJECTS.md" | "DEDICATION.md"
-        | "PUZZLE-HUNT.md" | "TO-SIGNAL.md" | "STATUS.md" | "HISTORY.md"
-        | "SCORECARD.md" | "CONCEPT-INDEX.md" | "READING-MAPS.md"
-        | "PREREQUISITES.md" | "index.md" | "book.md"
+        "README.md"
+            | "CHANGELOG.md"
+            | "LICENSE.md"
+            | "CONTRIBUTING.md"
+            | "CLAUDE.md"
+            | "MEMORY.md"
+            | "TRACKER.md"
+            | "BILL-OF-MATERIALS.md"
+            | "VOLUMES.md"
+            | "EXPANSION.md"
+            | "REVIEW.md"
+            | "FOREWORD.md"
+            | "COLOPHON.md"
+            | "PROJECTS.md"
+            | "DEDICATION.md"
+            | "PUZZLE-HUNT.md"
+            | "TO-SIGNAL.md"
+            | "STATUS.md"
+            | "HISTORY.md"
+            | "SCORECARD.md"
+            | "CONCEPT-INDEX.md"
+            | "READING-MAPS.md"
+            | "PREREQUISITES.md"
+            | "index.md"
+            | "book.md"
     );
     !is_structural
 }
@@ -203,7 +232,10 @@ fn is_figure_candidate(path: &Path) -> bool {
 fn is_excluded_dir(path: &Path) -> bool {
     path.components().any(|c| {
         let s = c.as_os_str().to_string_lossy();
-        matches!(s.as_ref(), "node_modules" | ".git" | "target" | ".proof-cache")
+        matches!(
+            s.as_ref(),
+            "node_modules" | ".git" | "target" | ".proof-cache"
+        )
     })
 }
 
@@ -214,7 +246,9 @@ mod tests {
     use tempfile::TempDir;
 
     fn write(path: &Path, content: &str) {
-        if let Some(parent) = path.parent() { fs::create_dir_all(parent).unwrap(); }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
         fs::write(path, content).unwrap();
     }
 
@@ -229,7 +263,11 @@ mod tests {
         );
 
         let unused = find_unused_figures(root);
-        assert!(unused.is_empty(), "used.md should not be flagged: {:?}", unused);
+        assert!(
+            unused.is_empty(),
+            "used.md should not be flagged: {:?}",
+            unused
+        );
     }
 
     #[test]
@@ -256,21 +294,32 @@ mod tests {
         );
 
         let unused = find_unused_figures(root);
-        assert!(unused.is_empty(), "both figures referenced via proof:layout: {:?}", unused);
+        assert!(
+            unused.is_empty(),
+            "both figures referenced via proof:layout: {:?}",
+            unused
+        );
     }
 
     #[test]
     fn source_attribute_reference_counts() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        write(&root.join("data/table.md"), "# Table\n\n| a | b |\n|---|---|\n| 1 | 2 |\n");
+        write(
+            &root.join("data/table.md"),
+            "# Table\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+        );
         write(
             &root.join("doc.source.md"),
             "```proof:row source=md://data/table.md\nproof:element field=a\n```\n",
         );
 
         let unused = find_unused_figures(root);
-        assert!(unused.is_empty(), "table referenced via source= attribute: {:?}", unused);
+        assert!(
+            unused.is_empty(),
+            "table referenced via source= attribute: {:?}",
+            unused
+        );
     }
 
     #[test]
@@ -282,7 +331,11 @@ mod tests {
         write(&root.join("doc.source.md"), "# Doc\n");
 
         let unused = find_unused_figures(root);
-        assert!(unused.is_empty(), "structural files must be excluded: {:?}", unused);
+        assert!(
+            unused.is_empty(),
+            "structural files must be excluded: {:?}",
+            unused
+        );
     }
 
     #[test]
@@ -298,7 +351,12 @@ mod tests {
         );
 
         let unused = find_unused_figures(root);
-        assert_eq!(unused.len(), 1, "prose mention must not protect figure: {:?}", unused);
+        assert_eq!(
+            unused.len(),
+            1,
+            "prose mention must not protect figure: {:?}",
+            unused
+        );
     }
 
     #[test]
@@ -311,10 +369,16 @@ mod tests {
         let diags = unused_diagnostics(root);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].code, "unused_figure");
-        assert!(diags[0].message.contains("figures/orphan.md"),
-            "message should name the figure: {}", diags[0].message);
-        assert!(diags[0].message.contains("not referenced"),
-            "message should explain the issue: {}", diags[0].message);
+        assert!(
+            diags[0].message.contains("figures/orphan.md"),
+            "message should name the figure: {}",
+            diags[0].message
+        );
+        assert!(
+            diags[0].message.contains("not referenced"),
+            "message should explain the issue: {}",
+            diags[0].message
+        );
     }
 
     #[test]
@@ -326,6 +390,10 @@ mod tests {
         write(&root.join("doc.source.md"), "# Doc\n");
 
         let unused = find_unused_figures(root);
-        assert!(unused.is_empty(), "node_modules figures must be ignored: {:?}", unused);
+        assert!(
+            unused.is_empty(),
+            "node_modules figures must be ignored: {:?}",
+            unused
+        );
     }
 }

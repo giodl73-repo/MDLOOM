@@ -3,7 +3,6 @@
 /// Scans `.source.md` files for `md://` URIs inside `proof:` directives and
 /// reports broken references as diagnostics — so `proof check` catches them
 /// without requiring a full compile.
-
 use crate::checks::Check;
 use crate::diagnostic::Diagnostic;
 use std::path::Path;
@@ -13,7 +12,9 @@ pub struct SourceLinkCheck {
 }
 
 impl Check for SourceLinkCheck {
-    fn name(&self) -> &'static str { "source_links" }
+    fn name(&self) -> &'static str {
+        "source_links"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
         // Only scan source documents, not compiled output
@@ -24,8 +25,8 @@ impl Check for SourceLinkCheck {
 
         let mut diags = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
-        let mut in_proof_fence = false;  // inside a ```proof:... fence
-        let mut in_other_fence = false;  // inside a non-proof fence (skip its content)
+        let mut in_proof_fence = false; // inside a ```proof:... fence
+        let mut in_other_fence = false; // inside a non-proof fence (skip its content)
 
         for (i, &line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
@@ -90,7 +91,8 @@ fn check_uris_in_text(
     while let Some(pos) = remaining.find("md://") {
         let uri_start = &remaining[pos..];
         // URI ends at whitespace, quote, or end of string
-        let uri_end = uri_start.find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ')' | ']'))
+        let uri_end = uri_start
+            .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ')' | ']'))
             .unwrap_or(uri_start.len());
         let uri_str = &uri_start[..uri_end];
 
@@ -105,7 +107,9 @@ fn check_uris_in_text(
         }
 
         remaining = &remaining[pos + uri_end..];
-        if remaining.is_empty() { break; }
+        if remaining.is_empty() {
+            break;
+        }
         remaining = &remaining[1..]; // step past the delimiter
     }
 }
@@ -113,7 +117,9 @@ fn check_uris_in_text(
 /// Find the proof root by walking up from `start` until we find `proof.toml`.
 /// Falls back to `start` if not found.
 fn find_proof_root(start: &Path) -> std::path::PathBuf {
-    let mut dir = if start.is_dir() { start.to_path_buf() } else {
+    let mut dir = if start.is_dir() {
+        start.to_path_buf()
+    } else {
         start.parent().unwrap_or(start).to_path_buf()
     };
     loop {
@@ -151,7 +157,11 @@ fn validate_uri(
 
     // Resolve against the proof root (where proof.toml lives), not the scan dir
     let proof_root = find_proof_root(path);
-    let effective_root = if proof_root.join("proof.toml").exists() { proof_root } else { root.to_path_buf() };
+    let effective_root = if proof_root.join("proof.toml").exists() {
+        proof_root
+    } else {
+        root.to_path_buf()
+    };
 
     // Check that the file exists
     let file_path = effective_root.join(&parsed.path);
@@ -164,7 +174,13 @@ fn validate_uri(
             ),
             None => format!("Reference to '{}' not found", parsed.path),
         };
-        diags.push(Diagnostic::error(path.to_path_buf(), line_no, 1, "md_broken_uri", msg));
+        diags.push(Diagnostic::error(
+            path.to_path_buf(),
+            line_no,
+            1,
+            "md_broken_uri",
+            msg,
+        ));
         return;
     }
 
@@ -224,7 +240,9 @@ fn collect_heading_slugs(content: &str) -> Vec<String> {
             in_fence = !in_fence;
             continue;
         }
-        if in_fence { continue; }
+        if in_fence {
+            continue;
+        }
         if trimmed.starts_with('#') {
             let level = trimmed.chars().take_while(|&c| c == '#').count();
             let text = trimmed[level..].trim();
@@ -261,7 +279,9 @@ fn suggest_similar_file(missing: &str, root: &Path) -> Option<String> {
             Ok(r) => r.to_string_lossy().replace('\\', "/"),
             Err(_) => continue,
         };
-        if !rel.ends_with(".md") { continue; }
+        if !rel.ends_with(".md") {
+            continue;
+        }
         let d = edit_distance_str(&missing_lower, &rel.to_lowercase());
         if d <= 3 {
             if best.as_ref().map_or(true, |(_, bd)| d < *bd) {
@@ -277,14 +297,23 @@ fn edit_distance_str(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let (m, n) = (a.len(), b.len());
-    if m == 0 { return n; }
-    if n == 0 { return m; }
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
     let mut row: Vec<usize> = (0..=n).collect();
     for i in 1..=m {
-        let mut prev = row[0]; row[0] = i;
+        let mut prev = row[0];
+        row[0] = i;
         for j in 1..=n {
             let old = row[j];
-            row[j] = if a[i-1] == b[j-1] { prev } else { 1 + prev.min(row[j]).min(row[j-1]) };
+            row[j] = if a[i - 1] == b[j - 1] {
+                prev
+            } else {
+                1 + prev.min(row[j]).min(row[j - 1])
+            };
             prev = old;
         }
     }
@@ -298,7 +327,9 @@ mod tests {
     fn check_source(content: &str, root: &Path) -> Vec<Diagnostic> {
         let path = root.join("test.source.md");
         std::fs::write(&path, content).unwrap();
-        let check = SourceLinkCheck { root: root.to_path_buf() };
+        let check = SourceLinkCheck {
+            root: root.to_path_buf(),
+        };
         check.check(&path, content)
     }
 
@@ -307,7 +338,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.md");
         std::fs::write(&path, "```proof:tree kind=org\n```\n").unwrap();
-        let check = SourceLinkCheck { root: dir.path().to_path_buf() };
+        let check = SourceLinkCheck {
+            root: dir.path().to_path_buf(),
+        };
         let diags = check.check(&path, "```proof:tree kind=org\n```\n");
         assert!(diags.is_empty());
     }
@@ -317,7 +350,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let content = "# Test\n\n```proof:tree kind=taxonomy source=md://missing.md\n```\n";
         let diags = check_source(content, dir.path());
-        assert!(!diags.is_empty(), "should detect broken md:// URI, got empty");
+        assert!(
+            !diags.is_empty(),
+            "should detect broken md:// URI, got empty"
+        );
         assert_eq!(diags[0].code, "md_broken_uri");
     }
 
@@ -327,7 +363,11 @@ mod tests {
         std::fs::write(dir.path().join("data.md"), "# Data\n| a |\n|---|\n| 1 |\n").unwrap();
         let content = "# Test\n\n```proof:tree kind=taxonomy source=md://data.md\n```\n";
         let diags = check_source(content, dir.path());
-        assert!(diags.is_empty(), "valid URI should produce no error, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "valid URI should produce no error, got: {:?}",
+            diags
+        );
     }
 
     #[test]
@@ -346,7 +386,9 @@ mod tests {
         // This is a compiled output file — should NOT be checked for source links
         let content = "```proof:tree kind=org source=md://nonexistent.md\n```\n";
         std::fs::write(&path, content).unwrap();
-        let check = SourceLinkCheck { root: dir.path().to_path_buf() };
+        let check = SourceLinkCheck {
+            root: dir.path().to_path_buf(),
+        };
         let diags = check.check(&path, content);
         assert!(diags.is_empty(), "compiled .md files should not be checked");
     }
@@ -356,21 +398,34 @@ mod tests {
     #[test]
     fn valid_heading_in_uri_produces_no_error() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("api.md"), "# API\n\n## Authentication\n\nContent.\n").unwrap();
+        std::fs::write(
+            dir.path().join("api.md"),
+            "# API\n\n## Authentication\n\nContent.\n",
+        )
+        .unwrap();
         let content = "```proof:include\nmd://api.md#authentication\n```\n";
         let diags = check_source(content, dir.path());
-        assert!(diags.is_empty(), "existing heading should not produce error, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "existing heading should not produce error, got: {:?}",
+            diags
+        );
     }
 
     #[test]
     fn missing_heading_in_uri_produces_error() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("api.md"), "# API\n\n## Overview\n\nContent.\n").unwrap();
+        std::fs::write(
+            dir.path().join("api.md"),
+            "# API\n\n## Overview\n\nContent.\n",
+        )
+        .unwrap();
         let content = "```proof:include\nmd://api.md#nonexistent-section\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),
-            "missing heading should produce md_broken_heading, got: {:?}", diags
+            "missing heading should produce md_broken_heading, got: {:?}",
+            diags
         );
     }
 
@@ -380,44 +435,62 @@ mod tests {
         std::fs::write(dir.path().join("data.md"), "# Data\n\nContent.\n").unwrap();
         let content = "```proof:include\nmd://data.md\n```\n";
         let diags = check_source(content, dir.path());
-        assert!(diags.is_empty(), "file-only URI (no heading) must not trigger heading check");
+        assert!(
+            diags.is_empty(),
+            "file-only URI (no heading) must not trigger heading check"
+        );
     }
 
     #[test]
     fn heading_inside_code_fence_does_not_count() {
         let dir = tempfile::tempdir().unwrap();
         // The only ## heading is inside a code fence — should not satisfy the heading check
-        std::fs::write(dir.path().join("doc.md"),
-            "# Title\n\n```\n## code-section\n```\n").unwrap();
+        std::fs::write(
+            dir.path().join("doc.md"),
+            "# Title\n\n```\n## code-section\n```\n",
+        )
+        .unwrap();
         let content = "```proof:include\nmd://doc.md#code-section\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),
-            "heading inside code fence must not satisfy heading path check, got: {:?}", diags
+            "heading inside code fence must not satisfy heading path check, got: {:?}",
+            diags
         );
     }
 
     #[test]
     fn nested_heading_path_validated() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("guide.md"),
-            "# Guide\n\n## API Reference\n\n### Authentication\n\nContent.\n").unwrap();
+        std::fs::write(
+            dir.path().join("guide.md"),
+            "# Guide\n\n## API Reference\n\n### Authentication\n\nContent.\n",
+        )
+        .unwrap();
         // md://guide.md#api-reference/authentication — both slugs must be found
         let content = "```proof:include\nmd://guide.md#api-reference/authentication\n```\n";
         let diags = check_source(content, dir.path());
-        assert!(diags.is_empty(), "nested heading path that exists must not produce error, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "nested heading path that exists must not produce error, got: {:?}",
+            diags
+        );
     }
 
     #[test]
     fn nested_heading_path_missing_child_warns() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("guide.md"),
-            "# Guide\n\n## API Reference\n\nContent only, no sub-headings.\n").unwrap();
+        std::fs::write(
+            dir.path().join("guide.md"),
+            "# Guide\n\n## API Reference\n\nContent only, no sub-headings.\n",
+        )
+        .unwrap();
         let content = "```proof:include\nmd://guide.md#api-reference/missing-child\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),
-            "missing child heading should produce md_broken_heading, got: {:?}", diags
+            "missing child heading should produce md_broken_heading, got: {:?}",
+            diags
         );
     }
 

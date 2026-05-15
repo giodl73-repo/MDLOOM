@@ -10,7 +10,6 @@
 /// Slide blocks: after front-matter (if any), the remaining text is split into raw slide
 /// strings at bare `---` lines. Each raw slide string is then parsed for `proof:slide`
 /// fence attributes and body content.
-
 use super::{FooterMode, Slide, SlideDoc, SlideLayout, SlideMeta, SlideTheme};
 
 // ─────────────────────────────────────────────────────────
@@ -29,12 +28,19 @@ impl std::fmt::Display for SlideError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SlideError::MalformedFrontMatter(msg) => write!(f, "malformed front-matter: {}", msg),
-            SlideError::InvalidRatio { slide, raw } =>
-                write!(f, "SLIDE-002: slide {}: ratio {:?} parts do not sum to 100", slide, raw),
-            SlideError::SlideOutOfRange { requested, count } =>
-                write!(f, "SLIDE-006: --slide {} out of range (document has {} slides)", requested, count),
-            SlideError::UnknownLayout { slide, name } =>
-                write!(f, "slide {}: unknown layout {:?}", slide, name),
+            SlideError::InvalidRatio { slide, raw } => write!(
+                f,
+                "SLIDE-002: slide {}: ratio {:?} parts do not sum to 100",
+                slide, raw
+            ),
+            SlideError::SlideOutOfRange { requested, count } => write!(
+                f,
+                "SLIDE-006: --slide {} out of range (document has {} slides)",
+                requested, count
+            ),
+            SlideError::UnknownLayout { slide, name } => {
+                write!(f, "slide {}: unknown layout {:?}", slide, name)
+            }
         }
     }
 }
@@ -116,7 +122,12 @@ pub fn parse_slide_doc(source: &str) -> Result<SlideDoc, Vec<SlideError>> {
         }
     }
 
-    if !errors.iter().any(|e| matches!(e, SlideError::MalformedFrontMatter(_) | SlideError::InvalidRatio { .. })) {
+    if !errors.iter().any(|e| {
+        matches!(
+            e,
+            SlideError::MalformedFrontMatter(_) | SlideError::InvalidRatio { .. }
+        )
+    }) {
         // Non-fatal errors don't prevent returning a SlideDoc
         Ok(SlideDoc { meta, slides })
     } else {
@@ -137,16 +148,24 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String> {
         }
         let (key, value) = split_yaml_kv(line)?;
         match key {
-            "width" => meta.width = value.parse::<usize>()
-                .map_err(|_| format!("width must be a positive integer, got {:?}", value))?,
-            "height" => meta.height = value.parse::<usize>()
-                .map_err(|_| format!("height must be a positive integer, got {:?}", value))?,
-            "theme" => meta.theme = match value {
-                "minimal" => SlideTheme::Minimal,
-                "box"     => SlideTheme::Box,
-                "none"    => SlideTheme::None,
-                other     => return Err(format!("unknown theme {:?}", other)),
-            },
+            "width" => {
+                meta.width = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("width must be a positive integer, got {:?}", value))?
+            }
+            "height" => {
+                meta.height = value
+                    .parse::<usize>()
+                    .map_err(|_| format!("height must be a positive integer, got {:?}", value))?
+            }
+            "theme" => {
+                meta.theme = match value {
+                    "minimal" => SlideTheme::Minimal,
+                    "box" => SlideTheme::Box,
+                    "none" => SlideTheme::None,
+                    other => return Err(format!("unknown theme {:?}", other)),
+                }
+            }
             "show-numbers" | "show_numbers" => {
                 meta.show_numbers = parse_bool(value)
                     .map_err(|_| format!("show-numbers must be true/false, got {:?}", value))?;
@@ -156,27 +175,36 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String> {
                     .map_err(|_| format!("progress-bar must be true/false, got {:?}", value))?;
             }
             "font-width" | "font_width" => {
-                meta.font_width = value.parse::<usize>()
+                meta.font_width = value
+                    .parse::<usize>()
                     .map_err(|_| format!("font-width must be 1 or 2, got {:?}", value))?;
             }
             "max-bullets" | "max_bullets" => {
-                meta.max_bullets = value.parse::<usize>()
-                    .map_err(|_| format!("max-bullets must be a positive integer, got {:?}", value))?;
+                meta.max_bullets = value.parse::<usize>().map_err(|_| {
+                    format!("max-bullets must be a positive integer, got {:?}", value)
+                })?;
             }
             "max-depth" | "max_depth" => {
-                meta.max_depth = value.parse::<usize>()
-                    .map_err(|_| format!("max-depth must be a positive integer, got {:?}", value))?;
+                meta.max_depth = value.parse::<usize>().map_err(|_| {
+                    format!("max-depth must be a positive integer, got {:?}", value)
+                })?;
             }
             "footer" => {
                 meta.footer = match value {
                     "true" | "yes" | "1" | "auto" => FooterMode::Auto,
-                    "false" | "no" | "0" | "off"  => FooterMode::Off,
+                    "false" | "no" | "0" | "off" => FooterMode::Off,
                     custom => FooterMode::Custom(custom.to_string()),
                 };
             }
-            "author" => { meta.author = Some(value.to_string()); }
-            "date"   => { meta.date   = Some(value.to_string()); }
-            "title"  => { meta.title  = Some(value.to_string()); }
+            "author" => {
+                meta.author = Some(value.to_string());
+            }
+            "date" => {
+                meta.date = Some(value.to_string());
+            }
+            "title" => {
+                meta.title = Some(value.to_string());
+            }
             // Ignore unknown keys (forward compatibility)
             _ => {}
         }
@@ -185,10 +213,14 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String> {
 }
 
 fn split_yaml_kv(line: &str) -> Result<(&str, &str), String> {
-    let colon = line.find(':')
+    let colon = line
+        .find(':')
         .ok_or_else(|| format!("expected key: value, got {:?}", line))?;
     let key = line[..colon].trim();
-    let value = line[colon + 1..].trim().trim_matches('"').trim_matches('\'');
+    let value = line[colon + 1..]
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'');
     Ok((key, value))
 }
 
@@ -242,13 +274,20 @@ fn parse_slide(raw: &str, index: usize, source_line: usize) -> Result<Slide, Sli
     // If so, everything inside is the body. If not, the whole chunk is the body.
     let trimmed = raw.trim();
 
-    let (layout, title, subtitle, author, date, body_raw) =
-        if trimmed.starts_with("```proof:slide") {
-            parse_slide_fence(trimmed, index)?
-        } else {
-            // No fence — treat entire chunk as body with default layout
-            (SlideLayout::TitleContent, None, None, None, None, trimmed.to_string())
-        };
+    let (layout, title, subtitle, author, date, body_raw) = if trimmed.starts_with("```proof:slide")
+    {
+        parse_slide_fence(trimmed, index)?
+    } else {
+        // No fence — treat entire chunk as body with default layout
+        (
+            SlideLayout::TitleContent,
+            None,
+            None,
+            None,
+            None,
+            trimmed.to_string(),
+        )
+    };
 
     let (body_content, notes_content) = extract_notes(&body_raw);
 
@@ -270,7 +309,17 @@ fn parse_slide(raw: &str, index: usize, source_line: usize) -> Result<Slide, Sli
 fn parse_slide_fence(
     text: &str,
     index: usize,
-) -> Result<(SlideLayout, Option<String>, Option<String>, Option<String>, Option<String>, String), SlideError> {
+) -> Result<
+    (
+        SlideLayout,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        String,
+    ),
+    SlideError,
+> {
     let mut lines = text.lines();
     let first = lines.next().unwrap_or("");
     // first = "```proof:slide layout=title-content title=\"Foo\" ..."
@@ -293,12 +342,16 @@ fn parse_slide_fence(
         // These override any values from the info string.
         if t.starts_with("title:") {
             let v = t["title:".len()..].trim().trim_matches('"').to_string();
-            if title.is_none() || !v.is_empty() { title = Some(v); }
+            if title.is_none() || !v.is_empty() {
+                title = Some(v);
+            }
             continue;
         }
         if t.starts_with("subtitle:") {
             let v = t["subtitle:".len()..].trim().trim_matches('"').to_string();
-            if subtitle.is_none() || !v.is_empty() { subtitle = Some(v); }
+            if subtitle.is_none() || !v.is_empty() {
+                subtitle = Some(v);
+            }
             continue;
         }
         if t.starts_with("author:") {
@@ -342,10 +395,10 @@ pub(crate) fn parse_slide_attrs(
                 (&rest[..end], &rest[end..])
             };
             match key {
-                "layout"   => layout_name = val,
-                "title"    => title = Some(val.to_string()),
+                "layout" => layout_name = val,
+                "title" => title = Some(val.to_string()),
                 "subtitle" => subtitle = Some(val.to_string()),
-                "ratio"    => ratio_raw = Some(val.to_string()),
+                "ratio" => ratio_raw = Some(val.to_string()),
                 _ => {}
             }
             rest = next.trim_start();
@@ -358,19 +411,19 @@ pub(crate) fn parse_slide_attrs(
 
     // Parse layout
     let layout = match layout_name {
-        "title"          => SlideLayout::Title,
-        "title-content"  => SlideLayout::TitleContent,
-        "two-column"     => {
+        "title" => SlideLayout::Title,
+        "title-content" => SlideLayout::TitleContent,
+        "two-column" => {
             let ratio = parse_ratio(ratio_raw.as_deref().unwrap_or("60:40"), index)?;
             SlideLayout::TwoColumn { ratio }
         }
-        "section"        => SlideLayout::Section,
-        "agenda"         => SlideLayout::Agenda,
-        "content-caption"=> SlideLayout::ContentCaption,
-        "comparison"     => SlideLayout::Comparison,
-        "stats"          => SlideLayout::Stats,
-        "blank"          => SlideLayout::Blank,
-        _other           => SlideLayout::Blank, // recover silently; caller may push warning
+        "section" => SlideLayout::Section,
+        "agenda" => SlideLayout::Agenda,
+        "content-caption" => SlideLayout::ContentCaption,
+        "comparison" => SlideLayout::Comparison,
+        "stats" => SlideLayout::Stats,
+        "blank" => SlideLayout::Blank,
+        _other => SlideLayout::Blank, // recover silently; caller may push warning
     };
 
     Ok((layout, title, subtitle))
@@ -380,14 +433,30 @@ pub(crate) fn parse_slide_attrs(
 fn parse_ratio(raw: &str, slide_index: usize) -> Result<(u8, u8), SlideError> {
     let parts: Vec<&str> = raw.splitn(2, ':').collect();
     if parts.len() != 2 {
-        return Err(SlideError::InvalidRatio { slide: slide_index, raw: raw.to_string() });
+        return Err(SlideError::InvalidRatio {
+            slide: slide_index,
+            raw: raw.to_string(),
+        });
     }
-    let a = parts[0].trim().parse::<u8>()
-        .map_err(|_| SlideError::InvalidRatio { slide: slide_index, raw: raw.to_string() })?;
-    let b = parts[1].trim().parse::<u8>()
-        .map_err(|_| SlideError::InvalidRatio { slide: slide_index, raw: raw.to_string() })?;
+    let a = parts[0]
+        .trim()
+        .parse::<u8>()
+        .map_err(|_| SlideError::InvalidRatio {
+            slide: slide_index,
+            raw: raw.to_string(),
+        })?;
+    let b = parts[1]
+        .trim()
+        .parse::<u8>()
+        .map_err(|_| SlideError::InvalidRatio {
+            slide: slide_index,
+            raw: raw.to_string(),
+        })?;
     if a.saturating_add(b) != 100 {
-        return Err(SlideError::InvalidRatio { slide: slide_index, raw: raw.to_string() });
+        return Err(SlideError::InvalidRatio {
+            slide: slide_index,
+            raw: raw.to_string(),
+        });
     }
     Ok((a, b))
 }
@@ -459,7 +528,12 @@ mod tests {
         // One --- opens FM, one closes FM, one more separates slides
         let source = "---\nwidth: 80\n---\nSlide 1\n---\nSlide 2";
         let doc = parse_slide_doc(source).expect("should parse");
-        assert_eq!(doc.slides.len(), 2, "expected 2 slides, got {}", doc.slides.len());
+        assert_eq!(
+            doc.slides.len(),
+            2,
+            "expected 2 slides, got {}",
+            doc.slides.len()
+        );
     }
 
     // ── Test 3: No front-matter: first --- is slide 2 separator ─────────────
@@ -492,8 +566,10 @@ mod tests {
     fn layout_agenda_parsed() {
         let source = "```proof:slide layout=agenda title=\"Today\"\n```";
         let doc = parse_slide_doc(source).expect("should parse");
-        assert!(matches!(doc.slides[0].layout, SlideLayout::Agenda),
-                "agenda layout should parse to SlideLayout::Agenda");
+        assert!(
+            matches!(doc.slides[0].layout, SlideLayout::Agenda),
+            "agenda layout should parse to SlideLayout::Agenda"
+        );
         assert_eq!(doc.slides[0].title.as_deref(), Some("Today"));
     }
 
@@ -521,8 +597,11 @@ mod tests {
         match result {
             Err(errors) => {
                 assert!(
-                    errors.iter().any(|e| matches!(e, SlideError::InvalidRatio { .. })),
-                    "expected InvalidRatio error, got: {:?}", errors
+                    errors
+                        .iter()
+                        .any(|e| matches!(e, SlideError::InvalidRatio { .. })),
+                    "expected InvalidRatio error, got: {:?}",
+                    errors
                 );
             }
             Ok(doc) => {
@@ -546,16 +625,23 @@ mod tests {
     fn notes_extracted_to_notes_content() {
         let source = "```proof:slide layout=title-content\nBody text\n```proof:notes\nSpeaker notes\n```\n```";
         let doc = parse_slide_doc(source).expect("should parse");
-        assert!(doc.slides[0].notes_content.contains("Speaker notes"),
-            "notes not extracted: {:?}", doc.slides[0].notes_content);
-        assert!(!doc.slides[0].body_content.contains("Speaker notes"),
-            "notes leaked into body: {:?}", doc.slides[0].body_content);
+        assert!(
+            doc.slides[0].notes_content.contains("Speaker notes"),
+            "notes not extracted: {:?}",
+            doc.slides[0].notes_content
+        );
+        assert!(
+            !doc.slides[0].body_content.contains("Speaker notes"),
+            "notes leaked into body: {:?}",
+            doc.slides[0].body_content
+        );
     }
 
     // ── Test 10: body_content contains subtitle/author/date for title layout ─
     #[test]
     fn author_date_extracted_from_body() {
-        let source = "```proof:slide layout=title title=\"My Deck\"\nauthor: Gio\ndate: April 2026\n```";
+        let source =
+            "```proof:slide layout=title title=\"My Deck\"\nauthor: Gio\ndate: April 2026\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         let slide = &doc.slides[0];
         assert_eq!(slide.author.as_deref(), Some("Gio"));
@@ -576,7 +662,12 @@ mod tests {
     fn five_slide_file_parsed() {
         let source = make_slides(5);
         let doc = parse_slide_doc(&source).expect("should parse");
-        assert_eq!(doc.slides.len(), 5, "expected 5 slides, got {}", doc.slides.len());
+        assert_eq!(
+            doc.slides.len(),
+            5,
+            "expected 5 slides, got {}",
+            doc.slides.len()
+        );
         for (i, slide) in doc.slides.iter().enumerate() {
             assert_eq!(slide.index, i + 1, "slide index wrong at position {}", i);
         }

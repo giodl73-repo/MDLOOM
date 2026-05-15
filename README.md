@@ -11,12 +11,13 @@ technical presentation decks, and a cross-linked documentation corpus. Every gui
 every chart, every diagram: authored in `.source.md`, compiled to `.md` by proof.
 
 ```
-.source.md  →  proof compile  →  .md
+.source.md  →  proof compile  →  .md / .html
+.md         →  proof backfill →  .source.md
 ```
 
-Think of it as a static site generator for terminal-first content — except instead of
-HTML, you get perfectly-formatted ASCII output that renders everywhere: terminals,
-GitHub, VS Code, any markdown viewer.
+Think of it as a static site generator for terminal-first content: markdown is
+the primary artifact, HTML is the first publish target, and richer targets such
+as PPTX belong behind the same compile graph rather than a separate workflow.
 
 **What proof can render from a single `.source.md` file:**
 
@@ -110,7 +111,35 @@ proof compile src/guides/          # compile directory → docs/guides/ (from pr
 proof compile --watch              # watch all [[compile]] targets for changes
 proof compile --progress           # show per-file progress at corpus scale
 proof compile file.source.md -o out.md   # single file, explicit output
+proof compile file.source.md --target html -o out.html
 ```
+
+Markdown is the default compile target. `--target html` resolves the same source
+directives, strips source-only frontmatter, and writes a standalone HTML document.
+Successful compile runs also write `.proof/artifacts.json`, a target-aware
+manifest of source files, output paths, diagnostics, cache status, and resolved
+directive counts.
+
+`.source.md` files may start with source-only frontmatter for corpus tagging.
+The block is stripped from normal compiled output and surfaced by status/stats:
+
+```yaml
+---
+tags: [ops, runbook]
+ops: [lint, compile]
+content_tags: [guide]
+---
+```
+
+```bash
+proof stats --by-tag src/guides/
+proof check src/guides/ --tag publish --op lint
+proof compile src/guides/ --tag publish --content-tag guide
+proof status src/guides/
+```
+
+Tag filters are opt-in and exact-match. Defaults remain inclusive; multiple
+filters must all match the source frontmatter.
 
 Configure targets in `proof.toml`:
 
@@ -123,6 +152,26 @@ output_dir = "docs/guides"
 source_dir = "src/presentations"
 output_dir = "docs/presentations"
 ```
+
+## Backfilling existing markdown
+
+Projects that already have `.md` files can bootstrap proof sources without a
+manual rewrite. The first pass is literal-first: preserve current markdown,
+add provenance frontmatter, optionally compile the generated source, and report
+round-trip fidelity.
+
+```bash
+proof backfill docs/ --output-source proof-source/ --literal-first --check-roundtrip
+```
+
+This creates `.source.md` candidates and `backfill-report.json`. The report
+includes advisory block counts for prose, fences, markdown tables, ASCII table
+candidates, chart-like blocks, diagram-like blocks, and ambiguous blocks.
+
+To start a structured migration, add `--extract-tables`. Proof still preserves
+the literal `.source.md` body, and writes high-confidence markdown pipe tables to
+sidecar files like `proof-source/guide.tables.json`, recording each extraction in
+the report.
 
 ---
 
@@ -358,10 +407,17 @@ proof check --daVinci .
 ## Fix pipeline
 
 ```bash
-proof fix . --dry-run                  # preview what changes
-proof fix . --min-confidence high      # apply safe auto-fixes
-proof fix . --min-confidence medium    # apply heuristic fixes too
+proof draft . -o draft-plan.json                    # generate a reviewable plan
+proof fix --plan draft-plan.json --dry-run          # preview what changes
+proof fix --plan draft-plan.json --min-confidence high
+proof fix --plan draft-plan.json --min-confidence medium
+proof --config proof.toml fix --plan draft-plan.json
 ```
+
+`proof fix` verifies modified files with the same global `--config` path used by
+other commands unless `--no-verify` is supplied. Each run writes
+`.proof/last-fix.json` with applied/skipped counts, modified files, and
+verification status.
 
 ---
 
@@ -388,7 +444,7 @@ required_h2_all = ["Summary", "Examples"]
 paths = ["docs/guides/*.md"]
 paths_exclude = ["00-OVERVIEW.md"]
 required_h2_all = ["Usage", "Examples"]
-optional_h2 = ["Background", "See Also"]   # H2 allowlist — unexpected H2s warned
+optional_h2 = ["Background", "See Also"]   # closes the H2 allowlist — unexpected H2s warned
 
 [[davinci]]
 id = "goroutine-scheduler"

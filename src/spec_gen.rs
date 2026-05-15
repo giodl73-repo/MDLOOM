@@ -3,7 +3,6 @@
 /// Works entirely offline: uses proof's own detection infrastructure to inspect
 /// the figure's structure (boxes, widths, line count, labels) and emit a ready-to-paste
 /// [[davinci]] TOML block with commented rationale.
-
 use crate::layout::visual_width;
 
 // ─────────────────────────────────────────────────────────
@@ -26,10 +25,19 @@ pub struct InvariantSuggestion {
 
 #[derive(Debug)]
 pub enum InvariantParams {
-    Text { value: String },
-    MinMax { min: Option<usize>, max: Option<usize> },
-    Exact { value: usize },
-    Values { values: Vec<String> },
+    Text {
+        value: String,
+    },
+    MinMax {
+        min: Option<usize>,
+        max: Option<usize>,
+    },
+    Exact {
+        value: usize,
+    },
+    Values {
+        values: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -42,9 +50,9 @@ pub enum SuggestionConfidence {
 impl SuggestionConfidence {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::High   => "high",
+            Self::High => "high",
             Self::Medium => "medium",
-            Self::Low    => "low",
+            Self::Low => "low",
         }
     }
 }
@@ -86,7 +94,9 @@ pub fn generate(content: &str, label: Option<&str>, uri: &str, id: &str) -> Spec
         if !phrase.is_empty() {
             invariants.push(InvariantSuggestion {
                 rule: "contains-text".to_string(),
-                params: InvariantParams::Text { value: phrase.to_string() },
+                params: InvariantParams::Text {
+                    value: phrase.to_string(),
+                },
                 rationale: format!(
                     "figure label {:?} — this phrase identifies the figure's purpose",
                     lbl
@@ -100,13 +110,15 @@ pub fn generate(content: &str, label: Option<&str>, uri: &str, id: &str) -> Spec
     let caps_phrases = find_allcaps_phrases(&lines);
     for phrase in caps_phrases.iter().take(2) {
         // Don't duplicate the label phrase
-        let already_added = invariants.iter().any(|inv| {
-            matches!(&inv.params, InvariantParams::Text { value } if value == phrase)
-        });
+        let already_added = invariants
+            .iter()
+            .any(|inv| matches!(&inv.params, InvariantParams::Text { value } if value == phrase));
         if !already_added {
             invariants.push(InvariantSuggestion {
                 rule: "contains-text".to_string(),
-                params: InvariantParams::Text { value: phrase.clone() },
+                params: InvariantParams::Text {
+                    value: phrase.clone(),
+                },
                 rationale: format!(
                     "all-caps identifier {:?} anchors the figure's key concept",
                     phrase
@@ -127,7 +139,8 @@ pub fn generate(content: &str, label: Option<&str>, uri: &str, id: &str) -> Spec
             },
             rationale: format!(
                 "figure contains {} box{} — structural minimum",
-                box_count, if box_count == 1 { "" } else { "es" }
+                box_count,
+                if box_count == 1 { "" } else { "es" }
             ),
             confidence: SuggestionConfidence::High,
         });
@@ -177,7 +190,9 @@ pub fn generate(content: &str, label: Option<&str>, uri: &str, id: &str) -> Spec
     if row_keys.len() >= 3 {
         invariants.push(InvariantSuggestion {
             rule: "required-row-keys".to_string(),
-            params: InvariantParams::Values { values: row_keys.clone() },
+            params: InvariantParams::Values {
+                values: row_keys.clone(),
+            },
             rationale: format!(
                 "table has {} rows with stable key column values",
                 row_keys.len()
@@ -260,7 +275,10 @@ fn extract_content_lines(content: &str) -> Vec<String> {
     if (first.starts_with("```") || first.starts_with("~~~")) && raw.len() >= 2 {
         let last = raw[raw.len() - 1].trim();
         if last.starts_with("```") || last.starts_with("~~~") {
-            return raw[1..raw.len() - 1].iter().map(|s| s.to_string()).collect();
+            return raw[1..raw.len() - 1]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
         }
     }
     raw.iter().map(|s| s.to_string()).collect()
@@ -301,7 +319,8 @@ fn find_allcaps_phrases(lines: &[String]) -> Vec<String> {
 
         for word in &words {
             // Strip trailing punctuation for the alpha check
-            let stripped: String = word.chars()
+            let stripped: String = word
+                .chars()
                 .filter(|c| c.is_alphabetic() || *c == '/')
                 .collect();
             let alpha: String = stripped.chars().filter(|c| c.is_alphabetic()).collect();
@@ -313,7 +332,7 @@ fn find_allcaps_phrases(lines: &[String]) -> Vec<String> {
                     // Build phrase, stripping trailing non-alpha from the last word
                     let last = run.last().unwrap();
                     let last_clean = last.trim_end_matches(|c: char| !c.is_alphabetic());
-                    let mut phrase_parts = run[..run.len()-1].to_vec();
+                    let mut phrase_parts = run[..run.len() - 1].to_vec();
                     phrase_parts.push(last_clean);
                     let phrase = phrase_parts.join(" ");
                     if phrase.len() >= 4 && !seen.contains(&phrase) {
@@ -327,7 +346,7 @@ fn find_allcaps_phrases(lines: &[String]) -> Vec<String> {
         if !run.is_empty() {
             let last = run.last().unwrap();
             let last_clean = last.trim_end_matches(|c: char| !c.is_alphabetic());
-            let mut phrase_parts = run[..run.len()-1].to_vec();
+            let mut phrase_parts = run[..run.len() - 1].to_vec();
             phrase_parts.push(last_clean);
             let phrase = phrase_parts.join(" ");
             if phrase.len() >= 4 && !seen.contains(&phrase) {
@@ -347,8 +366,14 @@ fn count_boxes(lines: &[String]) -> usize {
     for line in lines {
         let t = line.trim();
         // Unicode box style: count each ┌ on a line that has matching ┐
-        let unicode_tops = t.chars().filter(|&c| c == '┌' || c == '╔' || c == '╒' || c == '╓').count();
-        let unicode_bots = t.chars().filter(|&c| c == '┐' || c == '╗' || c == '╕' || c == '╖').count();
+        let unicode_tops = t
+            .chars()
+            .filter(|&c| c == '┌' || c == '╔' || c == '╒' || c == '╓')
+            .count();
+        let unicode_bots = t
+            .chars()
+            .filter(|&c| c == '┐' || c == '╗' || c == '╕' || c == '╖')
+            .count();
         if unicode_tops > 0 && unicode_bots > 0 {
             total += unicode_tops;
             continue;
@@ -398,7 +423,11 @@ fn detect_column_count(lines: &[String]) -> usize {
         }
     }
     // Most common count
-    counts.into_iter().max_by_key(|&(_, v)| v).map(|(k, _)| k).unwrap_or(0)
+    counts
+        .into_iter()
+        .max_by_key(|&(_, v)| v)
+        .map(|(k, _)| k)
+        .unwrap_or(0)
 }
 
 /// Detect row key values from the first cell of each content row in a table-like box.
@@ -407,9 +436,13 @@ fn detect_row_keys(lines: &[String]) -> Vec<String> {
     for line in lines {
         let t = line.trim();
         // Must be a multi-column content row
-        if !(t.starts_with('│') || t.starts_with('|')) { continue; }
+        if !(t.starts_with('│') || t.starts_with('|')) {
+            continue;
+        }
         let bar_count = t.chars().filter(|&c| c == '│' || c == '|').count();
-        if bar_count < 3 { continue; } // need at least 2 columns
+        if bar_count < 3 {
+            continue;
+        } // need at least 2 columns
 
         // Extract first cell content
         let without_first = if t.starts_with('│') {
@@ -418,17 +451,26 @@ fn detect_row_keys(lines: &[String]) -> Vec<String> {
             &t[1..]
         };
 
-        let cell_end = without_first.find(['│', '|']).unwrap_or(without_first.len());
+        let cell_end = without_first
+            .find(['│', '|'])
+            .unwrap_or(without_first.len());
         let cell = without_first[..cell_end].trim();
 
         // Only include non-empty, non-separator, non-code cells
-        let looks_like_code = cell.contains(":=") || cell.contains("<-")
-            || cell.contains("->") || cell.contains("//") || cell.starts_with("fn ")
-            || cell.starts_with("def ") || cell.contains("()");
+        let looks_like_code = cell.contains(":=")
+            || cell.contains("<-")
+            || cell.contains("->")
+            || cell.contains("//")
+            || cell.starts_with("fn ")
+            || cell.starts_with("def ")
+            || cell.contains("()");
         if !cell.is_empty()
-            && !cell.chars().all(|c| c == '-' || c == '─' || c == '=' || c == '≡')
+            && !cell
+                .chars()
+                .all(|c| c == '-' || c == '─' || c == '=' || c == '≡')
             && !looks_like_code
-            && cell.len() <= 40  // row keys shouldn't be full sentences
+            && cell.len() <= 40
+        // row keys shouldn't be full sentences
         {
             keys.push(cell.to_string());
         }
@@ -469,17 +511,28 @@ GOROUTINE SCHEDULER — M:N multiplexing
 
     #[test]
     fn test_generates_line_count() {
-        let spec = generate(GOROUTINE_FIG, Some("GOROUTINE SCHEDULER — M:N multiplexing"),
-            "md://fig.md#:0", "scheduler");
+        let spec = generate(
+            GOROUTINE_FIG,
+            Some("GOROUTINE SCHEDULER — M:N multiplexing"),
+            "md://fig.md#:0",
+            "scheduler",
+        );
         let line_count_inv = spec.invariants.iter().find(|i| i.rule == "line-count");
         assert!(line_count_inv.is_some(), "should suggest line-count");
-        assert!(matches!(line_count_inv.unwrap().confidence, SuggestionConfidence::High));
+        assert!(matches!(
+            line_count_inv.unwrap().confidence,
+            SuggestionConfidence::High
+        ));
     }
 
     #[test]
     fn test_generates_contains_text_from_label() {
-        let spec = generate(GOROUTINE_FIG, Some("GOROUTINE SCHEDULER — M:N multiplexing"),
-            "md://fig.md#:0", "scheduler");
+        let spec = generate(
+            GOROUTINE_FIG,
+            Some("GOROUTINE SCHEDULER — M:N multiplexing"),
+            "md://fig.md#:0",
+            "scheduler",
+        );
         let ct = spec.invariants.iter().find(|i| i.rule == "contains-text");
         assert!(ct.is_some(), "should suggest contains-text from label");
         if let InvariantParams::Text { value } = &ct.unwrap().params {
@@ -507,7 +560,10 @@ GOROUTINE SCHEDULER — M:N multiplexing
     #[test]
     fn test_detects_row_keys_for_table() {
         let spec = generate(TABLE_FIG, None, "md://table.md#:0", "type-table");
-        let rk = spec.invariants.iter().find(|i| i.rule == "required-row-keys");
+        let rk = spec
+            .invariants
+            .iter()
+            .find(|i| i.rule == "required-row-keys");
         assert!(rk.is_some(), "should suggest required-row-keys for table");
         if let InvariantParams::Values { values } = &rk.unwrap().params {
             assert!(values.contains(&"Binding".to_string()));
@@ -517,8 +573,12 @@ GOROUTINE SCHEDULER — M:N multiplexing
 
     #[test]
     fn test_format_toml_output() {
-        let spec = generate(GOROUTINE_FIG, Some("GOROUTINE SCHEDULER — M:N multiplexing"),
-            "md://fig.md#goroutine-scheduler:0", "scheduler");
+        let spec = generate(
+            GOROUTINE_FIG,
+            Some("GOROUTINE SCHEDULER — M:N multiplexing"),
+            "md://fig.md#goroutine-scheduler:0",
+            "scheduler",
+        );
         let toml = format_toml(&spec);
         assert!(toml.contains("[[davinci]]"));
         assert!(toml.contains("id = \"scheduler\""));
@@ -529,8 +589,10 @@ GOROUTINE SCHEDULER — M:N multiplexing
 
     #[test]
     fn test_pick_distinctive_phrase_with_emdash() {
-        assert_eq!(pick_distinctive_phrase("GOROUTINE SCHEDULER — M:N multiplexing"),
-                   "GOROUTINE SCHEDULER");
+        assert_eq!(
+            pick_distinctive_phrase("GOROUTINE SCHEDULER — M:N multiplexing"),
+            "GOROUTINE SCHEDULER"
+        );
     }
 
     #[test]

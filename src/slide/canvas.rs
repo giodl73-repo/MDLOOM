@@ -3,7 +3,6 @@
 /// Internally a flat Vec<char> of `width × height` characters, initially all spaces.
 /// `paste` writes lines into a rectangular region; excess lines are clipped silently.
 /// `render` returns each row as a space-padded String of exactly `width` visual columns.
-
 use crate::layout::visual_width;
 
 pub struct SlideCanvas {
@@ -35,8 +34,8 @@ impl SlideCanvas {
         &mut self,
         start_col: usize,
         start_row: usize,
-        max_col: usize,  // exclusive right boundary (0-based col)
-        max_row: usize,  // exclusive bottom boundary (0-based row)
+        max_col: usize, // exclusive right boundary (0-based col)
+        max_row: usize, // exclusive bottom boundary (0-based row)
         lines: &[&str],
     ) {
         let col_limit = max_col.min(self.width);
@@ -125,7 +124,12 @@ mod tests {
         let rows = c.render();
         assert_eq!(rows.len(), 24);
         for row in &rows {
-            assert_eq!(visual_width(row), 80, "row has wrong visual width: {:?}", row);
+            assert_eq!(
+                visual_width(row),
+                80,
+                "row has wrong visual width: {:?}",
+                row
+            );
         }
     }
 
@@ -134,7 +138,11 @@ mod tests {
         let mut c = SlideCanvas::new(20, 5);
         c.paste(2, 1, 20, 5, &["hello"]);
         let rows = c.render();
-        assert!(rows[1].contains("hello"), "pasted content not found: {:?}", rows[1]);
+        assert!(
+            rows[1].contains("hello"),
+            "pasted content not found: {:?}",
+            rows[1]
+        );
     }
 
     #[test]

@@ -15,17 +15,19 @@ fn bucket_series(series: &[f64], width: usize) -> Vec<f64> {
         return vec![0.0; width];
     }
     let n = series.len();
-    (0..width).map(|i| {
-        // Evenly-spaced buckets: bucket i covers [i*n/width, (i+1)*n/width)
-        let start = i * n / width;
-        let end = ((i + 1) * n / width).min(n);
-        if start >= end {
-            series[start.min(n - 1)]
-        } else {
-            let sum: f64 = series[start..end].iter().sum();
-            sum / (end - start) as f64
-        }
-    }).collect()
+    (0..width)
+        .map(|i| {
+            // Evenly-spaced buckets: bucket i covers [i*n/width, (i+1)*n/width)
+            let start = i * n / width;
+            let end = ((i + 1) * n / width).min(n);
+            if start >= end {
+                series[start.min(n - 1)]
+            } else {
+                let sum: f64 = series[start..end].iter().sum();
+                sum / (end - start) as f64
+            }
+        })
+        .collect()
 }
 
 /// Repeat-fill a series to exactly `width` values.
@@ -57,13 +59,16 @@ pub fn render_sparkline(series: &[f64], cfg: &ElementConfig) -> String {
     let max = working.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let range = max - min;
 
-    working.iter().map(|&v| {
-        if range == 0.0 {
-            '▄' // constant series → mid-height block (per spec F76)
-        } else {
-            level_char((v - min) / range)
-        }
-    }).collect()
+    working
+        .iter()
+        .map(|&v| {
+            if range == 0.0 {
+                '▄' // constant series → mid-height block (per spec F76)
+            } else {
+                level_char((v - min) / range)
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -72,7 +77,11 @@ mod tests {
     use crate::element::{ElementConfig, ElementKind};
 
     fn spark_cfg(width: usize) -> ElementConfig {
-        ElementConfig { kind: ElementKind::Sparkline, width, ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::Sparkline,
+            width,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -111,7 +120,11 @@ mod tests {
     fn test_render_sparkline_all_equal() {
         let series = vec![5.0; 5];
         let out = render_sparkline(&series, &spark_cfg(5));
-        assert!(out.chars().all(|c| c == '▄'), "all-equal should be mid-height ▄: {:?}", out);
+        assert!(
+            out.chars().all(|c| c == '▄'),
+            "all-equal should be mid-height ▄: {:?}",
+            out
+        );
     }
 
     #[test]
@@ -129,8 +142,15 @@ mod tests {
         // First bucket (0,1) should be lower than last bucket (8,9)
         let chars: Vec<char> = out.chars().collect();
         let first_idx = SPARK_CHARS.iter().position(|&c| c == chars[0]).unwrap();
-        let last_idx = SPARK_CHARS.iter().position(|&c| c == *chars.last().unwrap()).unwrap();
-        assert!(first_idx < last_idx, "first bucket should be lower than last: {:?}", out);
+        let last_idx = SPARK_CHARS
+            .iter()
+            .position(|&c| c == *chars.last().unwrap())
+            .unwrap();
+        assert!(
+            first_idx < last_idx,
+            "first bucket should be lower than last: {:?}",
+            out
+        );
     }
 
     #[test]
@@ -154,8 +174,16 @@ mod tests {
         let series = vec![0.0, 2.0, 6.0, 8.0];
         let bucketed = bucket_series(&series, 2);
         assert_eq!(bucketed.len(), 2);
-        assert!((bucketed[0] - 1.0).abs() < 0.01, "first bucket mean: {}", bucketed[0]);
-        assert!((bucketed[1] - 7.0).abs() < 0.01, "second bucket mean: {}", bucketed[1]);
+        assert!(
+            (bucketed[0] - 1.0).abs() < 0.01,
+            "first bucket mean: {}",
+            bucketed[0]
+        );
+        assert!(
+            (bucketed[1] - 7.0).abs() < 0.01,
+            "second bucket mean: {}",
+            bucketed[1]
+        );
     }
 
     #[test]

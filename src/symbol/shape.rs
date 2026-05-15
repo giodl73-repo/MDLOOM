@@ -32,20 +32,22 @@ impl ShapeAttrs {
                 let (val, next) = if rest.starts_with('"') {
                     if let Some(close) = rest[1..].find('"') {
                         (&rest[1..close + 1], &rest[close + 2..])
-                    } else { ("", "") }
+                    } else {
+                        ("", "")
+                    }
                 } else {
                     let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
                     (&rest[..end], &rest[end..])
                 };
                 match key {
-                    "name"      => out.name = val.to_string(),
-                    "title"     => out.title = Some(val.to_string()),
-                    "label"     => out.label = Some(val.to_string()),
-                    "text"      => out.text = Some(val.to_string()),
-                    "style"     => out.style = val.to_string(),
+                    "name" => out.name = val.to_string(),
+                    "title" => out.title = Some(val.to_string()),
+                    "label" => out.label = Some(val.to_string()),
+                    "text" => out.text = Some(val.to_string()),
+                    "style" => out.style = val.to_string(),
                     "direction" => out.direction = val.to_string(),
-                    "size"      => out.size = val.parse().unwrap_or(1),
-                    "width"     => out.width = val.parse().ok(),
+                    "size" => out.size = val.parse().unwrap_or(1),
+                    "width" => out.width = val.parse().ok(),
                     _ => {}
                 }
                 rest = next.trim_start();
@@ -75,18 +77,56 @@ impl std::fmt::Display for ShapeError {
 // ─────────────────────────────────────────────────────────
 
 struct BorderSet {
-    tl: char, tr: char,
-    bl: char, br: char,
-    h: char, v: char,
+    tl: char,
+    tr: char,
+    bl: char,
+    br: char,
+    h: char,
+    v: char,
 }
 
 fn border_set(style: &str) -> BorderSet {
     match style {
-        "single"  => BorderSet { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
-        "rounded" => BorderSet { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
-        "heavy"   => BorderSet { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
-        "ascii"   => BorderSet { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' },
-        _         => BorderSet { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }, // double (default)
+        "single" => BorderSet {
+            tl: '┌',
+            tr: '┐',
+            bl: '└',
+            br: '┘',
+            h: '─',
+            v: '│',
+        },
+        "rounded" => BorderSet {
+            tl: '╭',
+            tr: '╮',
+            bl: '╰',
+            br: '╯',
+            h: '─',
+            v: '│',
+        },
+        "heavy" => BorderSet {
+            tl: '┏',
+            tr: '┓',
+            bl: '┗',
+            br: '┛',
+            h: '━',
+            v: '┃',
+        },
+        "ascii" => BorderSet {
+            tl: '+',
+            tr: '+',
+            bl: '+',
+            br: '+',
+            h: '-',
+            v: '|',
+        },
+        _ => BorderSet {
+            tl: '╔',
+            tr: '╗',
+            bl: '╚',
+            br: '╝',
+            h: '═',
+            v: '║',
+        }, // double (default)
     }
 }
 
@@ -110,8 +150,11 @@ pub fn render_banner(title: &str, style: &str, inner_width: usize) -> String {
     let pad_left = pad_total / 2;
     let pad_right = pad_total - pad_left;
     let mid = format!(
-        "{}{}{}{}{}", b.v,
-        " ".repeat(pad_left), title, " ".repeat(pad_right),
+        "{}{}{}{}{}",
+        b.v,
+        " ".repeat(pad_left),
+        title,
+        " ".repeat(pad_right),
         b.v
     );
 
@@ -124,20 +167,20 @@ pub fn render_banner(title: &str, style: &str, inner_width: usize) -> String {
 pub fn render_badge(label: &str, style: &str) -> String {
     let (tl, tr, bl, br, h) = match style {
         "square" => ('┌', '┐', '└', '┘', '─'),
-        "sharp"  => ('+', '+', '+', '+', '-'),
-        _        => ('╭', '╮', '╰', '╯', '─'), // rounded (default)
+        "sharp" => ('+', '+', '+', '+', '-'),
+        _ => ('╭', '╮', '╰', '╯', '─'), // rounded (default)
     };
     let v = match style {
         "square" => '│',
-        "sharp"  => '|',
-        _        => '│',
+        "sharp" => '|',
+        _ => '│',
     };
 
     let label_w = visual_width(label);
     let inner = label_w + 2; // 1 space each side
 
-    let top    = format!(" {}{}{}", tl, h.to_string().repeat(inner), tr);
-    let mid    = format!(" {} {} {}", v, label, v);
+    let top = format!(" {}{}{}", tl, h.to_string().repeat(inner), tr);
+    let mid = format!(" {} {} {}", v, label, v);
     let bottom = format!(" {}{}{}", bl, h.to_string().repeat(inner), br);
 
     format!("{}\n{}\n{}", top, mid, bottom)
@@ -150,7 +193,7 @@ pub fn render_ribbon(text: &str) -> String {
     let inner = text_w + 6; // padding for the slanted sides
     let bar: String = "_".repeat(inner);
     let mid_pad = " ".repeat(3);
-    let top    = format!("   ╱{}╲", "‾".repeat(inner));
+    let top = format!("   ╱{}╲", "‾".repeat(inner));
     let middle = format!("  ╱{}{}{}╲", mid_pad, text, mid_pad);
     let bottom = format!(" ╱{}╲", bar);
     format!("{}\n{}\n{}", top, middle, bottom)
@@ -167,26 +210,35 @@ pub fn render_shape(attrs: &ShapeAttrs) -> Result<String, ShapeError> {
 
     match attrs.name.as_str() {
         "banner" => {
-            let title = attrs.title.as_deref()
+            let title = attrs
+                .title
+                .as_deref()
                 .or(attrs.text.as_deref())
                 .unwrap_or("");
             Ok(render_banner(title, &attrs.style, default_width))
         }
         "badge" => {
-            let label = attrs.label.as_deref()
+            let label = attrs
+                .label
+                .as_deref()
                 .or(attrs.text.as_deref())
                 .unwrap_or("");
             Ok(render_badge(label, &attrs.style))
         }
         "ribbon" => {
-            let text = attrs.text.as_deref()
+            let text = attrs
+                .text
+                .as_deref()
                 .or(attrs.title.as_deref())
                 .unwrap_or("");
             Ok(render_ribbon(text))
         }
         other => Err(ShapeError {
             code: "SYMBOL-003",
-            message: format!("shape {:?} not found — supported: banner, badge, ribbon", other),
+            message: format!(
+                "shape {:?} not found — supported: banner, badge, ribbon",
+                other
+            ),
         }),
     }
 }
@@ -255,7 +307,12 @@ mod tests {
         let out = render_banner("Test", "ascii", 20);
         for line in out.lines() {
             for ch in line.chars() {
-                assert!(ch.is_ascii(), "non-ASCII in ascii banner: {:?} in {:?}", ch, line);
+                assert!(
+                    ch.is_ascii(),
+                    "non-ASCII in ascii banner: {:?} in {:?}",
+                    ch,
+                    line
+                );
             }
         }
     }
@@ -273,8 +330,11 @@ mod tests {
         let mid = out.lines().nth(1).unwrap();
         // "HI" (2 chars) in inner_width 10: pad_left=4, pad_right=4
         // Total: ║ + 4 spaces + HI + 4 spaces + ║ = 12 chars
-        assert!(mid.contains("    HI    ") || mid.contains("   HI    ") || mid.contains("    HI   "),
-            "title should be centered: {:?}", mid);
+        assert!(
+            mid.contains("    HI    ") || mid.contains("   HI    ") || mid.contains("    HI   "),
+            "title should be centered: {:?}",
+            mid
+        );
     }
 
     #[test]

@@ -43,7 +43,9 @@ use crate::config::AiConfig;
 pub fn call_ai(prompt: &str, config: &AiConfig) -> Result<String> {
     let has_placeholder = config.args.iter().any(|a| a.contains("{prompt}"));
 
-    let args: Vec<String> = config.args.iter()
+    let args: Vec<String> = config
+        .args
+        .iter()
         .map(|a| a.replace("{prompt}", prompt))
         .collect();
 
@@ -57,20 +59,23 @@ pub fn call_ai(prompt: &str, config: &AiConfig) -> Result<String> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let mut child = cmd.spawn()
-        .with_context(|| format!(
+    let mut child = cmd.spawn().with_context(|| {
+        format!(
             "failed to launch AI CLI {:?} — is it installed and on PATH?",
             config.command
-        ))?;
+        )
+    })?;
 
     if !has_placeholder {
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(prompt.as_bytes())
+            stdin
+                .write_all(prompt.as_bytes())
                 .context("failed to write prompt to AI CLI stdin")?;
         }
     }
 
-    let output = child.wait_with_output()
+    let output = child
+        .wait_with_output()
         .context("AI CLI did not complete")?;
 
     if !output.status.success() {
@@ -152,7 +157,7 @@ mod tests {
     fn stdin_mode_when_no_placeholder() {
         let cfg = AiConfig {
             command: "cat".to_string(),
-            args: vec![],  // no {prompt} → stdin mode
+            args: vec![], // no {prompt} → stdin mode
         };
         // cat reads stdin and echoes it. On Windows "cat" may not exist — that's OK.
         let _result = call_ai("test input", &cfg);

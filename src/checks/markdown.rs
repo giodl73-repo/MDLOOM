@@ -3,7 +3,6 @@
 /// Checks heading counts, required sections, and required content patterns.
 /// All heading detection skips content inside fenced code blocks to avoid
 /// false positives from code comments that start with `#`.
-
 use crate::checks::Check;
 use crate::config::{MarkdownConfig, PatternSeverity};
 use crate::diagnostic::Diagnostic;
@@ -17,7 +16,9 @@ pub struct MarkdownCheck {
 }
 
 impl Check for MarkdownCheck {
-    fn name(&self) -> &'static str { "markdown" }
+    fn name(&self) -> &'static str {
+        "markdown"
+    }
 
     fn check(&self, path: &Path, content: &str) -> Vec<Diagnostic> {
         if !self.config.enabled {
@@ -34,18 +35,18 @@ impl Check for MarkdownCheck {
 
         // H1 count — only count headings outside code blocks
         if let Some(max_h1) = self.config.max_h1 {
-            let h1_lines: Vec<usize> = lines.iter().enumerate()
-                .filter(|(i, l)| {
-                    !in_code_block[*i]
-                        && l.starts_with("# ")
-                        && !l.starts_with("## ")
-                })
+            let h1_lines: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(i, l)| !in_code_block[*i] && l.starts_with("# ") && !l.starts_with("## "))
                 .map(|(i, _)| i + 1)
                 .collect();
             if h1_lines.len() > max_h1 {
                 for &ln in &h1_lines[max_h1..] {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_h1_count",
                         format!("extra H1 heading (max {} per file)", max_h1),
                     ));
@@ -55,15 +56,22 @@ impl Check for MarkdownCheck {
 
         // Required H2 sections (any one) — outside code blocks only
         if !self.config.required_h2.is_empty() {
-            let h2_headings: Vec<&str> = lines.iter().enumerate()
+            let h2_headings: Vec<&str> = lines
+                .iter()
+                .enumerate()
                 .filter(|(i, l)| !in_code_block[*i] && l.starts_with("## "))
                 .map(|(_, l)| l.trim_start_matches("## ").trim())
                 .collect();
-            let found_any = self.config.required_h2.iter()
+            let found_any = self
+                .config
+                .required_h2
+                .iter()
                 .any(|req| h2_headings.iter().any(|h| *h == req.as_str()));
             if !found_any {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), 1, 1,
+                    path.to_path_buf(),
+                    1,
+                    1,
                     "md_missing_section",
                     format!(
                         "missing required section — expected one of: {}",
@@ -82,7 +90,9 @@ impl Check for MarkdownCheck {
             });
             if !found {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), 1, 1,
+                    path.to_path_buf(),
+                    1,
+                    1,
                     "md_missing_section",
                     format!("missing required section: \"{}\"", required),
                 ));
@@ -93,12 +103,18 @@ impl Check for MarkdownCheck {
         // required_h2_all: keeps authoring scaffolds out of production guides.
         if !self.config.forbidden_h2.is_empty() {
             for (i, line) in lines.iter().enumerate() {
-                if in_code_block[i] { continue; }
-                if !line.starts_with("## ") { continue; }
+                if in_code_block[i] {
+                    continue;
+                }
+                if !line.starts_with("## ") {
+                    continue;
+                }
                 let heading = line.trim_start_matches("## ").trim();
                 if self.config.forbidden_h2.iter().any(|f| f == heading) {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), i + 1, 1,
+                        path.to_path_buf(),
+                        i + 1,
+                        1,
                         "md_forbidden_section",
                         format!("forbidden section: \"{}\" must not appear", heading),
                     ));
@@ -106,30 +122,44 @@ impl Check for MarkdownCheck {
             }
         }
 
-        // H2 allowlist (optional_h2 + required lists): when any of the three H2
-        // lists are non-empty, warn for any H2 that doesn't appear in any of them.
-        let has_allowlist = !self.config.optional_h2.is_empty()
-            || !self.config.required_h2.is_empty()
-            || !self.config.required_h2_all.is_empty();
+        // H2 allowlist (optional_h2 + required lists): `optional_h2` is the
+        // explicit signal to close the schema. Required H2 lists only enforce
+        // presence, so broad corpus schemas can require anchors without warning
+        // on every local section heading.
+        let has_allowlist = !self.config.optional_h2.is_empty();
         if has_allowlist {
-            let allowed: std::collections::HashSet<&str> = self.config.required_h2.iter()
+            let allowed: std::collections::HashSet<&str> = self
+                .config
+                .required_h2
+                .iter()
                 .chain(self.config.required_h2_all.iter())
                 .chain(self.config.optional_h2.iter())
                 .map(|s| s.as_str())
                 .collect();
             // Forbidden headings are flagged separately as md_forbidden_section —
             // skip them here so a single offending H2 doesn't produce two warnings.
-            let forbidden: std::collections::HashSet<&str> = self.config.forbidden_h2
-                .iter().map(|s| s.as_str()).collect();
+            let forbidden: std::collections::HashSet<&str> = self
+                .config
+                .forbidden_h2
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
             for (i, line) in lines.iter().enumerate() {
-                if in_code_block[i] { continue; }
+                if in_code_block[i] {
+                    continue;
+                }
                 if line.starts_with("## ") {
                     let heading = line.trim_start_matches("## ").trim();
                     if !allowed.contains(heading) && !forbidden.contains(heading) {
                         diags.push(Diagnostic::warning(
-                            path.to_path_buf(), i + 1, 1,
+                            path.to_path_buf(),
+                            i + 1,
+                            1,
                             "md_unexpected_section",
-                            format!("Unexpected H2 section \"{}\" — not in schema's allowed H2 list", heading),
+                            format!(
+                                "Unexpected H2 section \"{}\" — not in schema's allowed H2 list",
+                                heading
+                            ),
                         ));
                     }
                 }
@@ -143,14 +173,24 @@ impl Check for MarkdownCheck {
             if !found {
                 let d = match req.severity {
                     PatternSeverity::Error => Diagnostic::error(
-                        path.to_path_buf(), 1, 1,
+                        path.to_path_buf(),
+                        1,
+                        1,
                         "md_missing_pattern",
-                        format!("missing required content: {} (pattern: {:?})", req.description, req.pattern),
+                        format!(
+                            "missing required content: {} (pattern: {:?})",
+                            req.description, req.pattern
+                        ),
                     ),
                     PatternSeverity::Warning => Diagnostic::warning(
-                        path.to_path_buf(), 1, 1,
+                        path.to_path_buf(),
+                        1,
+                        1,
                         "md_missing_pattern",
-                        format!("missing recommended content: {} (pattern: {:?})", req.description, req.pattern),
+                        format!(
+                            "missing recommended content: {} (pattern: {:?})",
+                            req.description, req.pattern
+                        ),
                     ),
                 };
                 diags.push(d);
@@ -161,7 +201,9 @@ impl Check for MarkdownCheck {
         if let Some(max) = self.config.max_lines {
             if lines.len() > max {
                 diags.push(Diagnostic::warning(
-                    path.to_path_buf(), lines.len(), 1,
+                    path.to_path_buf(),
+                    lines.len(),
+                    1,
                     "md_file_length",
                     format!("file has {} lines, exceeds limit of {}", lines.len(), max),
                 ));
@@ -171,12 +213,16 @@ impl Check for MarkdownCheck {
         // ── Heading quality checks ───────────────────────────────────────────
 
         // Collect all ATX headings outside code blocks
-        let atx_headings: Vec<(usize, usize, &str)> = lines.iter().enumerate()
+        let atx_headings: Vec<(usize, usize, &str)> = lines
+            .iter()
+            .enumerate()
             .filter(|(i, l)| !in_code_block[*i] && l.starts_with('#'))
             .filter_map(|(i, l)| {
                 let level = l.chars().take_while(|&c| c == '#').count();
-                if level == 0 { return None; }
-                Some((i + 1, level, *l))  // (1-based line, level, raw line)
+                if level == 0 {
+                    return None;
+                }
+                Some((i + 1, level, *l)) // (1-based line, level, raw line)
             })
             .collect();
 
@@ -186,13 +232,17 @@ impl Check for MarkdownCheck {
                 // Must start with exactly one space (not zero, not two+)
                 if !after_hashes.is_empty() && !after_hashes.starts_with(' ') {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_heading_format",
                         format!("heading missing space after `#` — use `# Title` not `#Title`"),
                     ));
                 } else if after_hashes.starts_with("  ") {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_heading_format",
                         "heading has extra space after `#` — use exactly one space",
                     ));
@@ -222,7 +272,9 @@ impl Check for MarkdownCheck {
                 let after_hashes = raw.trim_start_matches('#');
                 if after_hashes.trim().is_empty() {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_empty_heading",
                         "empty heading — must have content after `#`",
                     ));
@@ -235,11 +287,15 @@ impl Check for MarkdownCheck {
             for &(ln, level, _raw) in &atx_headings {
                 if prev_level > 0 && level > prev_level + 1 {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_heading_hierarchy",
                         format!(
                             "heading level skips from H{} to H{} — expected H{}",
-                            prev_level, level, prev_level + 1
+                            prev_level,
+                            level,
+                            prev_level + 1
                         ),
                     ));
                 }
@@ -248,17 +304,22 @@ impl Check for MarkdownCheck {
         }
 
         if self.config.check_duplicate_headings {
-            let mut seen: std::collections::HashMap<(usize, String), usize> = std::collections::HashMap::new();
+            let mut seen: std::collections::HashMap<(usize, String), usize> =
+                std::collections::HashMap::new();
             for &(ln, level, raw) in &atx_headings {
                 let text = raw.trim_start_matches('#').trim().to_lowercase();
                 let key = (level, text.clone());
                 if let Some(&first_ln) = seen.get(&key) {
                     diags.push(Diagnostic::warning(
-                        path.to_path_buf(), ln, 1,
+                        path.to_path_buf(),
+                        ln,
+                        1,
                         "md_duplicate_heading",
                         format!(
                             "duplicate H{} heading {:?} — first appeared at line {}",
-                            level, raw.trim_start_matches('#').trim(), first_ln
+                            level,
+                            raw.trim_start_matches('#').trim(),
+                            first_ln
                         ),
                     ));
                 } else {
@@ -271,16 +332,31 @@ impl Check for MarkdownCheck {
 
         if let Some(ref required_style) = self.config.thematic_break_style {
             for (i, &line) in lines.iter().enumerate() {
-                if in_code_block[i] { continue; }
+                if in_code_block[i] {
+                    continue;
+                }
                 let trimmed = line.trim();
                 // Thematic break: line of only `-`, `*`, or `_` (with optional spaces), ≥3 chars
                 if is_thematic_break(trimmed) && !required_style.is_empty() {
-                    let char_used = trimmed.chars().find(|&c| c != ' ').unwrap_or('-').to_string();
-                    let expected_char = required_style.trim_matches('-').trim_matches('*').trim_matches('_');
+                    let char_used = trimmed
+                        .chars()
+                        .find(|&c| c != ' ')
+                        .unwrap_or('-')
+                        .to_string();
+                    let expected_char = required_style
+                        .trim_matches('-')
+                        .trim_matches('*')
+                        .trim_matches('_');
                     let _ = expected_char; // compare the repeated char vs required style
-                    if !trimmed.replace(' ', "").chars().all(|c| required_style.contains(c)) {
+                    if !trimmed
+                        .replace(' ', "")
+                        .chars()
+                        .all(|c| required_style.contains(c))
+                    {
                         diags.push(Diagnostic::warning(
-                            path.to_path_buf(), i + 1, 1,
+                            path.to_path_buf(),
+                            i + 1,
+                            1,
                             "md_break_style",
                             format!(
                                 "thematic break uses {:?} — project style requires {:?}",
@@ -294,13 +370,17 @@ impl Check for MarkdownCheck {
 
         if self.config.check_blockquote_spacing {
             for (i, &line) in lines.iter().enumerate() {
-                if in_code_block[i] { continue; }
+                if in_code_block[i] {
+                    continue;
+                }
                 // `>text` without space is valid CommonMark but bad style
                 if line.starts_with('>') && line.len() > 1 {
                     let after = &line[1..];
                     if !after.starts_with(' ') && !after.starts_with('>') {
                         diags.push(Diagnostic::warning(
-                            path.to_path_buf(), i + 1, 1,
+                            path.to_path_buf(),
+                            i + 1,
+                            1,
                             "md_blockquote_spacing",
                             "block quote missing space after `>` — use `> text` not `>text`",
                         ));
@@ -311,7 +391,13 @@ impl Check for MarkdownCheck {
 
         // ── Cross-document link target verification ───────────────────────────
         if self.config.check_links {
-            check_link_targets(path, self.root.as_deref(), &lines, &in_code_block, &mut diags);
+            check_link_targets(
+                path,
+                self.root.as_deref(),
+                &lines,
+                &in_code_block,
+                &mut diags,
+            );
         }
 
         diags
@@ -332,21 +418,34 @@ fn check_link_targets(
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
 
     for (i, &line) in lines.iter().enumerate() {
-        if in_code_block[i] { continue; }
+        if in_code_block[i] {
+            continue;
+        }
         let opaque = backtick_spans(line);
         for span in extract_md_links(line, &opaque) {
             // Trim a fragment so that `path.md#section` still resolves on disk
             let url = span.url.trim();
-            if url.is_empty() { continue; }
-            if is_external_or_anchor(url) { continue; }
+            if url.is_empty() {
+                continue;
+            }
+            if is_inline_math_notation_link(span.text, url) {
+                continue;
+            }
+            if is_external_or_anchor(url) {
+                continue;
+            }
             // mdpath URIs are validated by SourceLinkCheck on .source.md files
-            if url.starts_with("md://") { continue; }
+            if url.starts_with("md://") {
+                continue;
+            }
 
             let path_part = match url.find('#') {
                 Some(h) => &url[..h],
                 None => url,
             };
-            if path_part.is_empty() { continue; }
+            if path_part.is_empty() {
+                continue;
+            }
 
             // Reject explicit empty links and obvious non-paths
             let target = resolve_link_target(parent, root, path_part);
@@ -391,6 +490,7 @@ fn is_external_or_anchor(url: &str) -> bool {
 struct LinkSpan<'a> {
     /// 0-based column where the `[` begins.
     col: usize,
+    text: &'a str,
     url: &'a str,
 }
 
@@ -402,30 +502,76 @@ fn extract_md_links<'a>(line: &'a str, opaque: &[(usize, usize)]) -> Vec<LinkSpa
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
-        if bytes[i] != b'[' { i += 1; continue; }
-        if in_opaque(i, opaque) { i += 1; continue; }
+        if bytes[i] != b'[' {
+            i += 1;
+            continue;
+        }
+        if in_opaque(i, opaque) {
+            i += 1;
+            continue;
+        }
 
         // Find matching `](` — text portion may contain nested brackets, but
         // we keep this simple: find the next `](` not inside a code span.
         let after_open = i + 1;
         let close_text = match find_unopaque(line, after_open, "](", opaque) {
             Some(p) => p,
-            None => { i += 1; continue; }
+            None => {
+                i += 1;
+                continue;
+            }
         };
         let url_start = close_text + 2;
         let close_url = match find_unopaque(line, url_start, ")", opaque) {
             Some(p) => p,
-            None => { i += 1; continue; }
+            None => {
+                i += 1;
+                continue;
+            }
         };
 
+        let text = &line[after_open..close_text];
         let url = &line[url_start..close_url];
-        out.push(LinkSpan { col: i, url });
+        out.push(LinkSpan { col: i, text, url });
         i = close_url + 1;
     }
     out
 }
 
-fn find_unopaque(line: &str, from: usize, needle: &str, opaque: &[(usize, usize)]) -> Option<usize> {
+fn is_inline_math_notation_link(text: &str, url: &str) -> bool {
+    if url.contains(',')
+        && !url.contains(['/', '\\', '.', '#'])
+        && url
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ',' | '_' | ' '))
+    {
+        return true;
+    }
+
+    let math_text = text.len() <= 8
+        && !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ',' | '/' | '_' | ' '));
+    let function_arg_url = url.len() <= 8
+        && !url.is_empty()
+        && url
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ',' | '_' | ' '));
+
+    math_text
+        && function_arg_url
+        && (text.contains(',')
+            || text.contains('/')
+            || text.chars().all(|c| c.is_ascii_uppercase()))
+}
+
+fn find_unopaque(
+    line: &str,
+    from: usize,
+    needle: &str,
+    opaque: &[(usize, usize)],
+) -> Option<usize> {
     let mut search_from = from;
     while let Some(rel) = line[search_from..].find(needle) {
         let abs = search_from + rel;
@@ -448,16 +594,25 @@ fn backtick_spans(line: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
-        if bytes[i] != b'`' { i += 1; continue; }
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
         let run_start = i;
         let mut run = 0usize;
-        while i < bytes.len() && bytes[i] == b'`' { i += 1; run += 1; }
+        while i < bytes.len() && bytes[i] == b'`' {
+            i += 1;
+            run += 1;
+        }
         // Find a matching backtick run of the same length
         let mut j = i;
         while j < bytes.len() {
             if bytes[j] == b'`' {
                 let mut close_run = 0usize;
-                while j < bytes.len() && bytes[j] == b'`' { j += 1; close_run += 1; }
+                while j < bytes.len() && bytes[j] == b'`' {
+                    j += 1;
+                    close_run += 1;
+                }
                 if close_run == run {
                     out.push((run_start, j));
                     i = j; // advance past close backtick so it isn't treated as new open
@@ -477,9 +632,13 @@ fn backtick_spans(line: &str) -> Vec<(usize, usize)> {
 }
 
 fn is_thematic_break(trimmed: &str) -> bool {
-    if trimmed.len() < 3 { return false; }
+    if trimmed.len() < 3 {
+        return false;
+    }
     let without_spaces: String = trimmed.chars().filter(|&c| c != ' ').collect();
-    if without_spaces.len() < 3 { return false; }
+    if without_spaces.len() < 3 {
+        return false;
+    }
     let first = without_spaces.chars().next().unwrap();
     matches!(first, '-' | '*' | '_') && without_spaces.chars().all(|c| c == first)
 }
@@ -542,9 +701,11 @@ mod tests {
         };
         let diags = check.check(Path::new("test.md"), content);
         let h1_warns: Vec<_> = diags.iter().filter(|d| d.code == "md_h1_count").collect();
-        assert!(h1_warns.is_empty(),
+        assert!(
+            h1_warns.is_empty(),
             "# inside code block must not be counted as H1, got: {:?}",
-            h1_warns.iter().map(|d| &d.message).collect::<Vec<_>>());
+            h1_warns.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -559,8 +720,10 @@ mod tests {
             root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_h1_count"),
-            "real extra H1 outside code block must still be detected");
+        assert!(
+            diags.iter().any(|d| d.code == "md_h1_count"),
+            "real extra H1 outside code block must still be detected"
+        );
     }
 
     #[test]
@@ -576,8 +739,10 @@ mod tests {
             root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
-        assert!(diags.iter().any(|d| d.code == "md_missing_section"),
-            "## inside code block must not satisfy required section check");
+        assert!(
+            diags.iter().any(|d| d.code == "md_missing_section"),
+            "## inside code block must not satisfy required section check"
+        );
     }
 
     #[test]
@@ -592,8 +757,34 @@ mod tests {
             root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
-        assert!(diags.iter().all(|d| d.code != "md_h1_count"),
-            "# inside tilde fence must not be counted as H1");
+        assert!(
+            diags.iter().all(|d| d.code != "md_h1_count"),
+            "# inside tilde fence must not be counted as H1"
+        );
+    }
+
+    #[test]
+    fn trailing_hash_style_warns_but_csharp_heading_is_clean() {
+        let check = MarkdownCheck {
+            config: MarkdownConfig {
+                enabled: true,
+                check_heading_format: true,
+                ..Default::default()
+            },
+            root: None,
+        };
+
+        let decorated = check.check(Path::new("decorated.md"), "# Title\n\n## Title ##\n");
+        assert!(
+            decorated.iter().any(|d| d.code == "md_heading_format"),
+            "CommonMark closing hashes should be warned as local style"
+        );
+
+        let csharp = check.check(Path::new("csharp.md"), "# Title\n\n## Gotchas from C#\n");
+        assert!(
+            csharp.iter().all(|d| d.code != "md_heading_format"),
+            "C# and F# language names are not trailing hash decoration"
+        );
     }
 
     // ── link_broken_target ────────────────────────────────────────────────────
@@ -618,7 +809,8 @@ mod tests {
         let diags = link_check(Some(dir.path())).check(&path, content);
         assert!(
             diags.iter().all(|d| d.code != "link_broken_target"),
-            "link to existing file must not be flagged: {:?}", diags
+            "link to existing file must not be flagged: {:?}",
+            diags
         );
     }
 
@@ -628,8 +820,16 @@ mod tests {
         let path = dir.path().join("doc.md");
         let content = "# Doc\n\nSee [other](missing.md) for details.\n";
         let diags = link_check(Some(dir.path())).check(&path, content);
-        let broken: Vec<_> = diags.iter().filter(|d| d.code == "link_broken_target").collect();
-        assert_eq!(broken.len(), 1, "expected exactly one broken link, got {:?}", diags);
+        let broken: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "link_broken_target")
+            .collect();
+        assert_eq!(
+            broken.len(),
+            1,
+            "expected exactly one broken link, got {:?}",
+            diags
+        );
         assert!(broken[0].message.contains("missing.md"));
     }
 
@@ -637,7 +837,8 @@ mod tests {
     fn http_links_skipped() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("doc.md");
-        let content = "# Doc\n\nSee [the spec](https://example.com/spec) and [mailto](mailto:x@y).\n";
+        let content =
+            "# Doc\n\nSee [the spec](https://example.com/spec) and [mailto](mailto:x@y).\n";
         let diags = link_check(Some(dir.path())).check(&path, content);
         assert!(diags.iter().all(|d| d.code != "link_broken_target"));
     }
@@ -660,7 +861,8 @@ mod tests {
         let diags = link_check(Some(dir.path())).check(&path, content);
         assert!(
             diags.iter().all(|d| d.code != "link_broken_target"),
-            "path#fragment must resolve against the path: {:?}", diags
+            "path#fragment must resolve against the path: {:?}",
+            diags
         );
     }
 
@@ -680,11 +882,20 @@ mod tests {
     fn link_inside_backtick_span_skipped() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("doc.md");
-        let content = "# Doc\n\nUse the syntax `[text](url)` to add a link, see [README](README.md).\n";
+        let content =
+            "# Doc\n\nUse the syntax `[text](url)` to add a link, see [README](README.md).\n";
         let diags = link_check(Some(dir.path())).check(&path, content);
         // The README.md doesn't exist, so we expect exactly one diagnostic — not two.
-        let broken: Vec<_> = diags.iter().filter(|d| d.code == "link_broken_target").collect();
-        assert_eq!(broken.len(), 1, "code-span link must be ignored; only README.md is real: {:?}", broken);
+        let broken: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code == "link_broken_target")
+            .collect();
+        assert_eq!(
+            broken.len(),
+            1,
+            "code-span link must be ignored; only README.md is real: {:?}",
+            broken
+        );
         assert!(broken[0].message.contains("README.md"));
     }
 
@@ -697,6 +908,20 @@ mod tests {
         assert!(
             diags.iter().all(|d| d.code != "link_broken_target"),
             "md:// URIs are validated by SourceLinkCheck, not the prose link checker"
+        );
+    }
+
+    #[test]
+    fn inline_math_function_notation_links_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("doc.md");
+        let content =
+            "# Doc\n\n[X](t), [A,A](X,Y), and [m/n](x) are math notation, not file links.\n";
+        let diags = link_check(Some(dir.path())).check(&path, content);
+        assert!(
+            diags.iter().all(|d| d.code != "link_broken_target"),
+            "math notation should not be checked as relative links: {:?}",
+            diags
         );
     }
 
@@ -728,7 +953,8 @@ mod tests {
         let diags = link_check(Some(dir.path())).check(&path, content);
         assert!(
             diags.iter().all(|d| d.code != "link_broken_target"),
-            "leading-slash path must resolve against the runner root: {:?}", diags
+            "leading-slash path must resolve against the runner root: {:?}",
+            diags
         );
     }
 
@@ -749,11 +975,26 @@ mod tests {
     #[test]
     fn optional_h2_unexpected_section_warns() {
         let content = "# Title\n\n## Overview\n\ntext\n\n## Changelog\n\ntext\n";
+        let check = allowlist_check(vec!["Overview"], vec!["Notes"]);
+        let diags = check.check(Path::new("test.md"), content);
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "md_unexpected_section" && d.message.contains("Changelog")),
+            "H2 not in allowlist should produce md_unexpected_section, got: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn required_h2_without_optional_h2_allows_any_other_heading() {
+        let content = "# Title\n\n## Overview\n\ntext\n\n## Local Notes\n\ntext\n";
         let check = allowlist_check(vec!["Overview"], vec![]);
         let diags = check.check(Path::new("test.md"), content);
         assert!(
-            diags.iter().any(|d| d.code == "md_unexpected_section" && d.message.contains("Changelog")),
-            "H2 not in allowlist should produce md_unexpected_section, got: {:?}", diags
+            diags.iter().all(|d| d.code != "md_unexpected_section"),
+            "required H2s alone must not close the H2 allowlist, got: {:?}",
+            diags
         );
     }
 
@@ -764,7 +1005,8 @@ mod tests {
         let diags = check.check(Path::new("test.md"), content);
         assert!(
             diags.iter().all(|d| d.code != "md_unexpected_section"),
-            "H2 in optional_h2 must not trigger md_unexpected_section, got: {:?}", diags
+            "H2 in optional_h2 must not trigger md_unexpected_section, got: {:?}",
+            diags
         );
     }
 
@@ -772,13 +1014,17 @@ mod tests {
     fn optional_h2_empty_allows_any_heading() {
         let content = "# Title\n\n## Anything Goes\n\ntext\n\n## Even This\n\ntext\n";
         let check = MarkdownCheck {
-            config: MarkdownConfig { enabled: true, ..Default::default() },
+            config: MarkdownConfig {
+                enabled: true,
+                ..Default::default()
+            },
             root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
         assert!(
             diags.iter().all(|d| d.code != "md_unexpected_section"),
-            "empty allowlist must not flag any H2, got: {:?}", diags
+            "empty allowlist must not flag any H2, got: {:?}",
+            diags
         );
     }
 
@@ -790,7 +1036,8 @@ mod tests {
         let diags = check.check(Path::new("test.md"), content);
         assert!(
             diags.iter().all(|d| d.code != "md_unexpected_section"),
-            "required H2 must also be treated as allowed, got: {:?}", diags
+            "required H2 must also be treated as allowed, got: {:?}",
+            diags
         );
     }
 
@@ -810,10 +1057,17 @@ mod tests {
     #[test]
     fn forbidden_h2_warns_with_line_and_name() {
         let content = "# Title\n\n## Overview\n\nbody\n\n## Draft\n\nstub\n";
-        let diags = forbidden_check(vec!["Draft", "TODO", "WIP"]).check(Path::new("test.md"), content);
-        let hit = diags.iter().find(|d| d.code == "md_forbidden_section")
+        let diags =
+            forbidden_check(vec!["Draft", "TODO", "WIP"]).check(Path::new("test.md"), content);
+        let hit = diags
+            .iter()
+            .find(|d| d.code == "md_forbidden_section")
             .expect("expected md_forbidden_section, got: {:?}");
-        assert!(hit.message.contains("Draft"), "message should name the heading: {:?}", hit.message);
+        assert!(
+            hit.message.contains("Draft"),
+            "message should name the heading: {:?}",
+            hit.message
+        );
         assert_eq!(hit.span.line, 7, "should point at the offending H2 line");
     }
 
@@ -823,7 +1077,8 @@ mod tests {
         let diags = forbidden_check(vec![]).check(Path::new("test.md"), content);
         assert!(
             diags.iter().all(|d| d.code != "md_forbidden_section"),
-            "empty forbidden_h2 must not flag anything, got: {:?}", diags
+            "empty forbidden_h2 must not flag anything, got: {:?}",
+            diags
         );
     }
 
@@ -833,7 +1088,8 @@ mod tests {
         let diags = forbidden_check(vec!["Draft"]).check(Path::new("test.md"), content);
         assert!(
             diags.iter().all(|d| d.code != "md_forbidden_section"),
-            "## inside code block must not trigger md_forbidden_section, got: {:?}", diags
+            "## inside code block must not trigger md_forbidden_section, got: {:?}",
+            diags
         );
     }
 
@@ -853,11 +1109,23 @@ mod tests {
             root: None,
         };
         let diags = check.check(Path::new("test.md"), content);
-        let forbidden_hits = diags.iter().filter(|d| d.code == "md_forbidden_section").count();
-        let unexpected_hits = diags.iter()
+        let forbidden_hits = diags
+            .iter()
+            .filter(|d| d.code == "md_forbidden_section")
+            .count();
+        let unexpected_hits = diags
+            .iter()
             .filter(|d| d.code == "md_unexpected_section" && d.message.contains("Draft"))
             .count();
-        assert_eq!(forbidden_hits, 1, "expected exactly one md_forbidden_section: {:?}", diags);
-        assert_eq!(unexpected_hits, 0, "forbidden heading must not double as md_unexpected_section: {:?}", diags);
+        assert_eq!(
+            forbidden_hits, 1,
+            "expected exactly one md_forbidden_section: {:?}",
+            diags
+        );
+        assert_eq!(
+            unexpected_hits, 0,
+            "forbidden heading must not double as md_unexpected_section: {:?}",
+            diags
+        );
     }
 }

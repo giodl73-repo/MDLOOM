@@ -5,7 +5,11 @@ use super::ElementConfig;
 /// fill_count chars of cfg.fill_char, then (width - fill_count) of cfg.empty_char.
 pub fn render_mini_bar(val: f64, max: f64, cfg: &ElementConfig) -> String {
     let width = cfg.width;
-    let proportion = if max == 0.0 { 0.0 } else { (val / max).clamp(0.0, 1.0) };
+    let proportion = if max == 0.0 {
+        0.0
+    } else {
+        (val / max).clamp(0.0, 1.0)
+    };
     let fill_count = (proportion * width as f64).round() as usize;
     let fill_count = fill_count.min(width);
     let empty_count = width - fill_count;
@@ -26,7 +30,12 @@ mod tests {
     use crate::element::{ElementConfig, ElementKind};
 
     fn bar_cfg(width: usize, max: f64) -> ElementConfig {
-        ElementConfig { kind: ElementKind::MiniBar, width, max: Some(max), ..Default::default() }
+        ElementConfig {
+            kind: ElementKind::MiniBar,
+            width,
+            max: Some(max),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -67,8 +76,11 @@ mod tests {
     #[test]
     fn test_custom_fill_chars() {
         let cfg = ElementConfig {
-            kind: ElementKind::MiniBar, width: 5, max: Some(100.0),
-            fill_char: '#', empty_char: '-',
+            kind: ElementKind::MiniBar,
+            width: 5,
+            max: Some(100.0),
+            fill_char: '#',
+            empty_char: '-',
             ..Default::default()
         };
         let out = render_mini_bar(60.0, 100.0, &cfg);

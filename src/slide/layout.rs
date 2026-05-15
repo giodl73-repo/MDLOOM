@@ -25,8 +25,10 @@ pub fn render_body_lines_with_warnings(
     bullet_cfg: &crate::slide::bullets::BulletConfig,
 ) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
     use crate::slide::bullets::render_bullets;
-    use crate::slide::inline::{render_quote, render_centered, render_right, render_ol,
-                                render_callout, render_divider, CalloutStyle, DividerStyle};
+    use crate::slide::inline::{
+        render_callout, render_centered, render_divider, render_ol, render_quote, render_right,
+        CalloutStyle, DividerStyle,
+    };
 
     let mut output: Vec<String> = Vec::new();
     let mut warnings: Vec<crate::slide::bullets::BulletWarning> = Vec::new();
@@ -43,7 +45,9 @@ pub fn render_body_lines_with_warnings(
         // consumed.
         if line == "proof:notes" {
             i += 1;
-            while i < lines.len() && !lines[i].trim().is_empty() { i += 1; }
+            while i < lines.len() && !lines[i].trim().is_empty() {
+                i += 1;
+            }
             i += 1;
             continue;
         }
@@ -52,8 +56,10 @@ pub fn render_body_lines_with_warnings(
         if line.starts_with("proof:bullets") {
             i += 1;
             let mut bullet_lines = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 bullet_lines.push_str(lines[i]);
                 bullet_lines.push('\n');
                 i += 1;
@@ -68,8 +74,10 @@ pub fn render_body_lines_with_warnings(
         if line.starts_with("proof:centered") {
             i += 1;
             let mut text = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 text.push_str(lines[i]);
                 text.push('\n');
                 i += 1;
@@ -80,14 +88,18 @@ pub fn render_body_lines_with_warnings(
 
         // proof:callout style=X — collect content
         if line.starts_with("proof:callout") {
-            let style_str = line.split("style=").nth(1)
+            let style_str = line
+                .split("style=")
+                .nth(1)
                 .and_then(|s| s.split_whitespace().next())
                 .unwrap_or("note");
             let style = CalloutStyle::parse(style_str);
             i += 1;
             let mut text = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 text.push_str(lines[i]);
                 text.push('\n');
                 i += 1;
@@ -98,7 +110,9 @@ pub fn render_body_lines_with_warnings(
 
         // proof:divider style=X
         if line.starts_with("proof:divider") {
-            let style_str = line.split("style=").nth(1)
+            let style_str = line
+                .split("style=")
+                .nth(1)
                 .and_then(|s| s.split_whitespace().next())
                 .unwrap_or("thin");
             let style = DividerStyle::parse(style_str);
@@ -111,8 +125,10 @@ pub fn render_body_lines_with_warnings(
         if line == "proof:right" {
             i += 1;
             let mut text = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 text.push_str(lines[i]);
                 text.push('\n');
                 i += 1;
@@ -125,8 +141,10 @@ pub fn render_body_lines_with_warnings(
         if line == "proof:numbered-list" || line == "proof:ol" {
             i += 1;
             let mut text = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 text.push_str(lines[i]);
                 text.push('\n');
                 i += 1;
@@ -137,12 +155,16 @@ pub fn render_body_lines_with_warnings(
 
         // proof:quote attribution="..."
         if line.starts_with("proof:quote") {
-            let attr = line.split("attribution=").nth(1)
+            let attr = line
+                .split("attribution=")
+                .nth(1)
                 .map(|s| s.trim().trim_matches('"').to_string());
             i += 1;
             let mut text = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 text.push_str(lines[i]);
                 text.push('\n');
                 i += 1;
@@ -201,7 +223,9 @@ pub fn apply_theme(lines: &[String], meta: &SlideMeta) -> Vec<String> {
 /// Center a string within `width` cols. Tie-break: extra space on right (SL-6).
 pub fn center_in_width(s: &str, width: usize) -> String {
     let len = s.chars().count();
-    if len >= width { return clip_to_width(s, width); }
+    if len >= width {
+        return clip_to_width(s, width);
+    }
     let total_pad = width - len;
     let left = total_pad / 2;
     let right = total_pad - left; // extra on right
@@ -214,7 +238,9 @@ pub fn center_in_width(s: &str, width: usize) -> String {
 /// first line on all continuation lines so wrapped paragraphs stay indented.
 /// Returns one string per output line.
 pub fn word_wrap(s: &str, width: usize) -> Vec<String> {
-    if width == 0 { return vec![s.to_string()]; }
+    if width == 0 {
+        return vec![s.to_string()];
+    }
 
     // Detect leading indent (spaces only) to carry onto continuation lines
     let indent_len = s.chars().take_while(|c| *c == ' ').count();
@@ -243,7 +269,11 @@ pub fn word_wrap(s: &str, width: usize) -> Vec<String> {
             current_w += 1 + word_w;
         } else {
             // Flush current line with indent
-            lines.push(format!("{}{}", if lines.is_empty() { &indent } else { &indent }, current));
+            lines.push(format!(
+                "{}{}",
+                if lines.is_empty() { &indent } else { &indent },
+                current
+            ));
             current = word.to_string();
             current_w = word_w;
         }
@@ -261,14 +291,18 @@ pub fn word_wrap(s: &str, width: usize) -> Vec<String> {
 /// Never splits wide Unicode characters (CJK, emoji) at the boundary (F123).
 pub fn clip_to_width(s: &str, width: usize) -> String {
     use crate::layout::visual_width;
-    if visual_width(s) <= width { return s.to_string(); }
+    if visual_width(s) <= width {
+        return s.to_string();
+    }
     let ellipsis_w = 1usize; // … is 1 column
     let target = width.saturating_sub(ellipsis_w);
     let mut out = String::new();
     let mut w = 0usize;
     for ch in s.chars() {
         let ch_w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
-        if w + ch_w > target { break; }
+        if w + ch_w > target {
+            break;
+        }
         out.push(ch);
         w += ch_w;
     }
@@ -302,7 +336,11 @@ pub fn build_footer_line(meta: &SlideMeta) -> Option<String> {
                 .into_iter()
                 .flatten()
                 .collect();
-            if parts.is_empty() { None } else { Some(parts.join(" · ")) }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(" · "))
+            }
         }
     }
 }
@@ -313,7 +351,9 @@ pub fn build_footer_line(meta: &SlideMeta) -> Option<String> {
 /// it is clipped with `…`.  This overwrites the last row; callers must ensure
 /// the last row is a blank (padding) row and not content.
 pub fn apply_footer(lines: &mut Vec<String>, meta: &SlideMeta) {
-    let Some(text) = build_footer_line(meta) else { return; };
+    let Some(text) = build_footer_line(meta) else {
+        return;
+    };
     let w = meta.width;
     let clipped = clip_to_width(&text, w);
     let vw = crate::layout::visual_width(&clipped);
@@ -326,7 +366,8 @@ pub fn apply_footer(lines: &mut Vec<String>, meta: &SlideMeta) {
 
 /// Build a canvas from a list of content lines, padded to width×height.
 fn lines_to_canvas(lines: &[String], width: usize, height: usize) -> Vec<String> {
-    let mut result: Vec<String> = lines.iter()
+    let mut result: Vec<String> = lines
+        .iter()
         .take(height)
         .map(|l| fit_to_width(l, width))
         .collect();
@@ -352,12 +393,20 @@ pub fn render_title(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let h = meta.height;
 
     let mut content_lines: Vec<String> = Vec::new();
-    if let Some(ref t) = slide.title    { content_lines.push(center_in_width(t, w)); }
-    if let Some(ref s) = slide.subtitle { content_lines.push(center_in_width(s, w)); }
+    if let Some(ref t) = slide.title {
+        content_lines.push(center_in_width(t, w));
+    }
+    if let Some(ref s) = slide.subtitle {
+        content_lines.push(center_in_width(s, w));
+    }
     if slide.author.is_some() || slide.date.is_some() {
         content_lines.push(String::new());
-        if let Some(ref a) = slide.author { content_lines.push(center_in_width(a, w)); }
-        if let Some(ref d) = slide.date   { content_lines.push(center_in_width(d, w)); }
+        if let Some(ref a) = slide.author {
+            content_lines.push(center_in_width(a, w));
+        }
+        if let Some(ref d) = slide.date {
+            content_lines.push(center_in_width(d, w));
+        }
     }
 
     // Vertical centering: distribute blank lines evenly above and below
@@ -367,11 +416,19 @@ pub fn render_title(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let bot_pad = total_pad - top_pad;
 
     let mut result: Vec<String> = Vec::with_capacity(h);
-    for _ in 0..top_pad   { result.push(" ".repeat(w)); }
-    for line in &content_lines { result.push(fit_to_width(line, w)); }
-    for _ in 0..bot_pad   { result.push(" ".repeat(w)); }
+    for _ in 0..top_pad {
+        result.push(" ".repeat(w));
+    }
+    for line in &content_lines {
+        result.push(fit_to_width(line, w));
+    }
+    for _ in 0..bot_pad {
+        result.push(" ".repeat(w));
+    }
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result
 }
 
@@ -387,7 +444,9 @@ pub fn render_title_content(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 
     // Title area (left-aligned, padded)
     result.push(fit_to_width(title_str, w));
-    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    for _ in 1..title_height {
+        result.push(" ".repeat(w));
+    }
 
     // Separator
     result.push(separator(w));
@@ -397,17 +456,15 @@ pub fn render_title_content(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     result.extend(lines_to_canvas(&body_lines, w, body_height));
 
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result
 }
 
 /// `two-column` layout — columns split by ratio, optional divider.
 /// Column delimiters in body: `## col:left` and `## col:right` (H2 level).
-pub fn render_two_column(
-    slide: &Slide,
-    meta: &SlideMeta,
-    ratio: (u8, u8),
-) -> Vec<String> {
+pub fn render_two_column(slide: &Slide, meta: &SlideMeta, ratio: (u8, u8)) -> Vec<String> {
     let w = meta.width;
     let h = meta.height;
     let title_height = if slide.title.is_some() { 2usize } else { 0 };
@@ -417,7 +474,7 @@ pub fn render_two_column(
     let ratio_sum = (ratio.0 as usize) + (ratio.1 as usize);
     let col_a_w = (w * ratio.0 as usize) / ratio_sum;
     let _col_b_w = w.saturating_sub(col_a_w); // remainder goes to second col? No — first gets remainder
-    // Actually: spec says "remainder to first column"
+                                              // Actually: spec says "remainder to first column"
     let col_a_raw = (w * ratio.0 as usize) / ratio_sum;
     let col_b_raw = (w * ratio.1 as usize) / ratio_sum;
     let remainder = w.saturating_sub(col_a_raw + col_b_raw);
@@ -443,11 +500,17 @@ pub fn render_two_column(
     for i in 0..body_height {
         let a = col_a.get(i).map(|s| s.as_str()).unwrap_or("");
         let b = col_b.get(i).map(|s| s.as_str()).unwrap_or("");
-        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        result.push(format!(
+            "{}{}",
+            fit_to_width(a, col_a_width),
+            fit_to_width(b, col_b_width)
+        ));
     }
 
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result
 }
 
@@ -468,8 +531,14 @@ fn split_two_column(body: &str) -> (String, String) {
             continue;
         }
         match current {
-            'a' => { col_a.push_str(line); col_a.push('\n'); }
-            'b' => { col_b.push_str(line); col_b.push('\n'); }
+            'a' => {
+                col_a.push_str(line);
+                col_a.push('\n');
+            }
+            'b' => {
+                col_b.push_str(line);
+                col_b.push('\n');
+            }
             _ => {}
         }
     }
@@ -497,11 +566,19 @@ pub fn render_section(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let bot = total_pad - top;
 
     let mut result = Vec::with_capacity(h);
-    for _ in 0..top { result.push(" ".repeat(w)); }
-    for l in &lines { result.push(fit_to_width(l, w)); }
-    for _ in 0..bot { result.push(" ".repeat(w)); }
+    for _ in 0..top {
+        result.push(" ".repeat(w));
+    }
+    for l in &lines {
+        result.push(fit_to_width(l, w));
+    }
+    for _ in 0..bot {
+        result.push(" ".repeat(w));
+    }
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result
 }
 
@@ -521,7 +598,9 @@ pub fn render_stats(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
         match parts.len() {
             3 => stats.push((parts[0].into(), parts[1].into(), parts[2].into())),
             2 => stats.push((parts[0].into(), parts[1].into(), String::new())),
-            1 if !parts[0].is_empty() => stats.push((parts[0].into(), String::new(), String::new())),
+            1 if !parts[0].is_empty() => {
+                stats.push((parts[0].into(), String::new(), String::new()))
+            }
             _ => {}
         }
     }
@@ -535,18 +614,30 @@ pub fn render_stats(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let col_w_base = w / n;
     let remainder = w - col_w_base * n;
 
-    let col_widths: Vec<usize> = (0..n).map(|i| {
-        if i == n - 1 { col_w_base + remainder } else { col_w_base }
-    }).collect();
+    let col_widths: Vec<usize> = (0..n)
+        .map(|i| {
+            if i == n - 1 {
+                col_w_base + remainder
+            } else {
+                col_w_base
+            }
+        })
+        .collect();
 
     // Build content rows (value row, label row, sublabel row)
-    let value_row: String = stats.iter().zip(col_widths.iter())
+    let value_row: String = stats
+        .iter()
+        .zip(col_widths.iter())
         .map(|((v, _, _), &cw)| fit_to_width(&center_in_width(v, cw), cw))
         .collect();
-    let label_row: String = stats.iter().zip(col_widths.iter())
+    let label_row: String = stats
+        .iter()
+        .zip(col_widths.iter())
         .map(|((_, l, _), &cw)| fit_to_width(&center_in_width(l, cw), cw))
         .collect();
-    let sublabel_row: String = stats.iter().zip(col_widths.iter())
+    let sublabel_row: String = stats
+        .iter()
+        .zip(col_widths.iter())
         .map(|((_, _, sl), &cw)| fit_to_width(&center_in_width(sl, cw), cw))
         .collect();
 
@@ -559,9 +650,15 @@ pub fn render_stats(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
         result.push(fit_to_width(t, w));
         result.push(separator(w));
     }
-    for _ in 0..top { result.push(" ".repeat(w)); }
-    for l in &content_lines { result.push(fit_to_width(l, w)); }
-    while result.len() < h { result.push(" ".repeat(w)); }
+    for _ in 0..top {
+        result.push(" ".repeat(w));
+    }
+    for l in &content_lines {
+        result.push(fit_to_width(l, w));
+    }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result.truncate(h);
     result
 }
@@ -640,9 +737,14 @@ pub fn render_slide_with_warnings_in_deck(
 /// explicit title get a placeholder "Untitled section" entry so the agenda
 /// still reflects the deck's structure.
 pub fn collect_section_titles(all_slides: &[crate::slide::Slide]) -> Vec<String> {
-    all_slides.iter()
+    all_slides
+        .iter()
         .filter(|s| matches!(s.layout, SlideLayout::Section))
-        .map(|s| s.title.clone().unwrap_or_else(|| "Untitled section".to_string()))
+        .map(|s| {
+            s.title
+                .clone()
+                .unwrap_or_else(|| "Untitled section".to_string())
+        })
         .collect()
 }
 
@@ -665,7 +767,9 @@ pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String])
     let title_str = slide.title.as_deref().unwrap_or("Agenda");
     let mut result: Vec<String> = Vec::with_capacity(h);
     result.push(fit_to_width(title_str, w));
-    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    for _ in 1..title_height {
+        result.push(" ".repeat(w));
+    }
     result.push(separator(w));
 
     // Build the bullet body. `proof:bullets` would word-wrap to slide width
@@ -674,7 +778,9 @@ pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String])
     let body_lines: Vec<String> = if section_titles.is_empty() {
         vec![center_in_width("(no section slides in this deck)", w)]
     } else {
-        section_titles.iter().enumerate()
+        section_titles
+            .iter()
+            .enumerate()
             .map(|(i, t)| {
                 let prefix = format!("{}. ", i + 1);
                 fit_to_width(&format!("{}{}", prefix, t), w)
@@ -685,7 +791,9 @@ pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String])
     result.extend(lines_to_canvas(&body_lines, w, body_height));
 
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     result
 }
 
@@ -702,14 +810,19 @@ fn render_title_content_with_warnings(
     let title_str = slide.title.as_deref().unwrap_or("");
     let mut result: Vec<String> = Vec::with_capacity(h);
     result.push(fit_to_width(title_str, w));
-    for _ in 1..title_height { result.push(" ".repeat(w)); }
+    for _ in 1..title_height {
+        result.push(" ".repeat(w));
+    }
     result.push(separator(w));
 
-    let (body_lines, warnings) = render_body_lines_with_warnings(&slide.body_content, w, bullet_cfg);
+    let (body_lines, warnings) =
+        render_body_lines_with_warnings(&slide.body_content, w, bullet_cfg);
     result.extend(lines_to_canvas(&body_lines, w, body_height));
 
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     (result, warnings)
 }
 
@@ -749,10 +862,16 @@ fn render_two_column_with_warnings(
     for i in 0..body_height {
         let a = col_a.get(i).map(|s| s.as_str()).unwrap_or("");
         let b = col_b.get(i).map(|s| s.as_str()).unwrap_or("");
-        result.push(format!("{}{}", fit_to_width(a, col_a_width), fit_to_width(b, col_b_width)));
+        result.push(format!(
+            "{}{}",
+            fit_to_width(a, col_a_width),
+            fit_to_width(b, col_b_width)
+        ));
     }
     result.truncate(h);
-    while result.len() < h { result.push(" ".repeat(w)); }
+    while result.len() < h {
+        result.push(" ".repeat(w));
+    }
     (result, warns_a)
 }
 
@@ -763,7 +882,10 @@ fn render_blank_with_warnings(
 ) -> (Vec<String>, Vec<crate::slide::bullets::BulletWarning>) {
     let (body_lines, warnings) =
         render_body_lines_with_warnings(&slide.body_content, meta.width, bullet_cfg);
-    (lines_to_canvas(&body_lines, meta.width, meta.height), warnings)
+    (
+        lines_to_canvas(&body_lines, meta.width, meta.height),
+        warnings,
+    )
 }
 
 // ─────────────────────────────────────────────────────────
@@ -784,7 +906,7 @@ fn render_blank_with_warnings(
 /// separator (e.g. `---` for the `.slides.md` format or a form-feed for paging
 /// terminal output).
 pub fn render_slide_pages(slide: &Slide, meta: &SlideMeta) -> Vec<Vec<String>> {
-    use crate::slide::bullets::{BulletConfig, has_reveal_markers};
+    use crate::slide::bullets::{has_reveal_markers, BulletConfig};
 
     let bullet_cfg = BulletConfig {
         max_bullets: meta.max_bullets,
@@ -800,13 +922,10 @@ pub fn render_slide_pages(slide: &Slide, meta: &SlideMeta) -> Vec<Vec<String>> {
     // Only title-content and blank layouts support reveal pages today.
     // Two-column, agenda, and others fall back to single-page rendering.
     match &slide.layout {
-        SlideLayout::TitleContent | SlideLayout::ContentCaption
-        | SlideLayout::Comparison => {
+        SlideLayout::TitleContent | SlideLayout::ContentCaption | SlideLayout::Comparison => {
             render_reveal_pages_title_content(slide, meta, &bullet_cfg)
         }
-        SlideLayout::Blank => {
-            render_reveal_pages_blank(slide, meta, &bullet_cfg)
-        }
+        SlideLayout::Blank => render_reveal_pages_blank(slide, meta, &bullet_cfg),
         _ => vec![render_slide(slide, meta)],
     }
 }
@@ -817,8 +936,6 @@ fn render_reveal_pages_title_content(
     meta: &SlideMeta,
     bullet_cfg: &crate::slide::bullets::BulletConfig,
 ) -> Vec<Vec<String>> {
-    
-
     let w = meta.width;
     let h = meta.height;
     let title_height = 3usize;
@@ -828,7 +945,9 @@ fn render_reveal_pages_title_content(
     let title_str = slide.title.as_deref().unwrap_or("");
     let mut chrome: Vec<String> = Vec::with_capacity(title_height + 1);
     chrome.push(fit_to_width(title_str, w));
-    for _ in 1..title_height { chrome.push(" ".repeat(w)); }
+    for _ in 1..title_height {
+        chrome.push(" ".repeat(w));
+    }
     chrome.push(separator(w));
 
     // Expand the body: split on proof:bullets, generate pages for each bullets block,
@@ -839,15 +958,20 @@ fn render_reveal_pages_title_content(
     // per reveal step.  We then combine chrome + each body rendition into a full page.
     let body_pages = render_body_lines_pages(&slide.body_content, w, bullet_cfg);
 
-    body_pages.into_iter().map(|body_lines| {
-        let mut page = chrome.clone();
-        page.extend(lines_to_canvas(&body_lines, w, body_height));
-        page.truncate(h);
-        while page.len() < h { page.push(" ".repeat(w)); }
-        let mut themed = apply_theme(&page, meta);
-        apply_footer(&mut themed, meta);
-        themed
-    }).collect()
+    body_pages
+        .into_iter()
+        .map(|body_lines| {
+            let mut page = chrome.clone();
+            page.extend(lines_to_canvas(&body_lines, w, body_height));
+            page.truncate(h);
+            while page.len() < h {
+                page.push(" ".repeat(w));
+            }
+            let mut themed = apply_theme(&page, meta);
+            apply_footer(&mut themed, meta);
+            themed
+        })
+        .collect()
 }
 
 /// Build reveal pages for blank layout.
@@ -857,12 +981,15 @@ fn render_reveal_pages_blank(
     bullet_cfg: &crate::slide::bullets::BulletConfig,
 ) -> Vec<Vec<String>> {
     let body_pages = render_body_lines_pages(&slide.body_content, meta.width, bullet_cfg);
-    body_pages.into_iter().map(|body_lines| {
-        let page = lines_to_canvas(&body_lines, meta.width, meta.height);
-        let mut themed = apply_theme(&page, meta);
-        apply_footer(&mut themed, meta);
-        themed
-    }).collect()
+    body_pages
+        .into_iter()
+        .map(|body_lines| {
+            let page = lines_to_canvas(&body_lines, meta.width, meta.height);
+            let mut themed = apply_theme(&page, meta);
+            apply_footer(&mut themed, meta);
+            themed
+        })
+        .collect()
 }
 
 /// Render body content for each reveal step, returning one `Vec<String>` per step.
@@ -889,8 +1016,10 @@ pub fn render_body_lines_pages(
         if line.starts_with("proof:bullets") {
             i += 1;
             let mut block = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 block.push_str(lines[i]);
                 block.push('\n');
                 i += 1;
@@ -931,7 +1060,9 @@ pub fn render_body_lines_pages(
 
         if line == "proof:notes" {
             i += 1;
-            while i < lines.len() && !lines[i].trim().is_empty() { i += 1; }
+            while i < lines.len() && !lines[i].trim().is_empty() {
+                i += 1;
+            }
             i += 1;
             continue;
         }
@@ -939,8 +1070,10 @@ pub fn render_body_lines_pages(
         if line.starts_with("proof:bullets") {
             i += 1;
             let mut bullet_lines = String::new();
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 bullet_lines.push_str(lines[i]);
                 bullet_lines.push('\n');
                 i += 1;
@@ -949,8 +1082,8 @@ pub fn render_body_lines_pages(
                 let (pages, _) = render_bullets_pages(&bullet_lines, width, bullet_cfg);
                 segments.push(Segment::Paged(pages));
             } else {
-                let (rendered, _) = crate::slide::bullets::render_bullets(
-                    &bullet_lines, width, bullet_cfg);
+                let (rendered, _) =
+                    crate::slide::bullets::render_bullets(&bullet_lines, width, bullet_cfg);
                 segments.push(Segment::Fixed(rendered));
             }
             continue;
@@ -964,8 +1097,10 @@ pub fn render_body_lines_pages(
             mini_body.push_str(lines[i]);
             mini_body.push('\n');
             i += 1;
-            while i < lines.len() && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:") {
+            while i < lines.len()
+                && !lines[i].trim().is_empty()
+                && !lines[i].trim().starts_with("proof:")
+            {
                 mini_body.push_str(lines[i]);
                 mini_body.push('\n');
                 i += 1;
@@ -980,26 +1115,33 @@ pub fn render_body_lines_pages(
     }
 
     // Determine total page count = max pages across all Paged segments
-    let page_count = segments.iter().map(|seg| match seg {
-        Segment::Fixed(_) => 1,
-        Segment::Paged(pages) => pages.len(),
-    }).max().unwrap_or(1).max(1);
+    let page_count = segments
+        .iter()
+        .map(|seg| match seg {
+            Segment::Fixed(_) => 1,
+            Segment::Paged(pages) => pages.len(),
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1);
 
     // Assemble: for each page index, concatenate Fixed lines + Paged[page_idx] lines
-    (0..page_count).map(|page_idx| {
-        let mut out: Vec<String> = Vec::new();
-        for seg in &segments {
-            match seg {
-                Segment::Fixed(lines) => out.extend_from_slice(lines),
-                Segment::Paged(pages) => {
-                    // Use the last page if page_idx exceeds available pages
-                    let idx = page_idx.min(pages.len().saturating_sub(1));
-                    out.extend_from_slice(&pages[idx]);
+    (0..page_count)
+        .map(|page_idx| {
+            let mut out: Vec<String> = Vec::new();
+            for seg in &segments {
+                match seg {
+                    Segment::Fixed(lines) => out.extend_from_slice(lines),
+                    Segment::Paged(pages) => {
+                        // Use the last page if page_idx exceeds available pages
+                        let idx = page_idx.min(pages.len().saturating_sub(1));
+                        out.extend_from_slice(&pages[idx]);
+                    }
                 }
             }
-        }
-        out
-    }).collect()
+            out
+        })
+        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1026,7 +1168,11 @@ mod tests {
     }
 
     fn meta_80x24() -> SlideMeta {
-        SlideMeta { width: 80, height: 24, ..SlideMeta::default() }
+        SlideMeta {
+            width: 80,
+            height: 24,
+            ..SlideMeta::default()
+        }
     }
 
     // ── SL-1: every layout produces exactly height rows of width chars ──
@@ -1034,8 +1180,13 @@ mod tests {
     fn assert_sl1(lines: &[String], meta: &SlideMeta) {
         assert_eq!(lines.len(), meta.height, "SL-1 line count");
         for (i, l) in lines.iter().enumerate() {
-            assert_eq!(l.chars().count(), meta.width,
-                "SL-1 line {} width mismatch: {:?}", i, l);
+            assert_eq!(
+                l.chars().count(),
+                meta.width,
+                "SL-1 line {} width mismatch: {:?}",
+                i,
+                l
+            );
         }
     }
 
@@ -1095,7 +1246,11 @@ mod tests {
     #[test]
     fn two_column_ratio_rounding_odd_width() {
         // 119 cols, 60:40 → col_a_raw=71, col_b_raw=47, remainder=1 → col_a=72, col_b=47
-        let meta = SlideMeta { width: 119, height: 10, ..SlideMeta::default() };
+        let meta = SlideMeta {
+            width: 119,
+            height: 10,
+            ..SlideMeta::default()
+        };
         let mut s = blank_slide(SlideLayout::TwoColumn { ratio: (60, 40) });
         s.body_content = "## col:left\nA\n## col:right\nB\n".into();
         let lines = render_two_column(&s, &meta, (60, 40));
@@ -1118,7 +1273,10 @@ mod tests {
         let left_spaces = title_line.chars().take_while(|&c| c == ' ').count();
         let right_spaces = title_line.chars().rev().take_while(|&c| c == ' ').count();
         // Left and right padding should be approximately equal (tie-break: right gets extra)
-        assert!(right_spaces >= left_spaces, "tie-break should put extra space on right");
+        assert!(
+            right_spaces >= left_spaces,
+            "tie-break should put extra space on right"
+        );
     }
 
     // ── center_in_width tie-break ────────────────────────────
@@ -1138,18 +1296,26 @@ mod tests {
 
     #[test]
     fn theme_none_unchanged() {
-        let meta = SlideMeta { theme: SlideTheme::None, ..meta_80x24() };
+        let meta = SlideMeta {
+            theme: SlideTheme::None,
+            ..meta_80x24()
+        };
         let lines = vec!["hello".to_string()];
         assert_eq!(apply_theme(&lines, &meta), lines);
     }
 
     #[test]
     fn theme_box_adds_border() {
-        let meta = SlideMeta { width: 10, height: 1, theme: SlideTheme::Box, ..SlideMeta::default() };
+        let meta = SlideMeta {
+            width: 10,
+            height: 1,
+            theme: SlideTheme::Box,
+            ..SlideMeta::default()
+        };
         let lines = vec!["hi".to_string()];
         let themed = apply_theme(&lines, &meta);
         assert!(themed[0].starts_with('┌'));
-        assert!(themed[themed.len()-1].starts_with('└'));
+        assert!(themed[themed.len() - 1].starts_with('└'));
     }
 
     // ── split_two_column ─────────────────────────────────────
@@ -1176,7 +1342,11 @@ mod tests {
         let result = word_wrap("The quick brown fox jumped over the lazy dog", 20);
         assert!(result.len() > 1, "long line should wrap");
         for line in &result {
-            assert!(line.chars().count() <= 20, "line {:?} exceeds width 20", line);
+            assert!(
+                line.chars().count() <= 20,
+                "line {:?} exceeds width 20",
+                line
+            );
         }
         // All words should still be present
         let full = result.join(" ");
@@ -1185,11 +1355,18 @@ mod tests {
 
     #[test]
     fn word_wrap_preserves_indent() {
-        let result = word_wrap("  This is an indented line that goes way beyond the width limit", 30);
+        let result = word_wrap(
+            "  This is an indented line that goes way beyond the width limit",
+            30,
+        );
         assert!(result.len() > 1);
         // The continuation lines should preserve the 2-space indent
         for line in result.iter().skip(1) {
-            assert!(line.starts_with("  "), "continuation should preserve indent: {:?}", line);
+            assert!(
+                line.starts_with("  "),
+                "continuation should preserve indent: {:?}",
+                line
+            );
         }
     }
 
@@ -1235,9 +1412,12 @@ mod tests {
 
         let (_, warnings) = render_slide_with_warnings(&s, &meta);
         let slide001: Vec<_> = warnings.iter().filter(|w| w.code == "SLIDE-001").collect();
-        assert_eq!(slide001.len(), 2,
+        assert_eq!(
+            slide001.len(),
+            2,
             "expected 2 SLIDE-001 warnings (bullets 5 and 6) at default max_bullets=4, got: {:?}",
-            warnings);
+            warnings
+        );
     }
 
     #[test]
@@ -1259,7 +1439,10 @@ mod tests {
     fn slide_max_bullets_configurable_via_meta() {
         // Author overrides the threshold via slide front-matter (max-bullets: 8).
         // 6 bullets is then under the threshold and should not warn.
-        let meta = SlideMeta { max_bullets: 8, ..meta_80x24() };
+        let meta = SlideMeta {
+            max_bullets: 8,
+            ..meta_80x24()
+        };
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("Higher threshold".into());
         s.body_content = "proof:bullets\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n".into();
@@ -1284,7 +1467,8 @@ mod tests {
             "proof:bullets\n- L1\n- L2\n- L3\n",
             "## col:right\n",
             "proof:bullets\n- R1\n- R2\n- R3\n",
-        ).into();
+        )
+        .into();
 
         let (_, warnings) = render_slide_with_warnings(&s, &meta);
         // Each column independently re-counts bullets, so each column emits warnings
@@ -1300,7 +1484,11 @@ mod tests {
 
     // ── render_slide_pages / proof:reveal ─────────────────
 
-    fn make_reveal_slide(layout: SlideLayout, title: Option<&str>, body: &str) -> (Slide, SlideMeta) {
+    fn make_reveal_slide(
+        layout: SlideLayout,
+        title: Option<&str>,
+        body: &str,
+    ) -> (Slide, SlideMeta) {
         let mut s = blank_slide(layout);
         s.title = title.map(|t| t.into());
         s.body_content = body.into();
@@ -1310,7 +1498,8 @@ mod tests {
     #[test]
     fn reveal_no_markers_single_page() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::TitleContent, Some("Title"),
+            SlideLayout::TitleContent,
+            Some("Title"),
             "proof:bullets\n- A\n- B\n",
         );
         let pages = render_slide_pages(&s, &meta);
@@ -1321,7 +1510,8 @@ mod tests {
     #[test]
     fn reveal_two_steps_two_pages_sl1() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::TitleContent, Some("Title"),
+            SlideLayout::TitleContent,
+            Some("Title"),
             "proof:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
@@ -1334,45 +1524,53 @@ mod tests {
     #[test]
     fn reveal_page_1_hides_step_2() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::TitleContent, Some("Title"),
+            SlideLayout::TitleContent,
+            Some("Title"),
             "proof:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
         let p1 = pages[0].join("\n");
-        assert!( p1.contains("Always"), "page 1 should show step-1 bullet");
+        assert!(p1.contains("Always"), "page 1 should show step-1 bullet");
         assert!(!p1.contains("Step 2"), "page 1 should hide step-2 bullet");
     }
 
     #[test]
     fn reveal_page_2_shows_all() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::TitleContent, Some("Title"),
+            SlideLayout::TitleContent,
+            Some("Title"),
             "proof:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
         let p2 = pages[1].join("\n");
-        assert!(p2.contains("Always") && p2.contains("Step 2"),
-            "page 2 should show all bullets");
+        assert!(
+            p2.contains("Always") && p2.contains("Step 2"),
+            "page 2 should show all bullets"
+        );
     }
 
     #[test]
     fn reveal_title_identical_on_all_pages() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::TitleContent, Some("My Deck Title"),
+            SlideLayout::TitleContent,
+            Some("My Deck Title"),
             "proof:bullets\n- A\n[2] - B\n[3] - C\n",
         );
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 3);
         for page in &pages {
-            assert!(page[0].contains("My Deck Title"),
-                "title row must be identical on every page");
+            assert!(
+                page[0].contains("My Deck Title"),
+                "title row must be identical on every page"
+            );
         }
     }
 
     #[test]
     fn reveal_blank_layout_pages_sl1() {
         let (s, meta) = make_reveal_slide(
-            SlideLayout::Blank, None,
+            SlideLayout::Blank,
+            None,
             "proof:bullets\n- One\n[2] - Two\n",
         );
         let pages = render_slide_pages(&s, &meta);
@@ -1393,11 +1591,15 @@ mod tests {
 
     // ── Footer ────────────────────────────────────────────
 
-    fn meta_with_footer(footer: crate::slide::FooterMode, author: Option<&str>, date: Option<&str>) -> SlideMeta {
+    fn meta_with_footer(
+        footer: crate::slide::FooterMode,
+        author: Option<&str>,
+        date: Option<&str>,
+    ) -> SlideMeta {
         SlideMeta {
             footer,
             author: author.map(|s| s.to_string()),
-            date:   date.map(|s| s.to_string()),
+            date: date.map(|s| s.to_string()),
             ..meta_80x24()
         }
     }
@@ -1408,20 +1610,33 @@ mod tests {
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert!(!last.contains("Gio") && !last.contains("2026"),
-            "footer=off must not stamp last row: {:?}", last);
+        assert!(
+            !last.contains("Gio") && !last.contains("2026"),
+            "footer=off must not stamp last row: {:?}",
+            last
+        );
     }
 
     #[test]
     fn footer_auto_right_aligned() {
-        let meta = meta_with_footer(crate::slide::FooterMode::Auto, Some("Gio"), Some("April 2026"));
+        let meta = meta_with_footer(
+            crate::slide::FooterMode::Auto,
+            Some("Gio"),
+            Some("April 2026"),
+        );
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert!(last.contains("Gio · April 2026"),
-            "footer=auto should contain author · date: {:?}", last);
-        assert!(last.ends_with("Gio · April 2026"),
-            "footer should be right-aligned (ends with text): {:?}", last);
+        assert!(
+            last.contains("Gio · April 2026"),
+            "footer=auto should contain author · date: {:?}",
+            last
+        );
+        assert!(
+            last.ends_with("Gio · April 2026"),
+            "footer should be right-aligned (ends with text): {:?}",
+            last
+        );
     }
 
     #[test]
@@ -1430,8 +1645,16 @@ mod tests {
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert!(last.contains("Alice"), "auto footer with only author: {:?}", last);
-        assert!(!last.contains("·"), "no separator when only one field: {:?}", last);
+        assert!(
+            last.contains("Alice"),
+            "auto footer with only author: {:?}",
+            last
+        );
+        assert!(
+            !last.contains("·"),
+            "no separator when only one field: {:?}",
+            last
+        );
     }
 
     #[test]
@@ -1440,7 +1663,11 @@ mod tests {
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert!(last.contains("Q2 2026"), "auto footer with only date: {:?}", last);
+        assert!(
+            last.contains("Q2 2026"),
+            "auto footer with only date: {:?}",
+            last
+        );
     }
 
     #[test]
@@ -1449,23 +1676,34 @@ mod tests {
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert_eq!(last.trim(), "", "auto footer with no fields should be blank: {:?}", last);
+        assert_eq!(
+            last.trim(),
+            "",
+            "auto footer with no fields should be blank: {:?}",
+            last
+        );
     }
 
     #[test]
     fn footer_custom_text() {
         let meta = meta_with_footer(
-            crate::slide::FooterMode::Custom("CONFIDENTIAL".to_string()), None, None);
+            crate::slide::FooterMode::Custom("CONFIDENTIAL".to_string()),
+            None,
+            None,
+        );
         let s = blank_slide(SlideLayout::TitleContent);
         let lines = render_slide(&s, &meta);
         let last = lines.last().unwrap();
-        assert!(last.contains("CONFIDENTIAL"), "custom footer text: {:?}", last);
+        assert!(
+            last.contains("CONFIDENTIAL"),
+            "custom footer text: {:?}",
+            last
+        );
     }
 
     #[test]
     fn footer_sl1_row_count_and_width() {
-        let meta = meta_with_footer(
-            crate::slide::FooterMode::Auto, Some("Gio"), Some("2026"));
+        let meta = meta_with_footer(crate::slide::FooterMode::Auto, Some("Gio"), Some("2026"));
         let s = blank_slide(SlideLayout::TitleContent);
         assert_sl1(&render_slide(&s, &meta), &meta);
     }
@@ -1473,7 +1711,10 @@ mod tests {
     #[test]
     fn footer_on_every_layout() {
         let meta = meta_with_footer(
-            crate::slide::FooterMode::Custom("FTR".to_string()), None, None);
+            crate::slide::FooterMode::Custom("FTR".to_string()),
+            None,
+            None,
+        );
         for layout in [
             SlideLayout::Title,
             SlideLayout::TitleContent,
@@ -1485,8 +1726,12 @@ mod tests {
             s.title = Some("T".into());
             let lines = render_slide(&s, &meta);
             let last = lines.last().unwrap();
-            assert!(last.contains("FTR"),
-                "footer missing on layout {:?}: {:?}", layout, last);
+            assert!(
+                last.contains("FTR"),
+                "footer missing on layout {:?}: {:?}",
+                layout,
+                last
+            );
         }
     }
 
@@ -1505,8 +1750,10 @@ mod tests {
         use crate::slide::parser::parse_slide_doc;
         let source = "---\nfooter: \"My Org · Confidential\"\n---\nContent";
         let doc = parse_slide_doc(source).expect("should parse");
-        assert_eq!(doc.meta.footer,
-            crate::slide::FooterMode::Custom("My Org · Confidential".to_string()));
+        assert_eq!(
+            doc.meta.footer,
+            crate::slide::FooterMode::Custom("My Org · Confidential".to_string())
+        );
     }
 
     #[test]
@@ -1520,7 +1767,10 @@ mod tests {
     #[test]
     fn reveal_pages_all_have_footer() {
         let meta = meta_with_footer(
-            crate::slide::FooterMode::Custom("SLIDE".to_string()), None, None);
+            crate::slide::FooterMode::Custom("SLIDE".to_string()),
+            None,
+            None,
+        );
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("T".into());
         s.body_content = "proof:bullets\n- Always\n[2] - Step 2\n".into();
@@ -1528,22 +1778,32 @@ mod tests {
         assert_eq!(pages.len(), 2);
         for (i, page) in pages.iter().enumerate() {
             let last = page.last().unwrap();
-            assert!(last.contains("SLIDE"),
-                "footer missing on reveal page {}: {:?}", i + 1, last);
+            assert!(
+                last.contains("SLIDE"),
+                "footer missing on reveal page {}: {:?}",
+                i + 1,
+                last
+            );
         }
     }
 
     #[test]
     fn render_body_lines_pages_fixed_segment_on_every_page() {
         use crate::slide::bullets::BulletConfig;
-        let cfg = BulletConfig { max_bullets: 10, ..BulletConfig::default() };
+        let cfg = BulletConfig {
+            max_bullets: 10,
+            ..BulletConfig::default()
+        };
         // A fixed centered block, then a reveal bullets block
         let body = "proof:centered\nIntro\n\nproof:bullets\n- Always\n[2] - Step 2\n";
         let pages = render_body_lines_pages(body, 80, &cfg);
         assert_eq!(pages.len(), 2, "reveal block → 2 pages");
         for page in &pages {
             let text = page.join("\n");
-            assert!(text.contains("Intro"), "fixed prose must appear on every page");
+            assert!(
+                text.contains("Intro"),
+                "fixed prose must appear on every page"
+            );
         }
     }
 
@@ -1567,7 +1827,11 @@ mod tests {
     fn agenda_layout_sl1() {
         let meta = meta_80x24();
         let s = agenda_slide(1, Some("Agenda"));
-        let titles = vec!["Intro".to_string(), "Body".to_string(), "Wrap-up".to_string()];
+        let titles = vec![
+            "Intro".to_string(),
+            "Body".to_string(),
+            "Wrap-up".to_string(),
+        ];
         assert_sl1(&render_agenda(&s, &meta, &titles), &meta);
     }
 
@@ -1575,14 +1839,20 @@ mod tests {
     fn agenda_lists_section_titles_in_order() {
         let meta = meta_80x24();
         let agenda = agenda_slide(2, Some("Today"));
-        let titles = vec!["Problem".to_string(), "Approach".to_string(), "Results".to_string()];
+        let titles = vec![
+            "Problem".to_string(),
+            "Approach".to_string(),
+            "Results".to_string(),
+        ];
         let lines = render_agenda(&agenda, &meta, &titles);
         let body = lines.join("\n");
         let p_problem = body.find("Problem").expect("Problem missing");
         let p_approach = body.find("Approach").expect("Approach missing");
         let p_results = body.find("Results").expect("Results missing");
-        assert!(p_problem < p_approach && p_approach < p_results,
-                "section titles must appear in deck order");
+        assert!(
+            p_problem < p_approach && p_approach < p_results,
+            "section titles must appear in deck order"
+        );
     }
 
     #[test]
@@ -1592,8 +1862,11 @@ mod tests {
         let titles = vec!["First".to_string()];
         let lines = render_agenda(&agenda, &meta, &titles);
         // First line is the title row — must contain the default "Agenda"
-        assert!(lines[0].contains("Agenda"),
-                "default title 'Agenda' should appear in first line, got: {:?}", lines[0]);
+        assert!(
+            lines[0].contains("Agenda"),
+            "default title 'Agenda' should appear in first line, got: {:?}",
+            lines[0]
+        );
     }
 
     #[test]
@@ -1602,18 +1875,29 @@ mod tests {
         let agenda = agenda_slide(1, Some("Agenda"));
         let lines = render_agenda(&agenda, &meta, &[]);
         let body = lines.join("\n");
-        assert!(body.contains("(no section slides in this deck)"),
-                "empty deck should show a placeholder, got body:\n{}", body);
+        assert!(
+            body.contains("(no section slides in this deck)"),
+            "empty deck should show a placeholder, got body:\n{}",
+            body
+        );
     }
 
     #[test]
     fn agenda_items_are_numbered_for_easy_walkthrough() {
         let meta = meta_80x24();
         let agenda = agenda_slide(1, Some("Agenda"));
-        let titles = vec!["First".to_string(), "Second".to_string(), "Third".to_string()];
+        let titles = vec![
+            "First".to_string(),
+            "Second".to_string(),
+            "Third".to_string(),
+        ];
         let lines = render_agenda(&agenda, &meta, &titles);
         let body = lines.join("\n");
-        assert!(body.contains("1. First"), "expected '1. First' in:\n{}", body);
+        assert!(
+            body.contains("1. First"),
+            "expected '1. First' in:\n{}",
+            body
+        );
         assert!(body.contains("2. Second"));
         assert!(body.contains("3. Third"));
     }
@@ -1621,18 +1905,23 @@ mod tests {
     #[test]
     fn collect_section_titles_filters_to_section_layout() {
         let deck = vec![
-            blank_slide(SlideLayout::Title),                    // skipped
+            blank_slide(SlideLayout::Title), // skipped
             section_slide(1, "Setup"),
-            blank_slide(SlideLayout::TitleContent),             // skipped
+            blank_slide(SlideLayout::TitleContent), // skipped
             section_slide(2, "Findings"),
             section_slide(3, "Next steps"),
-            blank_slide(SlideLayout::Stats),                    // skipped
+            blank_slide(SlideLayout::Stats), // skipped
         ];
         let titles = collect_section_titles(&deck);
-        assert_eq!(titles, vec!["Setup".to_string(),
-                                "Findings".to_string(),
-                                "Next steps".to_string()],
-                   "only section slides should contribute to the agenda");
+        assert_eq!(
+            titles,
+            vec![
+                "Setup".to_string(),
+                "Findings".to_string(),
+                "Next steps".to_string()
+            ],
+            "only section slides should contribute to the agenda"
+        );
     }
 
     #[test]
@@ -1667,7 +1956,10 @@ mod tests {
         let agenda = agenda_slide(1, Some("Agenda"));
         let (rendered, _) = render_slide_with_warnings(&agenda, &meta);
         let body = rendered.join("\n");
-        assert!(body.contains("(no section slides in this deck)"),
-                "deck-less render must show the placeholder, got:\n{}", body);
+        assert!(
+            body.contains("(no section slides in this deck)"),
+            "deck-less render must show the placeholder, got:\n{}",
+            body
+        );
     }
 }

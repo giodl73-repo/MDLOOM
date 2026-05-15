@@ -7,8 +7,14 @@ pub fn render_value(v: f64, cfg: &ElementConfig) -> String {
     let fw = visual_width(&formatted);
     if fw >= cfg.width {
         // Truncate from left for numeric values (keep significant digits on right)
-        formatted.chars().rev().take(cfg.width).collect::<String>()
-            .chars().rev().collect()
+        formatted
+            .chars()
+            .rev()
+            .take(cfg.width)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
     } else {
         align_in_width(&formatted, fw, cfg.width, cfg.align)
     }
@@ -20,8 +26,14 @@ pub fn render_delta(v: f64, cfg: &ElementConfig) -> String {
     let formatted = apply_format_signed(v, &cfg.format);
     let fw = visual_width(&formatted);
     if fw >= cfg.width {
-        formatted.chars().rev().take(cfg.width).collect::<String>()
-            .chars().rev().collect()
+        formatted
+            .chars()
+            .rev()
+            .take(cfg.width)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
     } else {
         align_in_width(&formatted, fw, cfg.width, cfg.align)
     }
@@ -142,7 +154,7 @@ fn format_with_spec(v: f64, spec: &FormatSpec, force_sign: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{ElementConfig, ElementKind, ElementAlign};
+    use crate::element::{ElementAlign, ElementConfig, ElementKind};
 
     fn val_cfg(width: usize, fmt: &str, align: ElementAlign) -> ElementConfig {
         ElementConfig {
@@ -208,7 +220,10 @@ mod tests {
     #[test]
     fn test_render_delta_positive() {
         let cfg = ElementConfig {
-            kind: ElementKind::Delta, width: 6, format: "{:+.2}".to_string(), ..Default::default()
+            kind: ElementKind::Delta,
+            width: 6,
+            format: "{:+.2}".to_string(),
+            ..Default::default()
         };
         let out = render_delta(0.19, &cfg);
         assert!(out.contains('+'), "output: {:?}", out);
@@ -218,7 +233,10 @@ mod tests {
     #[test]
     fn test_render_delta_negative() {
         let cfg = ElementConfig {
-            kind: ElementKind::Delta, width: 6, format: "{:+.2}".to_string(), ..Default::default()
+            kind: ElementKind::Delta,
+            width: 6,
+            format: "{:+.2}".to_string(),
+            ..Default::default()
         };
         let out = render_delta(-4.1, &cfg);
         assert!(out.contains('-'), "output: {:?}", out);

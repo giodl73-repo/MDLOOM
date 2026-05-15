@@ -58,7 +58,7 @@ Glob semantics: `**` (any depth), `*` (one segment), `?` (one char). Patterns ar
 
 ## `[ascii_box]`
 
-Validates ASCII-art boxes — both `+---+ | | +---+` and Unicode `┌─┐ │ │ └─┘`. Catches: top/bottom border width mismatch, drifting `|` column separators across rows, missing inside-cell padding. Use this when guides include layered diagrams that must align column-perfect across many rows.
+Validates ASCII-art boxes — both `+---+ | | +---+` and Unicode `┌─┐ │ │ └─┘`. Catches: top/bottom border width mismatch, drifting `|` column separators across rows, missing inside-cell padding. Bottom-border column checks ignore row separators, spanning rows, connector ports, and incoming connector anchors so flowchart ports are not treated as table columns. Use this when guides include layered diagrams that must align column-perfect across many rows.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -75,7 +75,7 @@ Set `check_col_separators = false` when the directory's diagrams legitimately pl
 
 ## `[ascii_flow]`
 
-Validates flowcharts — boxes connected by arrows (`-->`, `──▶`, `→`) and vertical pipes. Catches arrow gaps, drifting vertical connectors, and inconsistent cell padding inside flow boxes.
+Validates flowcharts — boxes connected by arrows (`-->`, `──▶`, `→`) and vertical pipes. Catches arrow gaps, drifting connector-only vertical lines, and inconsistent cell padding inside flow boxes. Multi-space layout gaps between separate arrows and bidirectional scale rulers are not treated as broken arrow bodies.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -88,7 +88,7 @@ Validates flowcharts — boxes connected by arrows (`-->`, `──▶`, `→`) a
 
 ## `[ascii_barchart]`
 
-Validates inline ASCII bar charts — labeled rows where bar length encodes a numeric value. Catches misaligned values, mixed value formats (`%` vs raw integer), bar lengths that don't match their numeric values (e.g. a 78% bar filling 100% of the chart width), and missing label/value padding.
+Validates inline ASCII bar charts — labeled rows where bar length encodes a numeric value. Catches misaligned values, mixed value formats (`%` vs raw integer), bar lengths that don't match their numeric values (e.g. a 78% bar filling 100% of the chart width), and missing label/value padding. Runs only in plain-text diagram fences: empty info string, `text`, `txt`, `ascii`, `diagram`, `chart`, or `barchart`. Multi-run texture rows, equation operators, axis-attached bars, and boxed panels are ignored; stacked bars may mix default fill characters such as `█` and `░`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -110,12 +110,12 @@ Use `bar_chars = ["*"]` if your charts use ASCII-only bars instead of the defaul
 
 ## `[ascii_char]`
 
-Wide / fullwidth Unicode characters (CJK, fullwidth ASCII variants, some em-dashes) consume two visual columns but one source character — they silently break ASCII-art alignment. This check flags them. Set `error_on_wide = false` when the directory legitimately contains CJK content as guide examples (typography, world-languages, culinary-history) — the `[ascii_box]` checker still uses correct visual width to validate alignment, so a misdrawn box around CJK is still caught.
+Wide / fullwidth Unicode characters (CJK, fullwidth ASCII variants, some emoji) consume two visual columns but one source character — they can silently break ASCII-art alignment. This check flags them by default. Set `error_on_wide = false` when the directory legitimately contains wide content as guide examples (typography, world-languages, culinary-history, status checklists) — the `[ascii_box]` checker still uses correct visual width to validate alignment, so a misdrawn box around wide characters is still caught.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Master switch |
-| `error_on_wide` | bool | `true` | Error on 2-column chars in alignment-sensitive positions |
+| `error_on_wide` | bool | `true` | Error on 2-column chars in alignment-sensitive positions; set false to suppress intentional wide content |
 | `warn_unusual` | bool | `false` | Also warn on narrow chars outside the safe Unicode ranges (high false-positive rate) |
 
 ---
@@ -158,7 +158,7 @@ Document structure: headings, required content, file length. **Must set `enabled
 | `check_duplicate_headings` | bool | `false` | Warn on identical heading text at the same level |
 | `thematic_break_style` | string? | none | Enforce `"---"`, `"***"`, `"___"`, or `""` (any) |
 | `check_blockquote_spacing` | bool | `false` | Warn on `>text` (missing space after `>`) |
-| `check_links` | bool | `true` | Verify cross-document `[text](path.md)` links resolve to a real file. Skips `http(s)://`, `mailto:`, `md://`, and `#anchor` links. Emits `link_broken_target`. |
+| `check_links` | bool | `true` | Verify cross-document `[text](path.md)` links resolve to a real file. Skips `http(s)://`, `mailto:`, `md://`, `#anchor` links, and inline math/function notation like `[X](t)`. Emits `link_broken_target`. |
 
 ### `RequiredPattern`
 
@@ -174,7 +174,7 @@ Substring or regex required to appear somewhere in the file.
 
 ## `[markdown_table]`
 
-GFM pipe-table validation: separator format, cell padding, named per-table schemas. Use `ignore_extra_body_cols = true` for math/code-heavy guides where `|` appears legitimately in content (`|G|` group order, regex alternation, bitwise OR) and gets miscounted as extra columns.
+GFM pipe-table validation: separator format, cell padding, named per-table schemas. Use `ignore_extra_body_cols = true` for math/code-heavy guides where `|` appears legitimately in content (`|G|` group order, regex alternation, bitwise OR) and gets miscounted as extra columns. A blank top-left header is allowed when it serves as the row-label corner of a comparison matrix; its corner separator may use two dashes.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -184,7 +184,7 @@ GFM pipe-table validation: separator format, cell padding, named per-table schem
 | `min_cell_padding` | usize | `1` | Minimum spaces inside cell delimiters |
 | `required_tables` | usize? | none | Minimum number of tables per file |
 | `table_schemas` | `Vec<TableSchema>` | `[]` | Named schemas — see below |
-| `check_empty_headers` | bool | `true` | Warn when a header cell is empty |
+| `check_empty_headers` | bool | `true` | Warn when a header cell is empty, except a row-label corner in comparison matrices |
 | `max_columns` | usize | `0` | Warn over this many columns (`0` = no limit) |
 | `ignore_extra_body_cols` | bool | `false` | Don't flag rows with MORE columns than header (rows with FEWER are still flagged) |
 

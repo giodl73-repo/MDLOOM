@@ -8,4 +8,4 @@ mod bar;
 mod line;
 pub mod render;
 
-pub use render::{render_chart, ChartAttrs, ChartKind, ChartData, ChartError, ChartPoint};
+pub use render::{render_chart, ChartAttrs, ChartData, ChartError, ChartKind, ChartPoint};

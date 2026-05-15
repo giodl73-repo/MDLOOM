@@ -1,15 +1,28 @@
-﻿use std::path::{Path, PathBuf};
 use anyhow::Result;
+use std::path::{Path, PathBuf};
 
+use crate::compile_chart::resolve_chart_data;
+use crate::compile_directive::{collect_directives, Directive, ElementAttrs, TreeAttrs};
+#[cfg(test)]
+use crate::compile_prose::heading_slug;
+use crate::compile_prose::{render_blockquote, render_xref};
+use crate::compile_source::resolve_source_for_compile;
+use crate::compile_toc::generate_toc;
+use crate::compile_tree::{render_inline_outline, render_inline_tree};
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
-use crate::element::{ElementConfig, ElementData, ElementKind, ElementAlign, ElementError, render_element};
-use crate::element::row::{RowConfig, RowElement, render_row_foreach, validate_r1};
-use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
-use crate::runner::Runner;
 use crate::diagnostic::Severity;
-use crate::tree::schema::{FieldMap, parse_md_table, parse_json_source, generate_org, generate_taxonomy, generate_dependency, generate_outline};
-use crate::tree::dirtree::{DirtreeOptions, generate as dirtree_generate};
+use crate::element::row::{render_row_foreach, validate_r1, RowConfig, RowElement};
+use crate::element::{
+    render_element, ElementAlign, ElementConfig, ElementData, ElementError, ElementKind,
+};
+use crate::layout::{self, extract_content_lines};
+use crate::runner::Runner;
+use crate::tree::dirtree::{generate as dirtree_generate, DirtreeOptions};
+use crate::tree::schema::{
+    generate_dependency, generate_org, generate_outline, generate_taxonomy, parse_json_source,
+    parse_md_table, FieldMap,
+};
 
 // ─────────────────────────────────────────────────────────
 // Public result types
@@ -42,779 +55,11 @@ pub enum ViolationSeverity {
 }
 
 // ─────────────────────────────────────────────────────────
-// Directive types
-// ─────────────────────────────────────────────────────────
-
-#[derive(Debug)]
-enum Directive {
-    Include {
-        uri: String,
-        /// Optional DaVinci pin ID declared inline. Compile warns if no matching
-        /// [[davinci]] entry with this ID exists in proof.toml.
-        pin: Option<String>,
-        line_start: usize,
-        line_end: usize,
-    },
-    Layout {
-        uris: Vec<String>,
-        attrs: LayoutAttrs,
-        line_start: usize,
-        line_end: usize,
-    },
-    Table {
-        uri: String,
-        line_start: usize,
-        line_end: usize,
-    },
-    Tree {
-        kind: String,                   // dirtree | org | taxonomy | dependency | outline
-        source: Option<String>,         // md:// URI for schema-driven kinds
-        inline_body: Vec<String>,       // inline indented tree body (when no source)
-        attrs: TreeAttrs,
-        line_start: usize,
-        line_end: usize,
-    },
-    Element {
-        kind: String,                   // value | delta | sparkline | mini-bar | label | badge
-        source: Option<String>,         // md:// URI (absent if inline_value is set)
-        field: Option<String>,          // column name in source table
-        inline_value: Option<String>,   // from value="..." attribute
-        attrs: ElementAttrs,
-        line_start: usize,
-        line_end: usize,
-    },
-    Row {
-        source_uri: String,
-        #[allow(dead_code)]
-        var_name: String,
-        separator: String,
-        declared_width: Option<usize>,
-        elements: Vec<RowElement>,
-        no_chrome: bool,
-        line_start: usize,
-        line_end: usize,
-    },
-    Symbol {
-        name: String,
-        size: usize,
-        #[allow(dead_code)]
-        align: String,
-        line_start: usize,
-        line_end: usize,
-    },
-    Shape {
-        attrs: crate::symbol::shape::ShapeAttrs,
-        line_start: usize,
-        line_end: usize,
-    },
-    Region {
-        name: String,
-        body: Vec<String>,
-        line_start: usize,
-        line_end: usize,
-    },
-    Math {
-        expr: String,
-        width: usize,
-        align: crate::math::MathAlign,
-        no_chrome: bool,
-        line_start: usize,
-        line_end: usize,
-    },
-    Toc {
-        source: Option<String>,
-        max_depth: usize,
-        style: String,
-        /// Restrict TOC to headings nested under the heading with this text.
-        /// `None` lists every heading in the document.
-        section: Option<String>,
-        line_start: usize,
-        line_end: usize,
-    },
-    /// proof:xref — cross-reference to a heading in another document.
-    /// Renders as "See: [Heading Text](relative-path.md#slug)".
-    Xref {
-        /// Target URI: `md://path.md#heading-slug` or `md://path.md`
-        uri: String,
-        /// Optional override label; defaults to the resolved heading text
-        label: Option<String>,
-        /// Render format: "inline" | "note" | "callout"
-        format: String,
-        line_start: usize,
-        line_end: usize,
-    },
-    /// proof:blockquote — prose-document block quote.
-    ///
-    /// Distinct from `proof:quote`, which is slide-only (centered, curly-quoted).
-    /// `proof:blockquote` is for prose documents: left-aligned, indented, with
-    /// optional attribution on its own trailing line.
-    Blockquote {
-        /// Body text — multi-line. Blank lines separate paragraphs within the quote.
-        text: String,
-        /// Optional attribution (rendered as `— Name` on a trailing line).
-        attribution: Option<String>,
-        /// Render style: "indent" (markdown `> ` lines, default) or "boxed" (ASCII frame).
-        style: String,
-        line_start: usize,
-        line_end: usize,
-    },
-    /// proof:chart — full bar or line chart (distinct from sparkline elements).
-    Chart {
-        attrs: crate::chart::ChartAttrs,
-        /// md:// URI of a data table when source-driven; None for inline body data.
-        source: Option<String>,
-        /// Column name for category labels when source is set.
-        label_field: Option<String>,
-        /// Column name for numeric values when source is set.
-        value_field: Option<String>,
-        /// Inline body text (used when `source` is None). Lines are `label: value` pairs.
-        inline_body: String,
-        line_start: usize,
-        line_end: usize,
-    },
-}
-
-/// Parsed attributes from a proof:tree directive.
-#[derive(Debug, Default)]
-pub struct TreeAttrs {
-    pub name: Option<String>,
-    pub parent: Option<String>,
-    pub label: Option<String>,
-    pub format: String,              // "table" (default) or "json"
-    pub indent_width: usize,         // default: 4
-    pub root: Option<String>,        // for dirtree: filesystem root
-    pub max_depth: Option<usize>,
-    pub exclude: Vec<String>,
-    pub stub: bool,   // stub=true: compile errors become warnings (for WIP docs)
-}
-
-impl TreeAttrs {
-    fn parse(attrs_str: &str) -> Self {
-        let mut out = TreeAttrs {
-            format: "table".to_string(),
-            indent_width: 4,
-            ..Default::default()
-        };
-        let mut rest = attrs_str.trim();
-        while !rest.is_empty() {
-            if let Some(eq) = rest.find('=') {
-                let key = rest[..eq].trim();
-                rest = &rest[eq + 1..];
-                let (val, next) = if rest.starts_with('"') {
-                    if let Some(close) = rest[1..].find('"') {
-                        (&rest[1..close + 1], &rest[close + 2..])
-                    } else { ("", "") }
-                } else {
-                    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-                    (&rest[..end], &rest[end..])
-                };
-                match key {
-                    "name"         => out.name = Some(val.to_string()),
-                    "parent"       => out.parent = Some(val.to_string()),
-                    "label"        => out.label = Some(val.to_string()),
-                    "format"       => out.format = val.to_string(),
-                    "indent-width" => out.indent_width = val.parse().unwrap_or(4),
-                    "root"         => out.root = Some(val.to_string()),
-                    "max-depth"    => out.max_depth = val.parse().ok(),
-                    "exclude"      => out.exclude = val.split(',').map(|s| s.trim().to_string()).collect(),
-                    "stub"         => out.stub = val == "true" || val == "1",
-                    _ => {}
-                }
-                rest = next.trim_start();
-            } else {
-                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-                rest = &rest[end..].trim_start();
-            }
-        }
-        out
-    }
-}
-
-/// Parsed attributes from a proof:element directive.
-#[derive(Debug, Default)]
-pub struct ElementAttrs {
-    pub width: Option<usize>,
-    pub align: String,      // "left" | "right" | "center" — default "left"
-    pub format: String,     // "{:.1}" etc. — default "{}"
-    pub no_chrome: bool,
-    pub max: Option<f64>,
-    pub fill: char,         // default '█'
-    pub empty: char,        // default '░'
-}
-
-impl ElementAttrs {
-    fn parse(attrs_str: &str) -> Self {
-        let mut out = ElementAttrs {
-            align: "left".to_string(),
-            format: "{}".to_string(),
-            fill: '█',
-            empty: '░',
-            ..Default::default()
-        };
-        let mut rest = attrs_str.trim();
-        while !rest.is_empty() {
-            // Find the next whitespace-delimited token
-            let tok_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            let tok = &rest[..tok_end];
-
-            if let Some(eq) = tok.find('=') {
-                // key=value token
-                let key = tok[..eq].trim();
-                let after_eq = &tok[eq + 1..];
-                // Value may span into quoted region — re-parse from rest after key=
-                let val_start = &rest[eq + 1..];
-                let (val, consumed) = if val_start.starts_with('"') {
-                    if let Some(close) = val_start[1..].find('"') {
-                        (&val_start[1..close + 1], eq + 1 + close + 2)
-                    } else { (after_eq, tok_end) }
-                } else {
-                    (after_eq, tok_end)
-                };
-                match key {
-                    "width"     => out.width = val.parse().ok(),
-                    "align"     => out.align = val.to_string(),
-                    "format"    => out.format = val.to_string(),
-                    "max"       => out.max = val.parse().ok(),
-                    "fill"      => out.fill = val.chars().next().unwrap_or('█'),
-                    "empty"     => out.empty = val.chars().next().unwrap_or('░'),
-                    "no-chrome" => out.no_chrome = matches!(val, "true" | "1" | ""),
-                    _ => {}
-                }
-                rest = rest[consumed..].trim_start();
-            } else {
-                // Bare flag (no '=' in token)
-                if tok == "no-chrome" { out.no_chrome = true; }
-                rest = rest[tok_end..].trim_start();
-            }
-        }
-        out
-    }
-}
-
-impl Directive {
-    fn line_start(&self) -> usize {
-        match self {
-            Directive::Include { line_start, .. } => *line_start,
-            Directive::Layout { line_start, .. } => *line_start,
-            Directive::Table { line_start, .. } => *line_start,
-            Directive::Tree { line_start, .. }  => *line_start,
-            Directive::Element { line_start, .. } => *line_start,
-            Directive::Row { line_start, .. } => *line_start,
-            Directive::Symbol { line_start, .. } => *line_start,
-            Directive::Shape { line_start, .. } => *line_start,
-            Directive::Region { line_start, .. } => *line_start,
-            Directive::Math { line_start, .. } => *line_start,
-            Directive::Toc  { line_start, .. } => *line_start,
-            Directive::Xref { line_start, .. } => *line_start,
-            Directive::Blockquote { line_start, .. } => *line_start,
-            Directive::Chart { line_start, .. } => *line_start,
-        }
-    }
-    fn line_end(&self) -> usize {
-        match self {
-            Directive::Include { line_end, .. } => *line_end,
-            Directive::Layout { line_end, .. } => *line_end,
-            Directive::Table { line_end, .. } => *line_end,
-            Directive::Tree { line_end, .. } => *line_end,
-            Directive::Element { line_end, .. } => *line_end,
-            Directive::Row { line_end, .. } => *line_end,
-            Directive::Symbol { line_end, .. } => *line_end,
-            Directive::Shape { line_end, .. } => *line_end,
-            Directive::Region { line_end, .. } => *line_end,
-            Directive::Math { line_end, .. } => *line_end,
-            Directive::Toc  { line_end, .. } => *line_end,
-            Directive::Xref { line_end, .. } => *line_end,
-            Directive::Blockquote { line_end, .. } => *line_end,
-            Directive::Chart { line_end, .. } => *line_end,
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────
-// Layout attribute parsing
-// ─────────────────────────────────────────────────────────
-
-#[derive(Debug, Default)]
-struct LayoutAttrs {
-    gap: usize,
-    align: String,
-    labels: Vec<String>,
-    cols: Option<usize>,
-    width: usize,
-    direction: String,
-    border: bool,
-}
-
-impl LayoutAttrs {
-    fn parse(attrs_str: &str) -> Self {
-        let mut out = LayoutAttrs {
-            gap: 3,
-            align: "top".to_string(),
-            labels: Vec::new(),
-            cols: None,
-            width: 120,
-            direction: "horizontal".to_string(),
-            border: false,
-        };
-        let mut rest = attrs_str.trim();
-        while !rest.is_empty() {
-            if let Some(eq_pos) = rest.find('=') {
-                let key = rest[..eq_pos].trim();
-                rest = &rest[eq_pos + 1..];
-                let (val, next) = if rest.starts_with('"') {
-                    if let Some(close) = rest[1..].find('"') {
-                        (&rest[1..close + 1], &rest[close + 2..])
-                    } else {
-                        ("", "")
-                    }
-                } else {
-                    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-                    (&rest[..end], &rest[end..])
-                };
-                match key {
-                    "gap"       => out.gap = val.parse().unwrap_or(3),
-                    "align"     => out.align = val.to_string(),
-                    "labels"    => out.labels = val.split(',').map(|s| s.to_string()).collect(),
-                    "cols"      => out.cols = val.parse().ok(),
-                    "width"     => out.width = val.parse().unwrap_or(120),
-                    "direction" => out.direction = val.to_string(),
-                    "border"    => out.border = matches!(val, "true" | "1" | ""),
-                    _ => {}
-                }
-                rest = next.trim_start();
-            } else {
-                let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-                let key = rest[..end].trim();
-                if key == "border" { out.border = true; }
-                rest = &rest[end..].trim_start();
-            }
-        }
-        out
-    }
-
-    #[allow(dead_code)]
-    fn to_layout_config(self) -> LayoutConfig {
-        LayoutConfig {
-            gap: self.gap,
-            align: Align::parse(&self.align).unwrap_or(Align::Top),
-            labels: self.labels,
-            cols: self.cols,
-            width: self.width,
-            direction: Direction::parse(&self.direction).unwrap_or(Direction::Horizontal),
-            border: self.border,
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────
 // Directive parsing
 // ─────────────────────────────────────────────────────────
 
 pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
-    // Returns (line_start, line_end, kind, body) for quick inspection — used by tests
-    let lines: Vec<&str> = source.lines().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < lines.len() {
-        let trimmed = lines[i].trim_start();
-        if let Some(kind) = proof_directive_kind(trimmed) {
-            let start = i;
-            let _info = trimmed[3..].to_string(); // after ```
-            let mut body = Vec::new();
-            i += 1;
-            while i < lines.len() {
-                let l = lines[i].trim();
-                if l == "```" || l == "~~~" { break; }
-                body.push(lines[i]);
-                i += 1;
-            }
-            out.push((start, i, kind.to_string(), body.join("\n")));
-        }
-        i += 1;
-    }
-    out
-}
-
-fn collect_directives(source: &str) -> Vec<Directive> {
-    let lines: Vec<&str> = source.lines().collect();
-    let mut directives = Vec::new();
-    let mut i = 0;
-    while i < lines.len() {
-        let trimmed = lines[i].trim_start();
-        if let Some(kind) = proof_directive_kind(trimmed) {
-            let line_start = i;
-            let info_after_backticks = trimmed[3..].to_string(); // "proof:layout gap=4 ..."
-            let mut body: Vec<&str> = Vec::new();
-            i += 1;
-            while i < lines.len() {
-                let l = lines[i].trim();
-                if l == "```" || l == "~~~" { break; }
-                body.push(lines[i]);
-                i += 1;
-            }
-            let line_end = i;
-            match kind {
-                "include" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:include")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let pin = extract_attr_value(&info_after, "pin");
-                    if let Some(uri) = body.iter().find_map(|l| {
-                        let t = l.trim();
-                        if !t.is_empty() && !t.starts_with("pin=") { Some(t.to_string()) } else { None }
-                    }) {
-                        directives.push(Directive::Include { uri, pin, line_start, line_end });
-                    }
-                }
-                "layout" => {
-                    let attrs_str = info_after_backticks
-                        .strip_prefix("proof:layout")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let attrs = LayoutAttrs::parse(&attrs_str);
-                    let uris: Vec<String> = body.iter()
-                        .map(|l| l.trim())
-                        .filter(|l| !l.is_empty())
-                        .map(|l| l.to_string())
-                        .collect();
-                    directives.push(Directive::Layout { uris, attrs, line_start, line_end });
-                }
-                "table" => {
-                    let uri = body.iter()
-                        .find_map(|l| {
-                            let t = l.trim();
-                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
-                        })
-                        .unwrap_or_default();
-                    if !uri.is_empty() {
-                        directives.push(Directive::Table { uri, line_start, line_end });
-                    }
-                }
-                "tree" => {
-                    // Info string: "proof:tree kind=org name="Employee" parent="Manager""
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:tree")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-
-                    // Extract kind from attrs (first key=value or standalone word)
-                    let kind = info_after
-                        .split_whitespace()
-                        .find_map(|tok| {
-                            if tok.starts_with("kind=") {
-                                Some(tok.strip_prefix("kind=").unwrap_or("dirtree")
-                                    .trim_matches('"').to_string())
-                            } else if !tok.contains('=') {
-                                Some(tok.to_string()) // bare kind name
-                            } else { None }
-                        })
-                        .unwrap_or_else(|| "dirtree".to_string());
-
-                    let attrs = TreeAttrs::parse(&info_after);
-
-                    // Source URI: from info string attr OR first md:// body line
-                    let source_from_attrs = extract_attr_value(&info_after, "source")
-                        .filter(|s| s.starts_with("md://") || s.contains('/'));
-                    let source = source_from_attrs.or_else(|| {
-                        body.iter().find_map(|l| {
-                            let t = l.trim();
-                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
-                        })
-                    });
-
-                    // Inline body: non-md:// lines for inline tree content
-                    let inline_body: Vec<String> = body.iter()
-                        .filter(|l| !l.trim().starts_with("md://") && !l.trim().is_empty())
-                        .map(|l| l.to_string())
-                        .collect();
-
-                    directives.push(Directive::Tree { kind, source, inline_body, attrs, line_start, line_end });
-                }
-                "element" => {
-                    // Info string: "proof:element kind=value field=pts_82 width=8 align=right"
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:element")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-
-                    // Extract kind= from attrs
-                    let kind = extract_attr_value(&info_after, "kind")
-                        .unwrap_or_else(|| "value".to_string());
-
-                    // Extract field= and value= (inline literal)
-                    let field = extract_attr_value(&info_after, "field");
-                    let inline_value = extract_attr_value(&info_after, "value");
-
-                    let attrs = ElementAttrs::parse(&info_after);
-
-                    // Source URI is the first md:// line in the body
-                    let source = body.iter().find_map(|l| {
-                        let t = l.trim();
-                        if t.starts_with("md://") { Some(t.to_string()) } else { None }
-                    });
-
-                    directives.push(Directive::Element {
-                        kind, source, field, inline_value, attrs, line_start, line_end,
-                    });
-                }
-                "row" => {
-                    // Info string: "proof:row foreach=player in md://stats.md#edm:table:0 separator=" " width=120"
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:row")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-
-                    // Parse foreach=VAR in URI
-                    let (var_name, source_uri) = parse_foreach(&info_after);
-                    let separator = extract_attr_value(&info_after, "separator")
-                        .unwrap_or_else(|| " ".to_string());
-                    let declared_width = extract_attr_value(&info_after, "width")
-                        .and_then(|v| v.parse().ok());
-                    let no_chrome = info_after.split_whitespace()
-                        .any(|t| t == "no-chrome" || t == "no-chrome=true" || t == "no-chrome=1");
-
-                    // Body lines: each "proof:element ..." line becomes a RowElement
-                    let elements: Vec<RowElement> = body.iter()
-                        .filter_map(|l| parse_row_element_line(l.trim()))
-                        .collect();
-
-                    if !source_uri.is_empty() {
-                        directives.push(Directive::Row {
-                            source_uri,
-                            var_name,
-                            separator,
-                            declared_width,
-                            elements,
-                            no_chrome,
-                            line_start,
-                            line_end,
-                        });
-                    }
-                }
-                "symbol" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:symbol")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let name = extract_attr_value(&info_after, "name")
-                        .unwrap_or_default();
-                    let size = extract_attr_value(&info_after, "size")
-                        .and_then(|s| s.parse::<usize>().ok())
-                        .unwrap_or(1);
-                    let align = extract_attr_value(&info_after, "align")
-                        .unwrap_or_else(|| "left".to_string());
-                    if !name.is_empty() {
-                        directives.push(Directive::Symbol { name, size, align, line_start, line_end });
-                    }
-                }
-                "shape" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:shape")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let attrs = crate::symbol::shape::ShapeAttrs::parse(&info_after);
-                    if !attrs.name.is_empty() {
-                        directives.push(Directive::Shape { attrs, line_start, line_end });
-                    }
-                }
-                "region" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:region")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let name = extract_attr_value(&info_after, "name").unwrap_or_default();
-                    let body_owned: Vec<String> = body.iter().map(|s| s.to_string()).collect();
-                    directives.push(Directive::Region {
-                        name,
-                        body: body_owned,
-                        line_start,
-                        line_end,
-                    });
-                }
-                "math" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:math")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let width: usize = extract_attr_value(&info_after, "width")
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(0);
-                    let align = match extract_attr_value(&info_after, "align").as_deref() {
-                        Some("left")  => crate::math::MathAlign::Left,
-                        Some("right") => crate::math::MathAlign::Right,
-                        _             => crate::math::MathAlign::Center,
-                    };
-                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
-                        .map(|s| s == "true")
-                        .unwrap_or(false);
-                    let expr = body.join("\n");
-                    directives.push(Directive::Math {
-                        expr, width, align, no_chrome, line_start, line_end,
-                    });
-                }
-                "toc" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:toc")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let source = extract_attr_value(&info_after, "source")
-                        .or_else(|| body.iter().find_map(|l| {
-                            let t = l.trim();
-                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
-                        }));
-                    let max_depth = extract_attr_value(&info_after, "max-depth")
-                        .or_else(|| extract_attr_value(&info_after, "max_depth"))
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(3);
-                    let style = extract_attr_value(&info_after, "style")
-                        .unwrap_or_else(|| "list".to_string());
-                    let section = extract_attr_value(&info_after, "section");
-                    directives.push(Directive::Toc {
-                        source, max_depth, style, section, line_start, line_end,
-                    });
-                }
-                "xref" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:xref")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let uri = extract_attr_value(&info_after, "uri")
-                        .or_else(|| extract_attr_value(&info_after, "source"))
-                        .or_else(|| body.iter().find_map(|l| {
-                            let t = l.trim();
-                            if t.starts_with("md://") { Some(t.to_string()) } else { None }
-                        }))
-                        .unwrap_or_default();
-                    let label = extract_attr_value(&info_after, "label");
-                    let format = extract_attr_value(&info_after, "format")
-                        .unwrap_or_else(|| "inline".to_string());
-                    directives.push(Directive::Xref { uri, label, format, line_start, line_end });
-                }
-                "blockquote" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:blockquote")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let attribution = extract_attr_value(&info_after, "attribution")
-                        .or_else(|| extract_attr_value(&info_after, "by"));
-                    let style = extract_attr_value(&info_after, "style")
-                        .unwrap_or_else(|| "indent".to_string());
-                    let text = body.join("\n");
-                    directives.push(Directive::Blockquote {
-                        text, attribution, style, line_start, line_end,
-                    });
-                }
-                "chart" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:chart")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let kind = extract_attr_value(&info_after, "kind")
-                        .as_deref()
-                        .and_then(crate::chart::ChartKind::parse)
-                        .unwrap_or(crate::chart::ChartKind::Bar);
-                    let width = extract_attr_value(&info_after, "width")
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(60);
-                    let height = extract_attr_value(&info_after, "height")
-                        .and_then(|s| s.parse().ok())
-                        .unwrap_or(8);
-                    let title = extract_attr_value(&info_after, "title");
-                    let x_label = extract_attr_value(&info_after, "x-label")
-                        .or_else(|| extract_attr_value(&info_after, "xlabel"));
-                    let y_label = extract_attr_value(&info_after, "y-label")
-                        .or_else(|| extract_attr_value(&info_after, "ylabel"));
-                    let max = extract_attr_value(&info_after, "max")
-                        .and_then(|s| s.parse().ok());
-                    let no_chrome = extract_attr_value(&info_after, "no-chrome")
-                        .map(|s| s == "true")
-                        .unwrap_or(false);
-                    let attrs = crate::chart::ChartAttrs {
-                        kind, width, height, title, x_label, y_label, max, no_chrome,
-                    };
-                    let source = extract_attr_value(&info_after, "source");
-                    let label_field = extract_attr_value(&info_after, "label-field")
-                        .or_else(|| extract_attr_value(&info_after, "label_field"));
-                    let value_field = extract_attr_value(&info_after, "value-field")
-                        .or_else(|| extract_attr_value(&info_after, "value_field"));
-                    let inline_body = body.join("\n");
-                    directives.push(Directive::Chart {
-                        attrs, source, label_field, value_field, inline_body,
-                        line_start, line_end,
-                    });
-                }
-                _ => {}
-            }
-        }
-        i += 1;
-    }
-    directives
-}
-
-/// Extract a quoted or unquoted value for `key=` from an attribute string.
-fn extract_attr_value(attrs: &str, key: &str) -> Option<String> {
-    let prefix = format!("{}=", key);
-    let mut rest = attrs;
-    while !rest.is_empty() {
-        if let Some(pos) = rest.find(&prefix) {
-            // Ensure it's a word boundary (not mid-identifier)
-            if pos > 0 {
-                let prev = rest.as_bytes()[pos - 1] as char;
-                if prev.is_alphanumeric() || prev == '-' || prev == '_' {
-                    rest = &rest[pos + 1..];
-                    continue;
-                }
-            }
-            let after = &rest[pos + prefix.len()..];
-            let val = if after.starts_with('"') {
-                after[1..].find('"').map(|e| after[1..e + 1].to_string())
-            } else {
-                let end = after.find(char::is_whitespace).unwrap_or(after.len());
-                if end > 0 { Some(after[..end].to_string()) } else { None }
-            };
-            return val;
-        } else {
-            break;
-        }
-    }
-    None
-}
-
-fn proof_directive_kind(line: &str) -> Option<&'static str> {
-    let line = line.trim_start();
-    if !line.starts_with("```proof:") { return None; }
-    let rest = &line[9..]; // after "```proof:"
-    if rest.starts_with("include") { Some("include") }
-    else if rest.starts_with("layout")  { Some("layout") }
-    else if rest.starts_with("table")   { Some("table") }
-    else if rest.starts_with("tree")    { Some("tree") }
-    else if rest.starts_with("element") { Some("element") }
-    else if rest.starts_with("row")     { Some("row") }
-    else if rest.starts_with("symbol")  { Some("symbol") }
-    else if rest.starts_with("shape")   { Some("shape") }
-    else if rest.starts_with("region")  { Some("region") }
-    else if rest.starts_with("math")    { Some("math") }
-    else if rest.starts_with("toc")     { Some("toc") }
-    else if rest.starts_with("xref")    { Some("xref") }
-    else if rest.starts_with("blockquote") { Some("blockquote") }
-    else if rest.starts_with("chart")   { Some("chart") }
-    else if rest.starts_with("numbered-list") { Some("ol") } // primary name
-    else if rest.starts_with("ol")      { Some("ol") }       // short-form alias
-    else { None }
+    crate::compile_directive::parse_directives(source)
 }
 
 // ─────────────────────────────────────────────────────────
@@ -849,15 +94,17 @@ pub fn compile_file(
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
+    let source_body = crate::frontmatter::parse(&source_text)
+        .map(|parsed| parsed.body)
+        .unwrap_or(&source_text);
 
     // ── Tier 3 cache check ──────────────────────────────────────────────
     // Build a minimal directive-attrs JSON for cache keying, then check Tier 3.
     // On hit: write cached output (skip if identical), return early with from_cache=true.
     let mut path_index = crate::cache::load_path_index(root);
     {
-        let source_parse_key = crate::cache::get_or_compute_parse_key(
-            source_path, &source_text, &mut path_index
-        );
+        let source_parse_key =
+            crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
         // Collect resolved file deps from resolved_files for key computation
         // (empty on first compile; populated on cache store below)
         let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
@@ -882,8 +129,8 @@ pub fn compile_file(
     }
     // ────────────────────────────────────────────────────────────────────
 
-    let source_lines: Vec<&str> = source_text.lines().collect();
-    let directives = collect_directives(&source_text);
+    let source_lines: Vec<&str> = source_body.lines().collect();
+    let directives = collect_directives(source_body);
 
     // Build a runner for figure lint validation
     let runner = Runner::new(root, config.clone())?;
@@ -921,7 +168,14 @@ pub fn compile_file(
                 }
                 match resolve_uri_cached(uri, root, &mut path_index) {
                     Ok((content, fig_file)) => {
-                        lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
+                        lint_figure(
+                            uri,
+                            &content,
+                            &fig_file,
+                            line_start + 1,
+                            &runner,
+                            &mut violations,
+                        );
                         validate_davinci(uri, &content, config, line_start, &mut violations);
                         resolved_count += 1;
                         format_include_block(uri, &content)
@@ -947,7 +201,14 @@ pub fn compile_file(
                 for uri in uris {
                     match resolve_uri_cached(uri, root, &mut path_index) {
                         Ok((content, fig_file)) => {
-                            lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
+                            lint_figure(
+                                uri,
+                                &content,
+                                &fig_file,
+                                line_start + 1,
+                                &runner,
+                                &mut violations,
+                            );
                             validate_davinci(uri, &content, config, line_start, &mut violations);
                             figures.push(extract_content_lines(&content));
                             resolved_count += 1;
@@ -972,15 +233,7 @@ pub fn compile_file(
                 } else {
                     // Convert attrs directly to LayoutConfig — no re-serialization to avoid
                     // label corruption (labels with spaces would be split by the string parser)
-                    let layout_config = LayoutConfig {
-                        gap: attrs.gap,
-                        align: Align::parse(&attrs.align).unwrap_or(Align::Top),
-                        labels: attrs.labels.clone(),
-                        cols: attrs.cols,
-                        width: attrs.width,
-                        direction: Direction::parse(&attrs.direction).unwrap_or(Direction::Horizontal),
-                        border: attrs.border,
-                    };
+                    let layout_config = attrs.to_layout_config();
 
                     let composed = layout::layout(figures, &layout_config);
                     // Strip outer ``` wrapper — compile embeds content inline
@@ -992,66 +245,127 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Table { uri, .. } => {
-                match resolve_uri_cached(uri, root, &mut path_index) {
-                    Ok((content, fig_file)) => {
-                        lint_figure(uri, &content, &fig_file, line_start + 1, &runner, &mut violations);
-                        validate_davinci(uri, &content, config, line_start, &mut violations);
-                        resolved_count += 1;
-                        format_include_block(uri, &content)
-                    }
-                    Err(e) => {
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity: ViolationSeverity::Error,
-                            uri: uri.clone(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("{}", e),
-                            source_line: line_start + 1,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
+            Directive::Table { uri, .. } => match resolve_uri_cached(uri, root, &mut path_index) {
+                Ok((content, fig_file)) => {
+                    lint_figure(
+                        uri,
+                        &content,
+                        &fig_file,
+                        line_start + 1,
+                        &runner,
+                        &mut violations,
+                    );
+                    validate_davinci(uri, &content, config, line_start, &mut violations);
+                    resolved_count += 1;
+                    format_include_block(uri, &content)
                 }
-            }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity: ViolationSeverity::Error,
+                        uri: uri.clone(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("{}", e),
+                        source_line: line_start + 1,
+                    });
+                    source_lines[line_start..=line_end].join("\n")
+                }
+            },
 
-            Directive::Tree { kind, source, inline_body, attrs, .. } => {
-                generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, &mut violations)
-                    .unwrap_or_else(|e| {
-                        // stub=true: WIP directive — downgrade error to warning, keep source block
-                        let severity = if attrs.stub { ViolationSeverity::Warning } else { ViolationSeverity::Error };
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity,
-                            uri: source.clone().unwrap_or_default(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("tree generation failed: {}{}", e,
-                                if attrs.stub { " (stub — skipped)" } else { "" }),
-                            source_line: line_start + 1,
-                        });
-                        source_fallback(&source_lines, line_start, line_end)
-                    })
-            }
-
-            Directive::Element { kind, source, field, inline_value, attrs, .. } => {
-                compile_element(
-                    kind, source.as_deref(), field.as_deref(), inline_value.as_deref(),
-                    attrs, root, line_start,
-                    &mut violations, &source_lines, line_end,
-                    &mut resolved_count,
+            Directive::Tree {
+                kind,
+                source,
+                inline_body,
+                attrs,
+                ..
+            } => {
+                generate_tree_block(
+                    kind,
+                    source.as_deref(),
+                    inline_body,
+                    attrs,
+                    root,
+                    line_start,
+                    &mut violations,
                 )
+                .unwrap_or_else(|e| {
+                    // stub=true: WIP directive — downgrade error to warning, keep source block
+                    let severity = if attrs.stub {
+                        ViolationSeverity::Warning
+                    } else {
+                        ViolationSeverity::Error
+                    };
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity,
+                        uri: source.clone().unwrap_or_default(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!(
+                            "tree generation failed: {}{}",
+                            e,
+                            if attrs.stub {
+                                " (stub — skipped)"
+                            } else {
+                                ""
+                            }
+                        ),
+                        source_line: line_start + 1,
+                    });
+                    source_fallback(&source_lines, line_start, line_end)
+                })
             }
 
-            Directive::Row { source_uri, var_name: _, separator, declared_width, elements, no_chrome, .. } => {
-                compile_row(
-                    source_uri, separator, *declared_width, elements, *no_chrome,
-                    root, line_start, &mut violations, &source_lines, line_end,
-                    &mut resolved_count,
-                )
-            }
+            Directive::Element {
+                kind,
+                source,
+                field,
+                inline_value,
+                attrs,
+                ..
+            } => compile_element(
+                kind,
+                source.as_deref(),
+                field.as_deref(),
+                inline_value.as_deref(),
+                attrs,
+                root,
+                line_start,
+                &mut violations,
+                &source_lines,
+                line_end,
+                &mut resolved_count,
+            ),
 
-            Directive::Symbol { name, size, align: _, .. } => {
+            Directive::Row {
+                source_uri,
+                var_name: _,
+                separator,
+                declared_width,
+                elements,
+                no_chrome,
+                ..
+            } => compile_row(
+                source_uri,
+                separator,
+                *declared_width,
+                elements,
+                *no_chrome,
+                root,
+                line_start,
+                &mut violations,
+                &source_lines,
+                line_end,
+                &mut resolved_count,
+            ),
+
+            Directive::Symbol {
+                name,
+                size,
+                align: _,
+                ..
+            } => {
                 let lib = crate::symbol::SymbolLibrary::new();
                 match crate::symbol::resolve(name, &lib) {
                     Some(sym) => {
@@ -1080,29 +394,27 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Shape { attrs, .. } => {
-                match crate::symbol::shape::render_shape(attrs) {
-                    Ok(rendered) => {
-                        resolved_count += 1;
-                        format!(
+            Directive::Shape { attrs, .. } => match crate::symbol::shape::render_shape(attrs) {
+                Ok(rendered) => {
+                    resolved_count += 1;
+                    format!(
                             "<!-- proof:compiled from=\"proof:shape\" name=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
                             attrs.name, rendered
                         )
-                    }
-                    Err(e) => {
-                        violations.push(CompileViolation {
-                            code: e.code,
-                            severity: ViolationSeverity::Error,
-                            uri: String::new(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: e.message,
-                            source_line: line_start + 1,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
                 }
-            }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: e.code,
+                        severity: ViolationSeverity::Error,
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: e.message,
+                        source_line: line_start + 1,
+                    });
+                    source_lines[line_start..=line_end].join("\n")
+                }
+            },
 
             Directive::Region { name, .. } => {
                 // proof:region is only valid inside a .dashboard.source.md file —
@@ -1124,8 +436,15 @@ pub fn compile_file(
                 source_lines[line_start..=line_end].join("\n")
             }
 
-            Directive::Math { expr, width, align, no_chrome, .. } => {
-                let (math_lines, math_diags) = crate::math::render_display_math(expr, *width, *align);
+            Directive::Math {
+                expr,
+                width,
+                align,
+                no_chrome,
+                ..
+            } => {
+                let (math_lines, math_diags) =
+                    crate::math::render_display_math(expr, *width, *align);
                 resolved_count += 1;
                 for d in &math_diags {
                     violations.push(CompileViolation {
@@ -1149,7 +468,13 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Toc { source, max_depth, style, section, .. } => {
+            Directive::Toc {
+                source,
+                max_depth,
+                style,
+                section,
+                ..
+            } => {
                 let content_opt: Option<String> = if let Some(uri) = source {
                     match resolve_source_for_compile(uri, root) {
                         Ok(c) => Some(c),
@@ -1182,31 +507,36 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Xref { uri, label, format, .. } => {
-                match render_xref(uri, label.as_deref(), format, root) {
-                    Ok(rendered) => {
-                        resolved_count += 1;
-                        format!(
-                            "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
-                            rendered
-                        )
-                    }
-                    Err(e) => {
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity: ViolationSeverity::Error,
-                            uri: uri.clone(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("xref error: {}", e),
-                            source_line: line_start + 1,
-                        });
-                        source_fallback(&source_lines, line_start, line_end)
-                    }
+            Directive::Xref {
+                uri, label, format, ..
+            } => match render_xref(uri, label.as_deref(), format, root) {
+                Ok(rendered) => {
+                    resolved_count += 1;
+                    format!(
+                        "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
+                        rendered
+                    )
                 }
-            }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity: ViolationSeverity::Error,
+                        uri: uri.clone(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("xref error: {}", e),
+                        source_line: line_start + 1,
+                    });
+                    source_fallback(&source_lines, line_start, line_end)
+                }
+            },
 
-            Directive::Blockquote { text, attribution, style, .. } => {
+            Directive::Blockquote {
+                text,
+                attribution,
+                style,
+                ..
+            } => {
                 resolved_count += 1;
                 let rendered = render_blockquote(text, attribution.as_deref(), style);
                 format!(
@@ -1215,7 +545,14 @@ pub fn compile_file(
                 )
             }
 
-            Directive::Chart { attrs, source, label_field, value_field, inline_body, .. } => {
+            Directive::Chart {
+                attrs,
+                source,
+                label_field,
+                value_field,
+                inline_body,
+                ..
+            } => {
                 let data_result = resolve_chart_data(
                     source.as_deref(),
                     label_field.as_deref(),
@@ -1224,34 +561,32 @@ pub fn compile_file(
                     root,
                 );
                 match data_result {
-                    Ok(data) => {
-                        match crate::chart::render_chart(&data, attrs) {
-                            Ok(lines) => {
-                                resolved_count += 1;
-                                let rendered = lines.join("\n");
-                                if attrs.no_chrome {
-                                    format!("```\n{}\n```", rendered)
-                                } else {
-                                    format!(
+                    Ok(data) => match crate::chart::render_chart(&data, attrs) {
+                        Ok(lines) => {
+                            resolved_count += 1;
+                            let rendered = lines.join("\n");
+                            if attrs.no_chrome {
+                                format!("```\n{}\n```", rendered)
+                            } else {
+                                format!(
                                         "<!-- proof:compiled from=\"proof:chart\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
                                         rendered
                                     )
-                                }
-                            }
-                            Err(e) => {
-                                violations.push(CompileViolation {
-                                    code: e.code,
-                                    severity: ViolationSeverity::Error,
-                                    uri: source.clone().unwrap_or_default(),
-                                    figure_id: None,
-                                    invariant: String::new(),
-                                    message: e.message,
-                                    source_line: line_start + 1,
-                                });
-                                source_lines[line_start..=line_end].join("\n")
                             }
                         }
-                    }
+                        Err(e) => {
+                            violations.push(CompileViolation {
+                                code: e.code,
+                                severity: ViolationSeverity::Error,
+                                uri: source.clone().unwrap_or_default(),
+                                figure_id: None,
+                                invariant: String::new(),
+                                message: e.message,
+                                source_line: line_start + 1,
+                            });
+                            source_lines[line_start..=line_end].join("\n")
+                        }
+                    },
                     Err(msg) => {
                         violations.push(CompileViolation {
                             code: "CHART-002",
@@ -1272,7 +607,9 @@ pub fn compile_file(
     }
 
     // Collect all error-level violations
-    let has_errors = violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+    let has_errors = violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error);
     if has_errors {
         return Ok(CompileResult {
             output_path: output_path.to_path_buf(),
@@ -1285,7 +622,7 @@ pub fn compile_file(
     }
 
     // Rebuild source with replacements applied, preserving trailing newline
-    let had_trailing_newline = source_text.ends_with('\n');
+    let had_trailing_newline = source_body.ends_with('\n');
     let mut output_text = apply_replacements(&source_lines, &replacements);
     if had_trailing_newline && !output_text.ends_with('\n') {
         output_text.push('\n');
@@ -1300,9 +637,8 @@ pub fn compile_file(
 
     // ── Store to Tier 3 cache ───────────────────────────────────────────
     {
-        let source_parse_key = crate::cache::get_or_compute_parse_key(
-            source_path, &source_text, &mut path_index
-        );
+        let source_parse_key =
+            crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
         let cache_key = crate::cache::compile_key(&source_parse_key, &[], "{}");
         let entry = crate::cache::CompileCacheEntry {
             compile_key: cache_key,
@@ -1336,8 +672,8 @@ pub fn compile_file(
 // ─────────────────────────────────────────────────────────
 
 fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
-    let parsed = mdpath::parse(uri)
-        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let parsed =
+        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
     Ok((element.content, element.file))
@@ -1351,8 +687,8 @@ fn resolve_uri_cached(
     root: &Path,
     path_index: &mut crate::cache::PathIndex,
 ) -> Result<(String, PathBuf)> {
-    let parsed = mdpath::parse(uri)
-        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let parsed =
+        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
 
     let target_file = root.join(&parsed.path);
     if !target_file.exists() {
@@ -1362,12 +698,21 @@ fn resolve_uri_cached(
         Ok(c) => c,
         Err(_) => return resolve_uri(uri, root),
     };
-    if let Some(cached) = crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, uri, path_index) {
+    if let Some(cached) =
+        crate::cache::try_resolve_cache_hit(root, &target_file, &target_content, uri, path_index)
+    {
         return Ok((cached, target_file));
     }
     let element = mdpath::resolve(&parsed, root)
         .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    crate::cache::store_resolve_cache(root, &target_file, &target_content, uri, &element.content, path_index);
+    crate::cache::store_resolve_cache(
+        root,
+        &target_file,
+        &target_content,
+        uri,
+        &element.content,
+        path_index,
+    );
     Ok((element.content, element.file))
 }
 
@@ -1384,7 +729,8 @@ fn lint_figure(
     // Build a synthetic file content: wrap content in a fenced block for checking
     let synthetic = format!("```\n{}\n```\n", content);
     let diags = runner.lint_content(&synthetic, figure_file);
-    let errors: Vec<_> = diags.iter()
+    let errors: Vec<_> = diags
+        .iter()
         .filter(|d| d.severity == Severity::Error)
         .collect();
     if !errors.is_empty() {
@@ -1418,9 +764,7 @@ fn validate_davinci(
 ) {
     for entry in &config.davinci {
         // Match by URI or by uri suffix
-        let uri_matches = entry.uri == uri
-            || uri.ends_with(&entry.uri)
-            || entry.uri.ends_with(uri);
+        let uri_matches = entry.uri == uri || uri.ends_with(&entry.uri) || entry.uri.ends_with(uri);
         if !uri_matches {
             continue;
         }
@@ -1428,10 +772,10 @@ fn validate_davinci(
             if let Err(msg) = evaluate_invariant(inv, content) {
                 use crate::config::ProtectionTier;
                 let (code, sev) = match entry.protection {
-                    ProtectionTier::Error | ProtectionTier::Lock =>
-                        ("COMPILE-001", ViolationSeverity::Error),
-                    ProtectionTier::Warn =>
-                        ("COMPILE-003", ViolationSeverity::Warning),
+                    ProtectionTier::Error | ProtectionTier::Lock => {
+                        ("COMPILE-001", ViolationSeverity::Error)
+                    }
+                    ProtectionTier::Warn => ("COMPILE-003", ViolationSeverity::Warning),
                 };
                 violations.push(CompileViolation {
                     code,
@@ -1519,7 +863,9 @@ fn generate_tree_block(
 ) -> Result<String> {
     let body = match kind {
         "dirtree" => {
-            let tree_root = attrs.root.as_ref()
+            let tree_root = attrs
+                .root
+                .as_ref()
                 .map(|r| root.join(r))
                 .unwrap_or_else(|| root.to_path_buf());
             let opts = DirtreeOptions {
@@ -1542,21 +888,30 @@ fn generate_tree_block(
                     ..Default::default()
                 };
                 match kind {
-                    "org"        => generate_org(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                    "taxonomy"   => generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                    "dependency" => generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?,
-                    "outline"    => generate_outline(&content, attrs.indent_width)?,
+                    "org" => generate_org(&content, &attrs.format, &mut map, attrs.indent_width)?,
+                    "taxonomy" => {
+                        generate_taxonomy(&content, &attrs.format, &mut map, attrs.indent_width)?
+                    }
+                    "dependency" => {
+                        generate_dependency(&content, &attrs.format, &mut map, attrs.indent_width)?
+                    }
+                    "outline" => generate_outline(&content, attrs.indent_width)?,
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else if !inline_body.is_empty() {
                 let content = inline_body.join("\n");
                 match kind {
-                    "org" | "taxonomy" | "dependency" => render_inline_tree(&content, attrs.indent_width)?,
+                    "org" | "taxonomy" | "dependency" => {
+                        render_inline_tree(&content, attrs.indent_width)?
+                    }
                     "outline" => render_inline_outline(&content)?,
                     other => anyhow::bail!("unknown tree kind {:?}", other),
                 }
             } else {
-                anyhow::bail!("proof:tree kind={} requires either source=md://... or an inline body", kind)
+                anyhow::bail!(
+                    "proof:tree kind={} requires either source=md://... or an inline body",
+                    kind
+                )
             }
         }
     };
@@ -1577,397 +932,9 @@ fn generate_tree_block(
     ))
 }
 
-fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
-    let (target_level, _) = headings.last().unwrap();
-    let target_depth = target_level - min_level;
-    let mut counters: Vec<usize> = vec![0; target_depth + 1];
-    for (level, _) in headings {
-        let depth = level - min_level;
-        if depth <= target_depth {
-            counters[depth] += 1;
-            for d in (depth + 1)..=target_depth { counters[d] = 0; }
-        }
-    }
-    let parts: Vec<String> = counters[..=target_depth].iter().map(|n| n.to_string()).collect();
-    format!("{}.", parts.join("."))
-}
-
-fn generate_toc(content: &str, max_depth: usize, style: &str, section: Option<&str>) -> String {
-    // Collect every ATX heading outside fenced code blocks. Depth filtering and
-    // section narrowing happen below so that a target section can sit at any
-    // level relative to `max_depth`.
-    let mut all: Vec<(usize, String)> = Vec::new();
-    let mut in_fence = false;
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") { in_fence = !in_fence; continue; }
-        if in_fence { continue; }
-        if trimmed.starts_with('#') {
-            let level = trimmed.chars().take_while(|&c| c == '#').count();
-            let text = trimmed[level..].trim().to_string();
-            if !text.is_empty() { all.push((level, text)); }
-        }
-    }
-
-    // If `section` is given, narrow `all` to the descendants of the first
-    // heading whose text matches (case-insensitive trim). Descendants run from
-    // the heading after the match through to the next heading at the same or
-    // shallower level. The matching heading itself is excluded — only its
-    // children are listed.
-    let scoped: Vec<(usize, String)> = if let Some(target) = section {
-        let want = target.trim().to_lowercase();
-        let start = all.iter().position(|(_, t)| t.trim().to_lowercase() == want);
-        match start {
-            Some(idx) => {
-                let parent_level = all[idx].0;
-                let mut out = Vec::new();
-                for (level, text) in all.iter().skip(idx + 1) {
-                    if *level <= parent_level { break; }
-                    out.push((*level, text.clone()));
-                }
-                out
-            }
-            None => Vec::new(),
-        }
-    } else {
-        all
-    };
-
-    // Apply max_depth as the last filter so it always means "the absolute
-    // heading level cap" (`level <= max_depth`).
-    let headings: Vec<(usize, String)> = scoped
-        .into_iter()
-        .filter(|(level, _)| *level <= max_depth)
-        .collect();
-
-    if headings.is_empty() { return String::new(); }
-    let min_level = headings.iter().map(|(l, _)| *l).min().unwrap_or(1);
-    let mut out = String::new();
-    for (i, (level, text)) in headings.iter().enumerate() {
-        let depth = level - min_level;
-        let indent = "  ".repeat(depth);
-        if style == "tree" && depth > 0 {
-            let is_last = !headings[i+1..].iter().any(|(l, _)| *l <= *level);
-            let connector = if is_last { "└── " } else { "├── " };
-            let parent_indent = "  ".repeat(depth.saturating_sub(1));
-            out.push_str(&format!("{}  {}{}\n", parent_indent, connector, text));
-        } else if style == "numbered" {
-            let number = build_numbered_label(&headings[..=i], min_level);
-            out.push_str(&format!("{}{} {}\n", indent, number, text));
-        } else {
-            out.push_str(&format!("{}- {}\n", indent, text));
-        }
-    }
-    out.trim_end().to_string()
-}
-
-fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
-    let iw = indent_width.max(2);
-    let mut nodes: Vec<(usize, String)> = Vec::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() { continue; }
-        if let Some(rest) = trimmed.strip_prefix("root:") {
-            nodes.push((0, rest.trim().to_string()));
-            continue;
-        }
-        let leading = line.len() - line.trim_start_matches([' ', '-']).len();
-        // F86: first non-indented line without root: is treated as root
-        if leading == 0 && nodes.is_empty() && !trimmed.starts_with('-') {
-            nodes.push((0, trimmed.trim_start_matches([' ', '-']).trim().to_string()));
-            continue;
-        }
-        let depth = (leading / iw).max(1);
-        let label = trimmed.trim_start_matches([' ', '-']).trim();
-        if label.is_empty() { continue; }
-        nodes.push((depth, label.to_string()));
-    }
-
-    if nodes.is_empty() { anyhow::bail!("inline tree body is empty"); }
-
-    let mut out = String::new();
-    let _n = nodes.len();
-    for (i, (depth, label)) in nodes.iter().enumerate() {
-        if *depth == 0 { out.push_str(label); out.push('\n'); continue; }
-        let prefix = " ".repeat((*depth - 1) * iw);
-        let is_last = !nodes[i+1..].iter().any(|(d, _)| *d == *depth || *d < *depth);
-        let connector = if is_last { "└── " } else { "├── " };
-        out.push_str(&prefix);
-        out.push_str(connector);
-        out.push_str(label);
-        out.push('\n');
-    }
-    Ok(out.trim_end().to_string())
-}
-
-fn render_inline_outline(content: &str) -> Result<String> {
-    let mut out = String::new();
-    for line in content.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() { continue; }
-        out.push_str(trimmed);
-        out.push('\n');
-    }
-    Ok(out.trim_end().to_string())
-}
-
-/// Render a `proof:xref` directive as a formatted cross-reference.
-///
-/// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
-/// reading the target file and finding the heading whose slug matches.
-/// Falls back to the URI path if no specific heading is found.
-fn render_xref(uri: &str, label: Option<&str>, format: &str, root: &Path) -> Result<String> {
-    let parsed = mdpath::parse(uri)
-        .map_err(|e| anyhow::anyhow!("invalid xref URI {:?}: {}", uri, e))?;
-
-    let target_path = root.join(&parsed.path);
-    if !target_path.exists() {
-        anyhow::bail!("xref target file not found: {:?}", parsed.path);
-    }
-
-    // Resolve heading text from the heading_path (if any)
-    let heading_text: String = if parsed.heading_path.is_empty() {
-        // No heading — use filename without extension
-        target_path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(&parsed.path)
-            .replace('-', " ")
-            .replace('_', " ")
-    } else {
-        let content = std::fs::read_to_string(&target_path)?;
-        let slug_target = parsed.heading_path.last().map(|s| s.as_str()).unwrap_or("");
-        find_heading_by_slug(&content, slug_target)
-            .unwrap_or_else(|| slug_target.replace('-', " "))
-    };
-
-    let display_label = label.unwrap_or(&heading_text);
-
-    // Build a relative link to the target (path + anchor slug if heading present)
-    let anchor = if parsed.heading_path.is_empty() {
-        String::new()
-    } else {
-        let slug = heading_slug(&heading_text);
-        format!("#{}", slug)
-    };
-    let link = format!("{}{}", parsed.path, anchor);
-
-    let rendered = match format {
-        "note" => format!("> **See also:** [{}]({})", display_label, link),
-        "callout" => format!("→ [{}]({})", display_label, link),
-        _ => format!("*See: [{}]({})*", display_label, link),  // "inline" default
-    };
-
-    Ok(rendered)
-}
-
-/// Find a heading in `content` whose GitHub-style slug matches `target_slug`.
-fn find_heading_by_slug(content: &str, target_slug: &str) -> Option<String> {
-    let mut in_fence = false;
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence { continue; }
-        if trimmed.starts_with('#') {
-            let level = trimmed.chars().take_while(|&c| c == '#').count();
-            let text = trimmed[level..].trim();
-            if !text.is_empty() && heading_slug(text) == target_slug {
-                return Some(text.to_string());
-            }
-        }
-    }
-    None
-}
-
-/// Produce a GitHub-style heading anchor slug from heading text.
-/// Lowercase, spaces → hyphens, strip non-alphanumeric/non-hyphen.
-fn heading_slug(text: &str) -> String {
-    text.to_lowercase()
-        .chars()
-        .map(|c| if c == ' ' { '-' } else { c })
-        .filter(|c| c.is_alphanumeric() || *c == '-')
-        .collect()
-}
-
-fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
-    if src.starts_with("md://") {
-        // Try mdpath element resolution first (for addressed elements with selectors)
-        if let Ok(parsed) = mdpath::parse(src) {
-            if let Ok(element) = mdpath::resolve_with_classifier(&parsed, root, &mdpath::DefaultClassifier) {
-                return Ok(element.content);
-            }
-        }
-        // Fall back to reading the whole file directly (for plain data files without selectors)
-        let path_part = src.strip_prefix("md://").unwrap_or(src);
-        let path = root.join(path_part);
-        if path.exists() {
-            return std::fs::read_to_string(&path)
-                .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e));
-        }
-        anyhow::bail!("cannot resolve md:// URI {:?} — file not found and no addressed element", src)
-    } else {
-        let path = root.join(src);
-        std::fs::read_to_string(&path)
-            .map_err(|e| anyhow::anyhow!("reading {:?}: {}", path, e))
-    }
-}
-
 // ─────────────────────────────────────────────────────────
 // proof:element compile arm
 // ─────────────────────────────────────────────────────────
-
-/// Render a `proof:blockquote` directive for prose documents.
-///
-/// Distinct from `proof:quote` (slide-only, centered, curly-quoted): this is
-/// left-aligned, indented, with optional attribution on a trailing line. Two
-/// styles are supported:
-///
-/// - `style="indent"` (default) — emits standard markdown blockquote syntax:
-///   each line of the body is prefixed with `> `, blank lines remain `>`-prefixed
-///   to keep the quote contiguous, and attribution appears as a trailing
-///   `> — Name` line.
-///
-/// - `style="boxed"` — emits an ASCII-framed quote using `┌─...─┐ │ ... │ └─...─┘`,
-///   left-aligned within the frame. Attribution renders inside the frame on its
-///   own right-aligned line. Frame width is `max(visual_width(line) for line in body) + 4`,
-///   capped at the longest body line so the box hugs the content.
-///
-/// Unknown `style=` values silently fall back to `"indent"`.
-fn render_blockquote(text: &str, attribution: Option<&str>, style: &str) -> String {
-    let body_lines: Vec<&str> = text.lines().collect();
-    // Trim leading and trailing blank lines so authors can leave whitespace
-    // around the body for readability without it becoming part of the output.
-    let trimmed_body = trim_blank_edges(&body_lines);
-
-    match style {
-        "boxed" => render_blockquote_boxed(&trimmed_body, attribution),
-        // "indent" and any unknown style fall back to markdown blockquote.
-        _ => render_blockquote_indent(&trimmed_body, attribution),
-    }
-}
-
-fn trim_blank_edges<'a>(lines: &[&'a str]) -> Vec<&'a str> {
-    let start = lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
-    let end = lines.iter().rposition(|l| !l.trim().is_empty()).map(|i| i + 1).unwrap_or(0);
-    if start >= end { Vec::new() } else { lines[start..end].to_vec() }
-}
-
-fn render_blockquote_indent(body: &[&str], attribution: Option<&str>) -> String {
-    let mut out: Vec<String> = body.iter().map(|line| {
-        if line.trim().is_empty() {
-            ">".to_string()
-        } else {
-            format!("> {}", line)
-        }
-    }).collect();
-    if let Some(by) = attribution {
-        if !out.is_empty() { out.push(">".to_string()); }
-        out.push(format!("> — {}", by));
-    }
-    out.join("\n")
-}
-
-fn render_blockquote_boxed(body: &[&str], attribution: Option<&str>) -> String {
-    use crate::layout::visual_width;
-
-    if body.is_empty() && attribution.is_none() {
-        return String::new();
-    }
-
-    // Compute inner width: longest body line, or attribution length, whichever wider.
-    let body_max = body.iter().map(|l| visual_width(l)).max().unwrap_or(0);
-    let attr_w = attribution.map(|a| visual_width(a) + 2).unwrap_or(0); // "— "
-    let inner_w = body_max.max(attr_w);
-
-    let horizontal = "─".repeat(inner_w + 2); // 1 cell of padding each side
-    let top = format!("┌{}┐", horizontal);
-    let bot = format!("└{}┘", horizontal);
-
-    let mut out = vec![top];
-    for line in body {
-        let pad = inner_w.saturating_sub(visual_width(line));
-        out.push(format!("│ {}{} │", line, " ".repeat(pad)));
-    }
-    if let Some(by) = attribution {
-        // Insert a blank padded row before the attribution if there was body content.
-        if !body.is_empty() {
-            out.push(format!("│ {} │", " ".repeat(inner_w)));
-        }
-        let attr_text = format!("— {}", by);
-        let pad = inner_w.saturating_sub(visual_width(&attr_text));
-        // Right-align attribution inside the frame.
-        out.push(format!("│ {}{} │", " ".repeat(pad), attr_text));
-    }
-    out.push(bot);
-    out.join("\n")
-}
-
-/// Resolve a proof:chart directive's data — either from an md:// table or
-/// from the inline `label: value` body.
-fn resolve_chart_data(
-    source: Option<&str>,
-    label_field: Option<&str>,
-    value_field: Option<&str>,
-    inline_body: &str,
-    root: &Path,
-) -> std::result::Result<crate::chart::ChartData, String> {
-    if let Some(uri) = source {
-        let label_col = label_field.ok_or_else(||
-            "proof:chart with source= requires label-field=".to_string())?;
-        let value_col = value_field.ok_or_else(||
-            "proof:chart with source= requires value-field=".to_string())?;
-        let content = resolve_source_for_compile(uri, root)
-            .map_err(|e| format!("chart source error: {}", e))?;
-        chart_data_from_table(&content, label_col, value_col)
-            .map_err(|e| format!("chart table error: {}", e))
-    } else {
-        crate::chart::render::parse_inline_body(inline_body)
-            .map_err(|(line, msg)| format!("chart body line {}: {}", line + 1, msg))
-    }
-}
-
-/// Parse a markdown pipe table and extract `(label_col, value_col)` as a
-/// `ChartData`. Header row determines column order; values must parse as f64.
-fn chart_data_from_table(
-    content: &str,
-    label_col: &str,
-    value_col: &str,
-) -> std::result::Result<crate::chart::ChartData, String> {
-    let mut rows: Vec<Vec<String>> = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('|') { continue; }
-        let cells: Vec<String> = trimmed.trim_matches('|').split('|')
-            .map(|c| c.trim().to_string())
-            .collect();
-        rows.push(cells);
-    }
-    if rows.len() < 2 {
-        return Err("expected pipe table with header + separator + body rows".to_string());
-    }
-    let header = &rows[0];
-    let label_idx = header.iter().position(|h| h == label_col)
-        .ok_or_else(|| format!("label column {:?} not found in header", label_col))?;
-    let value_idx = header.iter().position(|h| h == value_col)
-        .ok_or_else(|| format!("value column {:?} not found in header", value_col))?;
-
-    // Skip header (row 0) and separator (row 1, all dashes).
-    let mut points = Vec::new();
-    for (i, row) in rows.iter().enumerate().skip(1) {
-        if row.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
-            continue;
-        }
-        if row.len() <= label_idx.max(value_idx) { continue; }
-        let label = row[label_idx].clone();
-        let value: f64 = row[value_idx].parse()
-            .map_err(|_| format!("row {}: invalid number {:?}", i, row[value_idx]))?;
-        points.push(crate::chart::ChartPoint { label, value });
-    }
-    Ok(crate::chart::ChartData(points))
-}
 
 #[allow(clippy::too_many_arguments)]
 /// Safe fallback: return source lines for the directive block, guarded against OOB.
@@ -2007,7 +974,9 @@ fn compile_element(
                     uri: uri_str.to_string(),
                     figure_id: None,
                     invariant: String::new(),
-                    message: "proof:element requires either value=\"...\" or a source URI in the body".to_string(),
+                    message:
+                        "proof:element requires either value=\"...\" or a source URI in the body"
+                            .to_string(),
                     source_line: source_line + 1,
                 });
                 return source_fallback(source_lines, source_line, line_end);
@@ -2016,7 +985,10 @@ fn compile_element(
 
         // Resolve URI content
         let content = match resolve_source_for_compile(src_uri, root) {
-            Ok(c) => { *resolved_count += 1; c }
+            Ok(c) => {
+                *resolved_count += 1;
+                c
+            }
             Err(e) => {
                 violations.push(CompileViolation {
                     code: "COMPILE-002",
@@ -2032,7 +1004,11 @@ fn compile_element(
         };
 
         // Parse source table
-        let format = if src_uri.ends_with(".json") { "json" } else { "table" };
+        let format = if src_uri.ends_with(".json") {
+            "json"
+        } else {
+            "table"
+        };
         let rows = match if format == "json" {
             parse_json_source(&content)
         } else {
@@ -2063,7 +1039,8 @@ fn compile_element(
                     uri: src_uri.to_string(),
                     figure_id: None,
                     invariant: String::new(),
-                    message: "proof:element with a source URI requires field=\"ColumnName\"".to_string(),
+                    message: "proof:element with a source URI requires field=\"ColumnName\""
+                        .to_string(),
                     source_line: source_line + 1,
                 });
                 return source_fallback(source_lines, source_line, line_end);
@@ -2184,9 +1161,7 @@ fn compile_element(
                 }
             }
         }
-        ElementKind::Label | ElementKind::Badge => {
-            ElementData::Text(raw_value.clone())
-        }
+        ElementKind::Label | ElementKind::Badge => ElementData::Text(raw_value.clone()),
         ElementKind::Value => {
             // F79: accept formatted display strings ("1,024", "99.9%", "142ms")
             // Strip commas and trailing % then try numeric; fall back to Text display.
@@ -2208,7 +1183,10 @@ fn compile_element(
                         uri: uri_str.to_string(),
                         figure_id: None,
                         invariant: String::new(),
-                        message: format!("element kind={} requires a numeric value; got {:?}", kind, raw_value),
+                        message: format!(
+                            "element kind={} requires a numeric value; got {:?}",
+                            kind, raw_value
+                        ),
                         source_line: source_line + 1,
                     });
                     return source_fallback(source_lines, source_line, line_end);
@@ -2233,7 +1211,10 @@ fn compile_element(
                 uri: uri_str.to_string(),
                 figure_id: None,
                 invariant: String::new(),
-                message: format!("rendered element width {} exceeds budget {}", actual, budget),
+                message: format!(
+                    "rendered element width {} exceeds budget {}",
+                    actual, budget
+                ),
                 source_line: source_line + 1,
             });
             source_fallback(source_lines, source_line, line_end)
@@ -2268,58 +1249,6 @@ fn format_row_block(uri: &str, rendered: &str) -> String {
 }
 
 // ─────────────────────────────────────────────────────────
-// proof:row foreach parsing helpers
-// ─────────────────────────────────────────────────────────
-
-/// Parse `foreach=VAR in URI` from the info string after `proof:row`.
-/// Returns (var_name, source_uri). Both empty strings on parse failure.
-fn parse_foreach(info: &str) -> (String, String) {
-    // Supports two forms:
-    //   source=md://file.md foreach=row    (attr style — source= anywhere)
-    //   foreach=row in md://file.md        (positional style — md:// after foreach=)
-    let mut var_name = String::new();
-    let mut source_uri = String::new();
-
-    // Check source= attr first
-    if let Some(s) = extract_attr_value(info, "source") {
-        if s.starts_with("md://") || s.contains('/') {
-            source_uri = s;
-        }
-    }
-
-    for tok in info.split_whitespace() {
-        if tok.starts_with("foreach=") {
-            var_name = tok["foreach=".len()..].to_string();
-        } else if tok.starts_with("md://") && source_uri.is_empty() {
-            source_uri = tok.to_string();
-        }
-    }
-    (var_name, source_uri)
-}
-
-/// Parse a body line of the form `proof:element kind=X field=Y width=N ...`
-/// into a RowElement. Returns None if the line doesn't start with `proof:element`.
-fn parse_row_element_line(line: &str) -> Option<RowElement> {
-    let rest = line.strip_prefix("proof:element")?.trim();
-    let attrs = ElementAttrs::parse(rest);
-    let kind_str = extract_attr_value(rest, "kind").unwrap_or_else(|| "value".to_string());
-    let kind = ElementKind::parse(&kind_str)?;
-    let field = extract_attr_value(rest, "field").unwrap_or_default();
-    let width = attrs.width.unwrap_or(0);
-    if field.is_empty() || width == 0 { return None; }
-    Some(RowElement {
-        kind,
-        field,
-        width,
-        align: ElementAlign::parse(&attrs.align),
-        format: attrs.format,
-        max: attrs.max,
-        fill_char: attrs.fill,
-        empty_char: attrs.empty,
-    })
-}
-
-// ─────────────────────────────────────────────────────────
 // proof:row compile handler
 // ─────────────────────────────────────────────────────────
 
@@ -2338,7 +1267,10 @@ fn compile_row(
 ) -> String {
     // Resolve source
     let content = match resolve_source_for_compile(source_uri, root) {
-        Ok(c) => { *resolved_count += 1; c }
+        Ok(c) => {
+            *resolved_count += 1;
+            c
+        }
         Err(e) => {
             violations.push(CompileViolation {
                 code: "COMPILE-002",
@@ -2354,7 +1286,11 @@ fn compile_row(
     };
 
     // Parse table
-    let format = if source_uri.ends_with(".json") { "json" } else { "table" };
+    let format = if source_uri.ends_with(".json") {
+        "json"
+    } else {
+        "table"
+    };
     let rows = match if format == "json" {
         parse_json_source(&content)
     } else {
@@ -2382,7 +1318,10 @@ fn compile_row(
             uri: source_uri.to_string(),
             figure_id: None,
             invariant: String::new(),
-            message: format!("proof:row produced no output — source table {:?} has 0 data rows", source_uri),
+            message: format!(
+                "proof:row produced no output — source table {:?} has 0 data rows",
+                source_uri
+            ),
             source_line: source_line + 1,
         });
     }
@@ -2461,9 +1400,9 @@ fn compile_slides_file(
     output_path: &Path,
     _config: &GlintConfig,
 ) -> Result<CompileResult> {
-    use crate::slide::parser::parse_slide_doc;
-    use crate::slide::layout::{render_slide_with_warnings_in_deck, render_slide_pages};
     use crate::slide::bullets::has_reveal_markers;
+    use crate::slide::layout::{render_slide_pages, render_slide_with_warnings_in_deck};
+    use crate::slide::parser::parse_slide_doc;
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
@@ -2552,10 +1491,20 @@ fn compile_slides_file(
         // Emit one canvas block per reveal page (single page for non-reveal slides)
         let num_pages = pages.len();
         for (page_idx, rendered) in pages.into_iter().enumerate() {
-            let separator = format!("SLIDE {} {}", n,
-                "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len())));
+            let separator = format!(
+                "SLIDE {} {}",
+                n,
+                "─".repeat(meta.width.saturating_sub(format!("SLIDE {}  ", n).len()))
+            );
             if use_reveal && num_pages > 1 {
-                parts.push(format!("{} {}/{} (reveal {}/{})", separator, n, total, page_idx + 1, num_pages));
+                parts.push(format!(
+                    "{} {}/{} (reveal {}/{})",
+                    separator,
+                    n,
+                    total,
+                    page_idx + 1,
+                    num_pages
+                ));
             } else {
                 parts.push(format!("{} {}/{}", separator, n, total));
             }
@@ -2575,8 +1524,7 @@ fn compile_slides_file(
     let tmp = output_path.with_extension("proof_tmp");
     std::fs::write(&tmp, &output_text)
         .map_err(|e| anyhow::anyhow!("writing {}: {}", tmp.display(), e))?;
-    std::fs::rename(&tmp, output_path)
-        .map_err(|e| anyhow::anyhow!("renaming output: {}", e))?;
+    std::fs::rename(&tmp, output_path).map_err(|e| anyhow::anyhow!("renaming output: {}", e))?;
 
     Ok(CompileResult {
         output_path: output_path.to_path_buf(),
@@ -2655,7 +1603,13 @@ fn compile_dashboard_file(
         std::collections::HashMap::new();
 
     for directive in &directives {
-        if let Directive::Region { name, body, line_start, .. } = directive {
+        if let Directive::Region {
+            name,
+            body,
+            line_start,
+            ..
+        } = directive
+        {
             let abs_line = body_offset + line_start;
 
             // DASHBOARD-004: region name not declared in front-matter
@@ -2690,7 +1644,9 @@ fn compile_dashboard_file(
     }
 
     // Stop here on any error before painting the canvas
-    let has_errors = violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+    let has_errors = violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error);
     if has_errors {
         return Ok(CompileResult {
             output_path: output_path.to_path_buf(),
@@ -2703,8 +1659,7 @@ fn compile_dashboard_file(
     }
 
     // ── 5. Composite the canvas ───────────────────────────
-    let (canvas_text, dashboard_errors) =
-        compile_dashboard(&meta, &regions, &region_contents);
+    let (canvas_text, dashboard_errors) = compile_dashboard(&meta, &regions, &region_contents);
 
     for de in dashboard_errors {
         let DashboardError { code, message } = de;
@@ -2724,7 +1679,9 @@ fn compile_dashboard_file(
         });
     }
 
-    let has_errors = violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+    let has_errors = violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error);
     if has_errors {
         return Ok(CompileResult {
             output_path: output_path.to_path_buf(),
@@ -2820,8 +1777,13 @@ fn render_region_body(
                 let nested = collect_directives(&synth);
                 if let Some(directive) = nested.into_iter().next() {
                     let rendered = render_one_directive_no_chrome(
-                        &directive, root, config, runner, abs_line + i,
-                        violations, resolved_count,
+                        &directive,
+                        root,
+                        config,
+                        runner,
+                        abs_line + i,
+                        violations,
+                        resolved_count,
                     );
                     for line in rendered.lines() {
                         output.push(line.to_string());
@@ -2875,24 +1837,32 @@ fn render_one_directive_no_chrome(
                 }
             }
         }
-        Directive::Shape { attrs, .. } => {
-            match crate::symbol::shape::render_shape(attrs) {
-                Ok(rendered) => { *resolved_count += 1; rendered }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: e.code,
-                        severity: ViolationSeverity::Error,
-                        uri: String::new(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: e.message,
-                        source_line: abs_line + 1,
-                    });
-                    String::new()
-                }
+        Directive::Shape { attrs, .. } => match crate::symbol::shape::render_shape(attrs) {
+            Ok(rendered) => {
+                *resolved_count += 1;
+                rendered
             }
-        }
-        Directive::Element { kind, source, field, inline_value, attrs, .. } => {
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: e.code,
+                    severity: ViolationSeverity::Error,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: e.message,
+                    source_line: abs_line + 1,
+                });
+                String::new()
+            }
+        },
+        Directive::Element {
+            kind,
+            source,
+            field,
+            inline_value,
+            attrs,
+            ..
+        } => {
             // Force no-chrome regardless of what the author wrote
             let attrs = ElementAttrs {
                 width: attrs.width,
@@ -2906,23 +1876,57 @@ fn render_one_directive_no_chrome(
             // compile_element returns the rendered text directly when no_chrome=true
             let dummy_src_lines: Vec<&str> = Vec::new();
             compile_element(
-                kind, source.as_deref(), field.as_deref(), inline_value.as_deref(),
-                &attrs, root, line_start,
-                violations, &dummy_src_lines, line_start,
+                kind,
+                source.as_deref(),
+                field.as_deref(),
+                inline_value.as_deref(),
+                &attrs,
+                root,
+                line_start,
+                violations,
+                &dummy_src_lines,
+                line_start,
                 resolved_count,
             )
         }
-        Directive::Row { source_uri, separator, declared_width, elements, .. } => {
+        Directive::Row {
+            source_uri,
+            separator,
+            declared_width,
+            elements,
+            ..
+        } => {
             let dummy_src_lines: Vec<&str> = Vec::new();
             compile_row(
-                source_uri, separator, *declared_width, elements,
+                source_uri,
+                separator,
+                *declared_width,
+                elements,
                 /* no_chrome = */ true,
-                root, line_start, violations, &dummy_src_lines, line_start,
+                root,
+                line_start,
+                violations,
+                &dummy_src_lines,
+                line_start,
                 resolved_count,
             )
         }
-        Directive::Tree { kind, source, inline_body, attrs, .. } => {
-            match generate_tree_block(kind, source.as_deref(), inline_body, attrs, root, line_start, violations) {
+        Directive::Tree {
+            kind,
+            source,
+            inline_body,
+            attrs,
+            ..
+        } => {
+            match generate_tree_block(
+                kind,
+                source.as_deref(),
+                inline_body,
+                attrs,
+                root,
+                line_start,
+                violations,
+            ) {
                 Ok(block) => {
                     // generate_tree_block wraps in chrome — strip it for canvas paste.
                     strip_compiled_chrome(&block)
@@ -2941,28 +1945,26 @@ fn render_one_directive_no_chrome(
                 }
             }
         }
-        Directive::Include { uri, .. } => {
-            match resolve_uri(uri, root) {
-                Ok((content, fig_file)) => {
-                    lint_figure(uri, &content, &fig_file, abs_line + 1, runner, violations);
-                    validate_davinci(uri, &content, config, abs_line, violations);
-                    *resolved_count += 1;
-                    extract_content_lines(&content).join("\n")
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: uri.clone(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("{}", e),
-                        source_line: abs_line + 1,
-                    });
-                    String::new()
-                }
+        Directive::Include { uri, .. } => match resolve_uri(uri, root) {
+            Ok((content, fig_file)) => {
+                lint_figure(uri, &content, &fig_file, abs_line + 1, runner, violations);
+                validate_davinci(uri, &content, config, abs_line, violations);
+                *resolved_count += 1;
+                extract_content_lines(&content).join("\n")
             }
-        }
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: uri.clone(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!("{}", e),
+                    source_line: abs_line + 1,
+                });
+                String::new()
+            }
+        },
         // Layout, Table, Region not supported inline within a region
         _ => String::new(),
     }
@@ -2973,15 +1975,27 @@ fn render_one_directive_no_chrome(
 fn strip_compiled_chrome(block: &str) -> String {
     let mut lines: Vec<&str> = block.lines().collect();
     // Drop leading "<!-- proof:compiled ... -->" lines
-    while lines.first().map(|l| l.trim_start().starts_with("<!-- proof:compiled")).unwrap_or(false) {
+    while lines
+        .first()
+        .map(|l| l.trim_start().starts_with("<!-- proof:compiled"))
+        .unwrap_or(false)
+    {
         lines.remove(0);
     }
     // Drop trailing "<!-- /proof:compiled -->" lines
-    while lines.last().map(|l| l.trim_start().starts_with("<!-- /proof:compiled")).unwrap_or(false) {
+    while lines
+        .last()
+        .map(|l| l.trim_start().starts_with("<!-- /proof:compiled"))
+        .unwrap_or(false)
+    {
         lines.pop();
     }
     // Drop a single outer ```...``` fence pair if present
-    if lines.first().map(|l| l.trim_start().starts_with("```")).unwrap_or(false) {
+    if lines
+        .first()
+        .map(|l| l.trim_start().starts_with("```"))
+        .unwrap_or(false)
+    {
         lines.remove(0);
     }
     if lines.last().map(|l| l.trim() == "```").unwrap_or(false) {
@@ -3012,7 +2026,10 @@ pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use crate::compile_directive::{parse_foreach, parse_row_element_line, LayoutAttrs};
+
     use super::*;
+    use crate::compile_directive::proof_directive_kind;
 
     // ── parse_directives ──────────────────────────────────
 
@@ -3136,7 +2153,17 @@ mod tests {
 
     #[test]
     fn test_apply_replacements_multiple() {
-        let lines = vec!["before", "```proof:include", "md://a", "```", "middle", "```proof:include", "md://b", "```", "after"];
+        let lines = vec![
+            "before",
+            "```proof:include",
+            "md://a",
+            "```",
+            "middle",
+            "```proof:include",
+            "md://b",
+            "```",
+            "after",
+        ];
         let replacements = vec![
             (1, 3, "A_RESOLVED".to_string()),
             (5, 7, "B_RESOLVED".to_string()),
@@ -3183,7 +2210,12 @@ mod tests {
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1);
         match &dirs[0] {
-            Directive::Include { uri, pin, line_start, line_end } => {
+            Directive::Include {
+                uri,
+                pin,
+                line_start,
+                line_end,
+            } => {
                 assert_eq!(uri, "md://fig.md#:0");
                 assert_eq!(*line_start, 2);
                 assert_eq!(*line_end, 4);
@@ -3251,7 +2283,12 @@ mod tests {
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1, "should parse one Row directive");
         match &dirs[0] {
-            Directive::Row { source_uri, var_name, elements, .. } => {
+            Directive::Row {
+                source_uri,
+                var_name,
+                elements,
+                ..
+            } => {
                 assert_eq!(source_uri, "md://stats.md#edm:table:0");
                 assert_eq!(var_name, "player");
                 assert_eq!(elements.len(), 2, "should parse 2 RowElements");
@@ -3306,14 +2343,18 @@ mod tests {
 
     #[test]
     fn test_proof_directive_kind_row() {
-        assert_eq!(proof_directive_kind("```proof:row foreach=p in md://x.md"), Some("row"));
+        assert_eq!(
+            proof_directive_kind("```proof:row foreach=p in md://x.md"),
+            Some("row")
+        );
     }
 
     // ── parse_foreach ────────────────────────────────────
 
     #[test]
     fn test_parse_foreach_extracts_var_and_uri() {
-        let (var, uri) = parse_foreach("foreach=player in md://stats.md#edm:table:0 separator=\" \"");
+        let (var, uri) =
+            parse_foreach("foreach=player in md://stats.md#edm:table:0 separator=\" \"");
         assert_eq!(var, "player");
         assert_eq!(uri, "md://stats.md#edm:table:0");
     }
@@ -3322,7 +2363,9 @@ mod tests {
 
     #[test]
     fn test_parse_row_element_line_label() {
-        let elem = parse_row_element_line("proof:element kind=label field=name width=12 align=left").unwrap();
+        let elem =
+            parse_row_element_line("proof:element kind=label field=name width=12 align=left")
+                .unwrap();
         assert_eq!(elem.field, "name");
         assert_eq!(elem.width, 12);
         assert!(matches!(elem.kind, ElementKind::Label));
@@ -3330,7 +2373,8 @@ mod tests {
 
     #[test]
     fn test_parse_row_element_line_mini_bar_with_max() {
-        let elem = parse_row_element_line("proof:element kind=mini-bar field=pts width=10 max=200").unwrap();
+        let elem = parse_row_element_line("proof:element kind=mini-bar field=pts width=10 max=200")
+            .unwrap();
         assert_eq!(elem.field, "pts");
         assert_eq!(elem.width, 10);
         assert_eq!(elem.max, Some(200.0));
@@ -3350,8 +2394,26 @@ mod tests {
         use crate::element::row::validate_r1;
         use crate::element::row::RowElement;
         let elems = vec![
-            RowElement { kind: ElementKind::Label, field: "n".into(), width: 10, align: ElementAlign::Left, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
-            RowElement { kind: ElementKind::Value, field: "p".into(), width: 5, align: ElementAlign::Right, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+            RowElement {
+                kind: ElementKind::Label,
+                field: "n".into(),
+                width: 10,
+                align: ElementAlign::Left,
+                format: "{}".into(),
+                max: None,
+                fill_char: '█',
+                empty_char: '░',
+            },
+            RowElement {
+                kind: ElementKind::Value,
+                field: "p".into(),
+                width: 5,
+                align: ElementAlign::Right,
+                format: "{}".into(),
+                max: None,
+                fill_char: '█',
+                empty_char: '░',
+            },
         ];
         // sum=15, sep_len=1, n=2 → total=16, declared=16 → OK
         assert!(validate_r1(&elems, 1, Some(16)).is_none());
@@ -3362,8 +2424,26 @@ mod tests {
         use crate::element::row::validate_r1;
         use crate::element::row::RowElement;
         let elems = vec![
-            RowElement { kind: ElementKind::Label, field: "n".into(), width: 10, align: ElementAlign::Left, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
-            RowElement { kind: ElementKind::Value, field: "p".into(), width: 5, align: ElementAlign::Right, format: "{}".into(), max: None, fill_char: '█', empty_char: '░' },
+            RowElement {
+                kind: ElementKind::Label,
+                field: "n".into(),
+                width: 10,
+                align: ElementAlign::Left,
+                format: "{}".into(),
+                max: None,
+                fill_char: '█',
+                empty_char: '░',
+            },
+            RowElement {
+                kind: ElementKind::Value,
+                field: "p".into(),
+                width: 5,
+                align: ElementAlign::Right,
+                format: "{}".into(),
+                max: None,
+                fill_char: '█',
+                empty_char: '░',
+            },
         ];
         // actual=16, declared=20 → violation
         let result = validate_r1(&elems, 1, Some(20));
@@ -3378,7 +2458,9 @@ mod tests {
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1, "should parse one Element directive");
         match &dirs[0] {
-            Directive::Element { kind, field, attrs, .. } => {
+            Directive::Element {
+                kind, field, attrs, ..
+            } => {
                 assert_eq!(kind, "value");
                 assert_eq!(field.as_deref(), Some("pts"));
                 assert_eq!(attrs.width, Some(6));
@@ -3403,7 +2485,9 @@ mod tests {
 
     #[test]
     fn test_element_attrs_parse_all_keys() {
-        let attrs = ElementAttrs::parse("kind=value field=pts width=8 align=right format=\"{:.1}\" max=200 fill=▓ empty=░");
+        let attrs = ElementAttrs::parse(
+            "kind=value field=pts width=8 align=right format=\"{:.1}\" max=200 fill=▓ empty=░",
+        );
         assert_eq!(attrs.width, Some(8));
         assert_eq!(attrs.align, "right");
         assert_eq!(attrs.format, "{:.1}");
@@ -3429,18 +2513,49 @@ mod tests {
 
     #[test]
     fn test_proof_directive_kind_element() {
-        assert_eq!(proof_directive_kind("```proof:element kind=value width=4"), Some("element"));
+        assert_eq!(
+            proof_directive_kind("```proof:element kind=value width=4"),
+            Some("element")
+        );
     }
 
     // E2E tests using compile_element directly (no file I/O)
 
     #[test]
     fn test_e2e_element_value_inline() {
-        let attrs = ElementAttrs { width: Some(4), align: "right".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(4),
+            align: "right".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=value value=\"42\" width=4 align=right", "```"];
-        let out = compile_element("value", None, None, Some("42"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
-        assert!(violations.is_empty(), "should have no violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        let lines = vec![
+            "```proof:element kind=value value=\"42\" width=4 align=right",
+            "```",
+        ];
+        let out = compile_element(
+            "value",
+            None,
+            None,
+            Some("42"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "should have no violations: {:?}",
+            violations
+                .iter()
+                .map(|v| v.message.as_str())
+                .collect::<Vec<_>>()
+        );
         assert!(out.contains("42"), "output should contain value: {:?}", out);
         let value_w = crate::layout::visual_width(&" 42");
         assert_eq!(value_w, 3);
@@ -3448,64 +2563,215 @@ mod tests {
 
     #[test]
     fn test_e2e_element_label_inline() {
-        let attrs = ElementAttrs { width: Some(8), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(8),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=label value=\"McDavid\" width=8 align=left", "```"];
-        let out = compile_element("label", None, None, Some("McDavid"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
-        assert!(violations.is_empty(), "should have no violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
-        assert!(out.contains("McDavid"), "output should contain label: {:?}", out);
+        let lines = vec![
+            "```proof:element kind=label value=\"McDavid\" width=8 align=left",
+            "```",
+        ];
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("McDavid"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "should have no violations: {:?}",
+            violations
+                .iter()
+                .map(|v| v.message.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            out.contains("McDavid"),
+            "output should contain label: {:?}",
+            out
+        );
     }
 
     #[test]
     fn test_e2e_element_badge_inline() {
-        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
         let lines = vec!["```proof:element kind=badge value=\"UFA\" width=5", "```"];
-        let out = compile_element("badge", None, None, Some("UFA"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
-        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
+        let out = compile_element(
+            "badge",
+            None,
+            None,
+            Some("UFA"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violations
+                .iter()
+                .map(|v| v.message.as_str())
+                .collect::<Vec<_>>()
+        );
         assert!(out.contains("UFA"), "output: {:?}", out);
     }
 
     #[test]
     fn test_e2e_element_no_chrome_true() {
-        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: true, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: true,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=label value=\"Hi\" width=5 no-chrome", "```"];
-        let out = compile_element("label", None, None, Some("Hi"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
-        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
-        assert!(!out.contains("```"), "no-chrome should have no fence: {:?}", out);
-        assert!(!out.contains("<!--"), "no-chrome should have no HTML comment: {:?}", out);
+        let lines = vec![
+            "```proof:element kind=label value=\"Hi\" width=5 no-chrome",
+            "```",
+        ];
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("Hi"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violations
+                .iter()
+                .map(|v| v.message.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            !out.contains("```"),
+            "no-chrome should have no fence: {:?}",
+            out
+        );
+        assert!(
+            !out.contains("<!--"),
+            "no-chrome should have no HTML comment: {:?}",
+            out
+        );
     }
 
     #[test]
     fn test_e2e_element_no_chrome_false_has_wrapper() {
-        let attrs = ElementAttrs { width: Some(5), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
         let lines = vec!["```proof:element kind=label value=\"Hi\" width=5", "```"];
-        let out = compile_element("label", None, None, Some("Hi"), &attrs, Path::new("."), 0, &mut violations, &lines, 1, &mut 0);
-        assert!(violations.is_empty(), "violations: {:?}", violations.iter().map(|v| v.message.as_str()).collect::<Vec<_>>());
-        assert!(out.contains("<!-- proof:compiled"), "should have traceability comment: {:?}", out);
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("Hi"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violations
+                .iter()
+                .map(|v| v.message.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            out.contains("<!-- proof:compiled"),
+            "should have traceability comment: {:?}",
+            out
+        );
         assert!(out.contains("```"), "should have fence: {:?}", out);
     }
 
     #[test]
     fn test_e2e_element_missing_field_emits_element_005() {
         // Simulate a source table with a known header, but ask for a missing field
-        let attrs = ElementAttrs { width: Some(6), align: "left".to_string(), format: "{}".to_string(), no_chrome: false, ..Default::default() };
+        let attrs = ElementAttrs {
+            width: Some(6),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=value field=absent width=6", "md://test", "```"];
+        let lines = vec![
+            "```proof:element kind=value field=absent width=6",
+            "md://test",
+            "```",
+        ];
         // Use inline value to avoid file I/O, but pass field= with no source → triggers ELEMENT-005 (missing source)
-        compile_element("value", None, Some("absent"), None, &attrs, Path::new("."), 0, &mut violations, &lines, 2, &mut 0);
+        compile_element(
+            "value",
+            None,
+            Some("absent"),
+            None,
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            2,
+            &mut 0,
+        );
         // Should emit ELEMENT-005 because source is None and inline_value is None
         let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
-        assert!(codes.contains(&"ELEMENT-005"), "expected ELEMENT-005, got: {:?}", codes);
+        assert!(
+            codes.contains(&"ELEMENT-005"),
+            "expected ELEMENT-005, got: {:?}",
+            codes
+        );
     }
 
     // ── Wave 3: dashboard pipeline ────────────────────────
 
     #[test]
     fn test_proof_directive_kind_region() {
-        assert_eq!(proof_directive_kind("```proof:region name=header"), Some("region"));
+        assert_eq!(
+            proof_directive_kind("```proof:region name=header"),
+            Some("region")
+        );
     }
 
     #[test]
@@ -3562,8 +2828,12 @@ mod tests {
         // End-to-end: write a .dashboard.source.md to a temp dir, compile, read output
         use std::io::Write;
 
-        let tmp = std::env::temp_dir().join(format!("proof-dash-{}.dashboard.source.md", std::process::id()));
-        let out = std::env::temp_dir().join(format!("proof-dash-{}.dashboard.md", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "proof-dash-{}.dashboard.source.md",
+            std::process::id()
+        ));
+        let out =
+            std::env::temp_dir().join(format!("proof-dash-{}.dashboard.md", std::process::id()));
         let _ = std::fs::remove_file(&tmp);
         let _ = std::fs::remove_file(&out);
 
@@ -3573,30 +2843,50 @@ mod tests {
         drop(f);
 
         let cfg = GlintConfig::default();
-        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
-            .expect("compile_file ok");
+        let result =
+            compile_file(&tmp, &out, &std::env::temp_dir(), &cfg).expect("compile_file ok");
 
         let _ = std::fs::remove_file(&tmp);
 
-        assert!(result.violations.iter().all(|v| v.severity != ViolationSeverity::Error),
+        assert!(
+            result
+                .violations
+                .iter()
+                .all(|v| v.severity != ViolationSeverity::Error),
             "unexpected errors: {:?}",
-            result.violations.iter().map(|v| (v.code, &v.message)).collect::<Vec<_>>());
+            result
+                .violations
+                .iter()
+                .map(|v| (v.code, &v.message))
+                .collect::<Vec<_>>()
+        );
         assert!(result.written, "should have written output");
 
         let written = std::fs::read_to_string(&out).expect("read output");
         let _ = std::fs::remove_file(&out);
 
-        assert!(written.contains("```dashboard"), "should have dashboard fence: {}", written);
+        assert!(
+            written.contains("```dashboard"),
+            "should have dashboard fence: {}",
+            written
+        );
         assert!(written.contains("HEADER LINE"), "top region not rendered");
         assert!(written.contains("FOOTER LINE"), "bot region not rendered");
 
         // Verify D-6: every line inside the fence is exactly the canvas width
-        let inner: Vec<&str> = written.lines()
+        let inner: Vec<&str> = written
+            .lines()
             .skip_while(|l| !l.starts_with("```dashboard"))
             .skip(1)
             .take_while(|l| *l != "```")
             .collect();
-        assert_eq!(inner.len(), 4, "canvas should be height=4 lines, got {}: {:?}", inner.len(), inner);
+        assert_eq!(
+            inner.len(),
+            4,
+            "canvas should be height=4 lines, got {}: {:?}",
+            inner.len(),
+            inner
+        );
         for line in &inner {
             assert_eq!(line.chars().count(), 20, "row width != 20: {:?}", line);
         }
@@ -3605,8 +2895,14 @@ mod tests {
     #[test]
     fn test_dashboard_unknown_region_emits_dashboard_004() {
         use std::io::Write;
-        let tmp = std::env::temp_dir().join(format!("proof-dash-bad-{}.dashboard.source.md", std::process::id()));
-        let out = std::env::temp_dir().join(format!("proof-dash-bad-{}.dashboard.md", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "proof-dash-bad-{}.dashboard.source.md",
+            std::process::id()
+        ));
+        let out = std::env::temp_dir().join(format!(
+            "proof-dash-bad-{}.dashboard.md",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&tmp);
         let _ = std::fs::remove_file(&out);
 
@@ -3617,22 +2913,31 @@ mod tests {
         drop(f);
 
         let cfg = GlintConfig::default();
-        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
-            .expect("compile_file ok");
+        let result =
+            compile_file(&tmp, &out, &std::env::temp_dir(), &cfg).expect("compile_file ok");
 
         let _ = std::fs::remove_file(&tmp);
         let _ = std::fs::remove_file(&out);
 
         let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
-        assert!(codes.contains(&"DASHBOARD-004"),
-            "expected DASHBOARD-004, got: {:?}", codes);
+        assert!(
+            codes.contains(&"DASHBOARD-004"),
+            "expected DASHBOARD-004, got: {:?}",
+            codes
+        );
     }
 
     #[test]
     fn test_dashboard_overlap_emits_dashboard_003() {
         use std::io::Write;
-        let tmp = std::env::temp_dir().join(format!("proof-dash-ovl-{}.dashboard.source.md", std::process::id()));
-        let out = std::env::temp_dir().join(format!("proof-dash-ovl-{}.dashboard.md", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!(
+            "proof-dash-ovl-{}.dashboard.source.md",
+            std::process::id()
+        ));
+        let out = std::env::temp_dir().join(format!(
+            "proof-dash-ovl-{}.dashboard.md",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&tmp);
         let _ = std::fs::remove_file(&out);
 
@@ -3642,15 +2947,18 @@ mod tests {
         drop(f);
 
         let cfg = GlintConfig::default();
-        let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg)
-            .expect("compile_file ok");
+        let result =
+            compile_file(&tmp, &out, &std::env::temp_dir(), &cfg).expect("compile_file ok");
 
         let _ = std::fs::remove_file(&tmp);
         let _ = std::fs::remove_file(&out);
 
         let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
-        assert!(codes.contains(&"DASHBOARD-003"),
-            "expected DASHBOARD-003 (overlap), got: {:?}", codes);
+        assert!(
+            codes.contains(&"DASHBOARD-003"),
+            "expected DASHBOARD-003 (overlap), got: {:?}",
+            codes
+        );
     }
 
     #[test]
@@ -3663,7 +2971,10 @@ mod tests {
         let _ = std::fs::remove_file(&out);
 
         let src = "---\ndashboard:\n  width: 300\n  height: 10\n---\n\n```proof:region name=r1\nhello\n```\n";
-        std::fs::File::create(&tmp).unwrap().write_all(src.as_bytes()).unwrap();
+        std::fs::File::create(&tmp)
+            .unwrap()
+            .write_all(src.as_bytes())
+            .unwrap();
 
         let cfg = GlintConfig::default();
         let result = compile_file(&tmp, &out, &std::env::temp_dir(), &cfg).expect("compile ok");
@@ -3672,8 +2983,11 @@ mod tests {
         let _ = std::fs::remove_file(&out);
 
         let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
-        assert!(codes.contains(&"DASHBOARD-006"),
-            "expected DASHBOARD-006 for canvas width 300 > 220, got: {:?}", codes);
+        assert!(
+            codes.contains(&"DASHBOARD-006"),
+            "expected DASHBOARD-006 for canvas width 300 > 220, got: {:?}",
+            codes
+        );
     }
 
     // ── generate_toc: section= scoping ────────────────────────────────────────
@@ -3716,11 +3030,17 @@ Some prose.
         assert!(out.contains("Authentication"));
         assert!(out.contains("GET /widgets"));
         // The anchor heading itself is NOT listed — only its children
-        assert!(!out.contains("API Reference"),
-            "section anchor heading must be excluded from output, got:\n{}", out);
+        assert!(
+            !out.contains("API Reference"),
+            "section anchor heading must be excluded from output, got:\n{}",
+            out
+        );
         // Sibling sections must NOT appear
-        assert!(!out.contains("Migration"),
-            "headings outside the section must be excluded, got:\n{}", out);
+        assert!(
+            !out.contains("Migration"),
+            "headings outside the section must be excluded, got:\n{}",
+            out
+        );
         assert!(!out.contains("Upgrade Steps"));
         assert!(!out.contains("Intro"));
     }
@@ -3731,23 +3051,32 @@ Some prose.
         let out = generate_toc(SAMPLE_DOC, 3, "list", Some("API Reference"));
         assert!(out.contains("Endpoints"));
         assert!(out.contains("Authentication"));
-        assert!(!out.contains("GET /widgets"),
-            "H4 must be filtered by max_depth=3, got:\n{}", out);
+        assert!(
+            !out.contains("GET /widgets"),
+            "H4 must be filtered by max_depth=3, got:\n{}",
+            out
+        );
         assert!(!out.contains("POST /widgets"));
     }
 
     #[test]
     fn toc_section_case_insensitive_match() {
         let out = generate_toc(SAMPLE_DOC, 4, "list", Some("api reference"));
-        assert!(out.contains("Endpoints"),
-            "section match must be case-insensitive, got:\n{}", out);
+        assert!(
+            out.contains("Endpoints"),
+            "section match must be case-insensitive, got:\n{}",
+            out
+        );
     }
 
     #[test]
     fn toc_section_not_found_returns_empty() {
         let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Nonexistent Section"));
-        assert!(out.is_empty(),
-            "missing section should produce empty TOC, got:\n{}", out);
+        assert!(
+            out.is_empty(),
+            "missing section should produce empty TOC, got:\n{}",
+            out
+        );
     }
 
     #[test]
@@ -3764,8 +3093,11 @@ Some prose.
     fn toc_section_numbered_renumbers_from_section() {
         let out = generate_toc(SAMPLE_DOC, 4, "numbered", Some("API Reference"));
         // Within the section, the first H3 is "1." (re-rooted by min_level)
-        assert!(out.starts_with("1. Endpoints"),
-            "numbered TOC must renumber from the section root, got:\n{}", out);
+        assert!(
+            out.starts_with("1. Endpoints"),
+            "numbered TOC must renumber from the section root, got:\n{}",
+            out
+        );
     }
 
     #[test]
@@ -3774,7 +3106,9 @@ Some prose.
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1);
         match &dirs[0] {
-            Directive::Toc { section, max_depth, .. } => {
+            Directive::Toc {
+                section, max_depth, ..
+            } => {
                 assert_eq!(section.as_deref(), Some("API Reference"));
                 assert_eq!(*max_depth, 3);
             }
@@ -3790,7 +3124,9 @@ Some prose.
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1);
         match &dirs[0] {
-            Directive::Xref { uri, format, label, .. } => {
+            Directive::Xref {
+                uri, format, label, ..
+            } => {
                 assert_eq!(uri, "md://api.md#authentication");
                 assert_eq!(format, "note");
                 assert!(label.is_none());
@@ -3826,26 +3162,55 @@ Some prose.
 
         let result = render_xref("md://api.md#authentication", None, "inline", dir.path())
             .expect("render_xref should succeed");
-        assert!(result.contains("See:"), "inline format should start with See:");
-        assert!(result.contains("Authentication"), "should resolve heading text");
-        assert!(result.contains("api.md#authentication"), "should include link");
+        assert!(
+            result.contains("See:"),
+            "inline format should start with See:"
+        );
+        assert!(
+            result.contains("Authentication"),
+            "should resolve heading text"
+        );
+        assert!(
+            result.contains("api.md#authentication"),
+            "should include link"
+        );
     }
 
     #[test]
     fn xref_note_format_renders_blockquote() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("ref.md"), "# Ref\n\n## Background\n\nContent.\n").unwrap();
+        std::fs::write(
+            dir.path().join("ref.md"),
+            "# Ref\n\n## Background\n\nContent.\n",
+        )
+        .unwrap();
         let result = render_xref("md://ref.md#background", None, "note", dir.path()).unwrap();
-        assert!(result.starts_with("> **See also:**"), "note format must use blockquote");
+        assert!(
+            result.starts_with("> **See also:**"),
+            "note format must use blockquote"
+        );
         assert!(result.contains("Background"));
     }
 
     #[test]
     fn xref_label_override_used_instead_of_heading() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("guide.md"), "# Guide\n\n## Setup\n\nContent.\n").unwrap();
-        let result = render_xref("md://guide.md#setup", Some("the setup section"), "inline", dir.path()).unwrap();
-        assert!(result.contains("the setup section"), "label override must appear in output");
+        std::fs::write(
+            dir.path().join("guide.md"),
+            "# Guide\n\n## Setup\n\nContent.\n",
+        )
+        .unwrap();
+        let result = render_xref(
+            "md://guide.md#setup",
+            Some("the setup section"),
+            "inline",
+            dir.path(),
+        )
+        .unwrap();
+        assert!(
+            result.contains("the setup section"),
+            "label override must appear in output"
+        );
         assert!(!result.contains("Setup") || result.contains("the setup section"));
     }
 
@@ -3860,7 +3225,10 @@ Some prose.
 
     #[test]
     fn blockquote_directive_kind_detected() {
-        assert_eq!(proof_directive_kind("```proof:blockquote"), Some("blockquote"));
+        assert_eq!(
+            proof_directive_kind("```proof:blockquote"),
+            Some("blockquote")
+        );
         assert_eq!(
             proof_directive_kind("```proof:blockquote attribution=\"Author\""),
             Some("blockquote"),
@@ -3888,7 +3256,10 @@ Some prose.
         let text = "First paragraph.\n\nSecond paragraph.";
         let out = render_blockquote(text, None, "indent");
         let lines: Vec<&str> = out.lines().collect();
-        assert_eq!(lines, vec!["> First paragraph.", ">", "> Second paragraph."]);
+        assert_eq!(
+            lines,
+            vec!["> First paragraph.", ">", "> Second paragraph."]
+        );
     }
 
     #[test]
@@ -3901,9 +3272,11 @@ Some prose.
     #[test]
     fn blockquote_unknown_style_falls_back_to_indent() {
         let out_unknown = render_blockquote("hi", None, "marble");
-        let out_indent  = render_blockquote("hi", None, "indent");
-        assert_eq!(out_unknown, out_indent,
-            "unknown style must fall back to indent (permissive parsing)");
+        let out_indent = render_blockquote("hi", None, "indent");
+        assert_eq!(
+            out_unknown, out_indent,
+            "unknown style must fall back to indent (permissive parsing)"
+        );
     }
 
     #[test]
@@ -3917,7 +3290,9 @@ Some prose.
         assert!(lines.last().unwrap().starts_with('└'));
         assert!(lines.last().unwrap().ends_with('┘'));
         // Content row contains the text and is bracketed by │ ... │.
-        assert!(lines.iter().any(|l| l.starts_with('│') && l.contains("Hello world") && l.ends_with('│')));
+        assert!(lines
+            .iter()
+            .any(|l| l.starts_with('│') && l.contains("Hello world") && l.ends_with('│')));
     }
 
     #[test]
@@ -3926,8 +3301,11 @@ Some prose.
         let lines: Vec<&str> = out.lines().collect();
         // Last content line (before bottom border) should hold the attribution.
         let attr_line = lines[lines.len() - 2];
-        assert!(attr_line.contains("— Hamlet"),
-            "expected attribution in penultimate line, got {:?}", attr_line);
+        assert!(
+            attr_line.contains("— Hamlet"),
+            "expected attribution in penultimate line, got {:?}",
+            attr_line
+        );
         assert!(attr_line.starts_with('│') && attr_line.ends_with('│'));
     }
 
@@ -3938,7 +3316,12 @@ Some prose.
         let dirs = collect_directives(src);
         assert_eq!(dirs.len(), 1, "expected exactly one Blockquote directive");
         match &dirs[0] {
-            Directive::Blockquote { text, attribution, style, .. } => {
+            Directive::Blockquote {
+                text,
+                attribution,
+                style,
+                ..
+            } => {
                 assert!(text.contains("Analytical Engine"));
                 assert_eq!(attribution.as_deref(), Some("Ada"));
                 assert_eq!(style, "indent", "default style is indent");
