@@ -492,6 +492,7 @@ proof compile --watch
 | [Compile](docs/guides/07-compile.md) | Full directive reference |
 | [Lint](docs/guides/08-lint.md) | Check rules and proof.toml |
 | [Crates](docs/guides/09-crates.md) | proof-canvas and proof-math APIs |
+| [CROP](docs/guides/12-crop.md) | Corpus-intelligence adapter |
 
 ---
 

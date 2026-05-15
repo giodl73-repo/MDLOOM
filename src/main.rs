@@ -7,6 +7,7 @@ mod cmd_check;
 mod cmd_compile;
 mod cmd_config;
 mod cmd_context;
+mod cmd_crop;
 mod cmd_depends;
 mod cmd_draft;
 mod cmd_fix;
