@@ -102,6 +102,40 @@ Each report also accepts `--root`, `--extension`, `--exclude-dir`, `--format
 json`, and `--format markdown`. PROOF relays CROP's exit code so CI can fail on
 CROP-side report errors without PROOF reimplementing those checks.
 
+When PROOF source files need corpus side-info during compilation, sync all JSON
+reports into the compiler's default side-info store:
+
+```text
+proof crop sync --view .crop/views/ready-guides.json
+```
+
+This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
+`.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
+
+---
+
+## Insert backlink lists in source documents
+
+After `proof crop sync`, authors can render inbound links directly from CROP's
+backlink graph:
+
+````markdown
+```proof:backlinks target="reference.source.md"
+```
+````
+
+By default the directive reads `.proof/side-info/backlinks.json` and renders a
+Markdown list. Use `format=count` for a numeric count or `format=table` for a
+source/target table:
+
+````markdown
+```proof:backlinks target="reference.source.md" format=table
+```
+````
+
+Use `side-info="path/to/backlinks.json"` when a source should consume a
+non-default CROP report.
+
 ---
 
 ## Check generated artifact health

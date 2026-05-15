@@ -30,6 +30,8 @@ enum CropCommand {
     Headings(SideInfoArgs),
     /// Report PROOF generated artifact manifest health through CROP
     Artifacts(ArtifactsArgs),
+    /// Generate side-info JSON files under .proof\side-info for PROOF compiler use
+    Sync(SyncArgs),
 }
 
 #[derive(clap::Args)]
@@ -99,6 +101,25 @@ struct ArtifactsArgs {
     output: Option<PathBuf>,
 }
 
+#[derive(clap::Args)]
+struct SyncArgs {
+    /// Root directory or file to analyze
+    #[arg(long)]
+    root: Option<PathBuf>,
+    /// crop.view.v1 recipe to analyze
+    #[arg(long)]
+    view: Option<PathBuf>,
+    /// Directory where links/backlinks/frontmatter/headings JSON files are written
+    #[arg(long, default_value = ".proof\\side-info")]
+    output_dir: PathBuf,
+    /// Restrict analyzed files to one or more extensions, e.g. --extension md
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename while analyzing
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
+}
+
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status),
@@ -114,6 +135,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
             run_side_info(args.crop_bin, "headings", side_info, globals)
         }
         CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
+        CropCommand::Sync(sync) => run_sync(args.crop_bin, sync),
     }
 }
 
@@ -250,6 +272,55 @@ fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<
     }
 
     Ok(crop_args)
+}
+
+fn run_sync(crop_bin: PathBuf, args: SyncArgs) -> Result<()> {
+    let command_args = build_sync_args(args)?;
+    for crop_args in command_args {
+        run_crop(crop_bin.clone(), crop_args)?;
+    }
+    Ok(())
+}
+
+fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
+    if args.root.is_some() && args.view.is_some() {
+        bail!("proof crop sync accepts either --root or --view, not both");
+    }
+
+    std::fs::create_dir_all(&args.output_dir)
+        .with_context(|| format!("creating side-info directory {}", args.output_dir.display()))?;
+
+    let mut all = Vec::new();
+    for command in ["links", "backlinks", "frontmatter", "headings"] {
+        let mut crop_args = vec![command.to_string()];
+        if let Some(root) = &args.root {
+            crop_args.push("--root".to_string());
+            crop_args.push(root.display().to_string());
+        }
+        if let Some(view) = &args.view {
+            crop_args.push("--view".to_string());
+            crop_args.push(view.display().to_string());
+        }
+        for extension in &args.extensions {
+            crop_args.push("--extension".to_string());
+            crop_args.push(extension.clone());
+        }
+        for exclude_dir in &args.exclude_dirs {
+            crop_args.push("--exclude-dir".to_string());
+            crop_args.push(exclude_dir.clone());
+        }
+        crop_args.push("--format".to_string());
+        crop_args.push("json".to_string());
+        crop_args.push("--output".to_string());
+        crop_args.push(
+            args.output_dir
+                .join(format!("{}.json", command))
+                .display()
+                .to_string(),
+        );
+        all.push(crop_args);
+    }
+    Ok(all)
 }
 
 fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
@@ -455,5 +526,36 @@ mod tests {
                 "ARTIFACTS.md"
             ]
         );
+    }
+
+    #[test]
+    fn sync_args_generate_all_side_info_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let output_dir = dir.path().join("side-info");
+        let args = build_sync_args(SyncArgs {
+            root: None,
+            view: Some(PathBuf::from("ready.json")),
+            output_dir: output_dir.clone(),
+            extensions: vec!["md".to_string()],
+            exclude_dirs: vec!["target".to_string()],
+        })
+        .unwrap();
+
+        assert_eq!(args.len(), 4);
+        assert_eq!(args[0][0], "links");
+        assert_eq!(args[1][0], "backlinks");
+        assert_eq!(args[2][0], "frontmatter");
+        assert_eq!(args[3][0], "headings");
+        for crop_args in &args {
+            assert!(crop_args.contains(&"--view".to_string()));
+            assert!(crop_args.contains(&"ready.json".to_string()));
+            assert!(crop_args.contains(&"--format".to_string()));
+            assert!(crop_args.contains(&"json".to_string()));
+            assert!(crop_args.contains(&"--extension".to_string()));
+            assert!(crop_args.contains(&"md".to_string()));
+            assert!(crop_args.contains(&"--exclude-dir".to_string()));
+            assert!(crop_args.contains(&"target".to_string()));
+        }
+        assert!(args[1].contains(&output_dir.join("backlinks.json").display().to_string()));
     }
 }

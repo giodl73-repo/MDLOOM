@@ -76,6 +76,90 @@ fn toc_directive_generates_outline_in_output() {
 }
 
 #[test]
+fn backlinks_directive_renders_default_crop_side_info() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("backlinks.json"),
+        r#"{
+  "schema_version": "crop.markdown-backlinks.v1",
+  "root": "docs",
+  "source_count": 2,
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "title": "Reference",
+      "inbound_link_count": 2,
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md#reference" },
+        { "source": "nested/overview.source.md", "target": "reference.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let src =
+        "# Reference\n\n```proof:backlinks target=\"md://reference.source.md#reference\"\n```\n";
+    let (out, violations) = compile_str(src, "reference.source.md", dir.path());
+
+    assert!(violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(out.contains("- [guide.source.md](guide.source.md)"));
+    assert!(out.contains("- [overview.source.md](nested/overview.source.md)"));
+}
+
+#[test]
+fn backlinks_directive_supports_count_table_and_empty_formats() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("backlinks.json"),
+        r#"{
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md#reference" }
+      ]
+    },
+    { "source": "empty.source.md", "inbound_links": [] }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let count_src =
+        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=count\n```\n";
+    let (count_out, count_violations) = compile_str(count_src, "reference.source.md", dir.path());
+    assert!(count_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(count_out.contains("\n1\n"));
+
+    let table_src =
+        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=table\n```\n";
+    let (table_out, table_violations) = compile_str(table_src, "reference.source.md", dir.path());
+    assert!(table_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(table_out.contains("| Source | Target |"));
+    assert!(table_out
+        .contains("| [guide.source.md](guide.source.md) | `reference.source.md#reference` |"));
+
+    let empty_src = "# Empty\n\n```proof:backlinks target=\"empty.source.md\"\n```\n";
+    let (empty_out, empty_violations) = compile_str(empty_src, "empty.source.md", dir.path());
+    assert!(empty_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(empty_out.contains("_No backlinks._"));
+}
+
+#[test]
 fn source_frontmatter_is_stripped_from_compile_output() {
     let dir = tempfile::tempdir().unwrap();
     let src = "---\ntags: [ops, runbook]\nops: [compile]\n---\n# Tagged Source\n\nBody.\n";

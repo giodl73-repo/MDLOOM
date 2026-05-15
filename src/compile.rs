@@ -163,6 +163,14 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    /// proof:backlinks — render inbound links for a target from CROP side-info.
+    Backlinks {
+        target: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
     /// proof:chart — full bar or line chart (distinct from sparkline elements).
     Chart {
         attrs: crate::chart::ChartAttrs,
@@ -320,6 +328,7 @@ impl Directive {
             Directive::Toc { line_start, .. } => *line_start,
             Directive::Xref { line_start, .. } => *line_start,
             Directive::Blockquote { line_start, .. } => *line_start,
+            Directive::Backlinks { line_start, .. } => *line_start,
             Directive::Chart { line_start, .. } => *line_start,
         }
     }
@@ -338,6 +347,7 @@ impl Directive {
             Directive::Toc { line_end, .. } => *line_end,
             Directive::Xref { line_end, .. } => *line_end,
             Directive::Blockquote { line_end, .. } => *line_end,
+            Directive::Backlinks { line_end, .. } => *line_end,
             Directive::Chart { line_end, .. } => *line_end,
         }
     }
@@ -830,6 +840,38 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         line_end,
                     });
                 }
+                "backlinks" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:backlinks")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let target = extract_attr_value(&info_after, "target")
+                        .or_else(|| extract_attr_value(&info_after, "uri"))
+                        .or_else(|| extract_attr_value(&info_after, "source"))
+                        .or_else(|| {
+                            body.iter().find_map(|l| {
+                                let t = l.trim();
+                                if !t.is_empty() {
+                                    Some(t.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .unwrap_or_default();
+                    let source = extract_attr_value(&info_after, "side-info")
+                        .or_else(|| extract_attr_value(&info_after, "side_info"));
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "list".to_string());
+                    directives.push(Directive::Backlinks {
+                        target,
+                        source,
+                        format,
+                        line_start,
+                        line_end,
+                    });
+                }
                 "chart" => {
                     let info_after = info_after_backticks
                         .strip_prefix("proof:chart")
@@ -954,6 +996,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
         Some("xref")
     } else if rest.starts_with("blockquote") {
         Some("blockquote")
+    } else if rest.starts_with("backlinks") {
+        Some("backlinks")
     } else if rest.starts_with("chart") {
         Some("chart")
     } else if rest.starts_with("numbered-list") {
@@ -1482,6 +1526,33 @@ pub fn compile_file(
                     rendered
                 )
             }
+
+            Directive::Backlinks {
+                target,
+                source,
+                format,
+                ..
+            } => match render_backlinks(target, source.as_deref(), format, root) {
+                Ok(rendered) => {
+                    resolved_count += 1;
+                    format!(
+                        "<!-- proof:compiled from=\"proof:backlinks\" target=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+                        target, rendered
+                    )
+                }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: "COMPILE-002",
+                        severity: ViolationSeverity::Error,
+                        uri: target.clone(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: format!("backlinks error: {}", e),
+                        source_line: line_start + 1 + source_line_offset,
+                    });
+                    source_fallback(&source_lines, line_start, line_end)
+                }
+            },
 
             Directive::Chart {
                 attrs,
@@ -2291,6 +2362,92 @@ fn render_xref(uri: &str, label: Option<&str>, format: &str, root: &Path) -> Res
     };
 
     Ok(rendered)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BacklinksReport {
+    pages: Vec<BacklinksPage>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BacklinksPage {
+    source: String,
+    #[serde(default)]
+    inbound_links: Vec<BacklinkEntry>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BacklinkEntry {
+    source: String,
+    #[serde(default)]
+    target: String,
+}
+
+fn render_backlinks(
+    target: &str,
+    side_info: Option<&str>,
+    format: &str,
+    root: &Path,
+) -> Result<String> {
+    let report_path = side_info
+        .map(|p| root.join(p))
+        .unwrap_or_else(|| root.join(".proof").join("side-info").join("backlinks.json"));
+    let content = std::fs::read_to_string(&report_path)
+        .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
+    let report: BacklinksReport = serde_json::from_str(&content)
+        .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
+    let target = normalize_backlink_target(target);
+    let page = report
+        .pages
+        .iter()
+        .find(|page| normalize_backlink_target(&page.source) == target)
+        .ok_or_else(|| {
+            anyhow::anyhow!("target {:?} not found in CROP backlinks side-info", target)
+        })?;
+
+    if page.inbound_links.is_empty() {
+        return Ok("_No backlinks._".to_string());
+    }
+
+    let mut lines = Vec::new();
+    match format {
+        "count" => Ok(page.inbound_links.len().to_string()),
+        "table" => {
+            lines.push("| Source | Target |".to_string());
+            lines.push("|--------|--------|".to_string());
+            for link in &page.inbound_links {
+                lines.push(format!(
+                    "| [{}]({}) | `{}` |",
+                    backlink_label(&link.source),
+                    link.source,
+                    link.target
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+        _ => {
+            for link in &page.inbound_links {
+                lines.push(format!(
+                    "- [{}]({})",
+                    backlink_label(&link.source),
+                    link.source
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+    }
+}
+
+fn normalize_backlink_target(target: &str) -> String {
+    let target = target.trim().trim_matches('"').trim_matches('\'');
+    let target = target.strip_prefix("md://").unwrap_or(target);
+    let target = target.split('#').next().unwrap_or(target);
+    target.replace('\\', "/")
+}
+
+fn backlink_label(source: &str) -> String {
+    let path = source.replace('\\', "/");
+    path.rsplit('/').next().unwrap_or(source).to_string()
 }
 
 /// Find a heading in `content` whose GitHub-style slug matches `target_slug`.

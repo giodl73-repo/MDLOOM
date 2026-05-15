@@ -473,13 +473,13 @@ fn write_fake_crop_bin(dir: &Path, args_file: &Path, exit_code: i32) -> PathBuf 
     };
     let script = if cfg!(windows) {
         format!(
-            "@echo off\r\necho %* > \"{}\"\r\nexit /b {}\r\n",
+            "@echo off\r\necho %* >> \"{}\"\r\nexit /b {}\r\n",
             args_file.display(),
             exit_code
         )
     } else {
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$*\" > '{}'\nexit {}\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nexit {}\n",
             args_file.display(),
             exit_code
         )
@@ -1861,6 +1861,59 @@ fn binary_crop_side_info_delegates_to_named_crop_report() {
         "got: {}",
         args
     );
+    assert!(args.contains("--extension md"), "got: {}", args);
+    assert!(args.contains("--exclude-dir target"), "got: {}", args);
+}
+
+#[test]
+fn binary_crop_sync_generates_all_side_info_reports() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let output_dir = dir.path().join(".proof").join("side-info");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("sync")
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--output-dir")
+        .arg(&output_dir)
+        .arg("--extension")
+        .arg("md")
+        .arg("--exclude-dir")
+        .arg("target")
+        .output()
+        .expect("failed to run proof crop sync");
+
+    assert!(
+        output.status.success(),
+        "proof crop sync failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    for command in ["links", "backlinks", "frontmatter", "headings"] {
+        assert!(args.contains(command), "got: {}", args);
+        assert!(
+            args.contains(
+                &output_dir
+                    .join(format!("{}.json", command))
+                    .display()
+                    .to_string()
+            ),
+            "got: {}",
+            args
+        );
+    }
+    assert!(args.contains("--format json"), "got: {}", args);
     assert!(args.contains("--extension md"), "got: {}", args);
     assert!(args.contains("--exclude-dir target"), "got: {}", args);
 }
