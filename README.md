@@ -2,6 +2,8 @@
 
 **Write in markdown. Compile to anything.**
 
+**Series:** [Tools & Infrastructure](https://github.com/giodl73-repo/giodl73-repo/blob/main/series/tools-infrastructure.md).
+
 proof is a full markdown compilation toolchain — LaTeX math, ASCII slide decks,
 live dashboards, tree diagrams, sparkline charts, cross-referenced guides — all
 authored in plain text, compiled to terminal-perfect output.
@@ -136,6 +138,8 @@ proof stats --by-tag src/guides/
 proof check src/guides/ --tag publish --op lint
 proof compile src/guides/ --tag publish --content-tag guide
 proof status src/guides/
+proof index --root docs/guides --output docs/INDEX.md
+proof catalog --root docs/guides --output docs/CATALOG.md
 ```
 
 Tag filters are opt-in and exact-match. Defaults remain inclusive; multiple
