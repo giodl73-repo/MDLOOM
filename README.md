@@ -181,6 +181,9 @@ the literal `.source.md` body, and writes high-confidence markdown pipe tables t
 sidecar files like `proof-source/guide.tables.json`, recording each extraction in
 the report.
 
+See `docs/guides/14-backfill-migration.md` for a MAXIM-style staged migration
+checklist.
+
 ---
 
 ## Directives
