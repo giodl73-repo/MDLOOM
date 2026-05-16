@@ -301,6 +301,7 @@ fn run_once(
                 status: artifact_status,
                 directives_resolved: result.directives_resolved,
                 from_cache: result.from_cache,
+                resolved_files: result.resolved_files.clone(),
                 diagnostics: result
                     .violations
                     .iter()

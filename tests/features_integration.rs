@@ -160,6 +160,143 @@ fn backlinks_directive_supports_count_table_and_empty_formats() {
 }
 
 #[test]
+fn backlinks_directive_tracks_default_side_info_as_resolved_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    let backlinks_path = side_info.join("backlinks.json");
+    std::fs::write(
+        &backlinks_path,
+        r#"{
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let src_path = dir.path().join("reference.source.md");
+    std::fs::write(
+        &src_path,
+        "# Reference\n\n```proof:backlinks target=\"reference.source.md\"\n```\n",
+    )
+    .unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+
+    assert!(result
+        .violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert_eq!(result.resolved_files, vec![backlinks_path]);
+}
+
+#[test]
+fn backlinks_directive_tracks_explicit_side_info_as_resolved_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let report_dir = dir.path().join("reports");
+    std::fs::create_dir_all(&report_dir).unwrap();
+    let backlinks_path = report_dir.join("custom-backlinks.json");
+    std::fs::write(
+        &backlinks_path,
+        r#"{
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let src_path = dir.path().join("reference.source.md");
+    std::fs::write(
+        &src_path,
+        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" side-info=\"reports/custom-backlinks.json\"\n```\n",
+    )
+    .unwrap();
+    let out_file = tempfile::NamedTempFile::new().unwrap();
+    let cfg = GlintConfig::default();
+
+    let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
+
+    assert!(result
+        .violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert_eq!(result.resolved_files, vec![backlinks_path]);
+}
+
+#[test]
+fn backlinks_side_info_changes_invalidate_compile_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    let backlinks_path = side_info.join("backlinks.json");
+    std::fs::write(
+        &backlinks_path,
+        r#"{
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let src_path = dir.path().join("reference.source.md");
+    let out_path = dir.path().join("reference.md");
+    std::fs::write(
+        &src_path,
+        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=count\n```\n",
+    )
+    .unwrap();
+    let cfg = GlintConfig::default();
+
+    let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!first.from_cache);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n1\n"));
+
+    let second = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(second.from_cache);
+
+    std::fs::write(
+        &backlinks_path,
+        r#"{
+  "pages": [
+    {
+      "source": "reference.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "reference.source.md" },
+        { "source": "overview.source.md", "target": "reference.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let third = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!third.from_cache);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n2\n"));
+}
+
+#[test]
 fn source_frontmatter_is_stripped_from_compile_output() {
     let dir = tempfile::tempdir().unwrap();
     let src = "---\ntags: [ops, runbook]\nops: [compile]\n---\n# Tagged Source\n\nBody.\n";

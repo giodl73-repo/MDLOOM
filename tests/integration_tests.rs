@@ -1709,6 +1709,64 @@ fn binary_compile_writes_artifact_manifest() {
 }
 
 #[test]
+fn binary_compile_manifest_records_backlinks_side_info_dependency() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    let backlinks_path = side_info.join("backlinks.json");
+    std::fs::write(
+        &backlinks_path,
+        r#"{
+  "pages": [
+    {
+      "source": "manifest.source.md",
+      "inbound_links": [
+        { "source": "guide.source.md", "target": "manifest.source.md" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let source = dir.path().join("manifest.source.md");
+    let output_path = dir.path().join("manifest.md");
+    std::fs::write(
+        &source,
+        "# Manifest\n\n```proof:backlinks target=\"manifest.source.md\"\n```\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(
+        manifest["artifacts"][0]["resolved_files"],
+        serde_json::json!([backlinks_path])
+    );
+}
+
+#[test]
 fn binary_crop_status_delegates_to_crop_status() {
     let bin = debug_bin();
     if !bin.exists() {

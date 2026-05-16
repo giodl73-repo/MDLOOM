@@ -125,6 +125,10 @@ proof crop sync --view .crop/views/ready-guides.json
 
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
+When a source uses `proof:backlinks`, `proof compile` records the backlinks JSON
+as a resolved input in `.proof/artifacts.json` and includes it in the compile
+cache key, so rerun `proof crop sync` before compiling when the corpus graph has
+changed.
 
 For README or non-compiled Markdown authoring, render a target-specific
 backlink snippet directly from the synced side-info:

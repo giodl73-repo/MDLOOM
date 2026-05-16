@@ -19,6 +19,8 @@ pub struct ArtifactRecord {
     pub status: ArtifactStatus,
     pub directives_resolved: usize,
     pub from_cache: bool,
+    #[serde(default)]
+    pub resolved_files: Vec<PathBuf>,
     pub diagnostics: Vec<ArtifactDiagnostic>,
 }
 
