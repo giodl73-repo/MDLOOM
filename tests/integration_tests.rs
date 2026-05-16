@@ -2001,6 +2001,8 @@ exclude = ["target/**"]
         .arg(&output_path)
         .arg("--name")
         .arg("ready-guides")
+        .arg("--frontmatter-query")
+        .arg("status eq 'ready'")
         .arg("--tag")
         .arg("guide")
         .arg("--op")
@@ -2028,7 +2030,7 @@ exclude = ["target/**"]
     assert_eq!(recipe["exclude_dirs"], serde_json::json!(["target"]));
     assert_eq!(
         recipe["frontmatter_query"],
-        "tags has 'guide' and ops has 'compile' and content_tags has 'markdown'"
+        "status eq 'ready' and tags has 'guide' and ops has 'compile' and content_tags has 'markdown'"
     );
 }
 

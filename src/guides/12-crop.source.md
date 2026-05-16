@@ -96,15 +96,16 @@ Generate a reusable view recipe from PROOF's config and source-frontmatter
 selection flags:
 
 ```text
-proof crop view --root src/guides --output .crop/views/ready-guides.json --name ready-guides --tag guide --op compile
+proof crop view --root src/guides --output .crop/views/ready-guides.json --name ready-guides --frontmatter-query "status eq 'ready'" --tag guide --op compile
 ```
 
 `proof crop view` maps `proof.toml` `[files].include` to CROP
 `include_extensions`, maps simple `[files].exclude` directory globs to
-`exclude_dirs`, and maps `--tag`, `--op`, and `--content-tag` to CROP
-`frontmatter_query` clauses. The generated `root` is written relative to the
-view file, so the recipe can move with `.crop/views`. The resulting view can be
-reused anywhere a CROP command accepts `--view`.
+`exclude_dirs`, accepts a raw `--frontmatter-query`, and maps `--tag`, `--op`,
+and `--content-tag` to additional CROP `frontmatter_query` clauses. The
+generated `root` is written relative to the view file, so the recipe can move
+with `.crop/views`. The resulting view can be reused anywhere a CROP command
+accepts `--view`.
 
 Generate first-class authoring pages from the same view:
 

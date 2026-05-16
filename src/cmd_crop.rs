@@ -154,6 +154,9 @@ struct ViewArgs {
     /// Add a frontmatter content_tags predicate (repeatable)
     #[arg(long = "content-tag")]
     content_tags: Vec<String>,
+    /// Add a raw crop.view.v1 frontmatter_query clause, e.g. status eq 'ready'
+    #[arg(long = "frontmatter-query")]
+    frontmatter_query: Option<String>,
 }
 
 #[derive(clap::Args)]
@@ -547,6 +550,11 @@ fn component_eq(left: Component<'_>, right: Component<'_>) -> bool {
 
 fn build_frontmatter_query(args: &ViewArgs) -> Result<Option<String>> {
     let mut clauses = Vec::new();
+    if let Some(query) = args.frontmatter_query.as_deref().map(str::trim) {
+        if !query.is_empty() {
+            clauses.push(query.to_string());
+        }
+    }
     for tag in &args.tags {
         clauses.push(frontmatter_clause("tags", tag)?);
     }
@@ -1072,6 +1080,7 @@ exclude = ["target/**", "node_modules/**"]
                 tags: vec!["guide".to_string()],
                 ops: vec!["compile".to_string()],
                 content_tags: vec!["markdown".to_string()],
+                frontmatter_query: None,
             },
             &globals("text"),
         )
@@ -1106,6 +1115,7 @@ exclude = ["target/**", "node_modules/**"]
                 tags: vec![],
                 ops: vec![],
                 content_tags: vec![],
+                frontmatter_query: None,
             },
             &globals("text"),
         )
@@ -1114,6 +1124,34 @@ exclude = ["target/**", "node_modules/**"]
         assert_eq!(recipe.include_extensions, vec!["md", "mdx"]);
         assert_eq!(recipe.exclude_dirs, vec!["target"]);
         assert_eq!(recipe.frontmatter_query, None);
+    }
+
+    #[test]
+    fn view_recipe_combines_raw_frontmatter_query_with_shorthands() {
+        let dir = tempfile::tempdir().unwrap();
+        let recipe = build_view_recipe(
+            &ViewArgs {
+                root: dir.path().to_path_buf(),
+                output: PathBuf::from("ready.json"),
+                name: "ready".to_string(),
+                task: None,
+                token_budget: 12000,
+                seed: 0,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                tags: vec!["guide".to_string()],
+                ops: vec![],
+                content_tags: vec![],
+                frontmatter_query: Some("status eq 'ready'".to_string()),
+            },
+            &globals("text"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            recipe.frontmatter_query.as_deref(),
+            Some("status eq 'ready' and tags has 'guide'")
+        );
     }
 
     #[test]
@@ -1132,6 +1170,7 @@ exclude = ["target/**", "node_modules/**"]
                 tags: vec!["author's".to_string()],
                 ops: vec![],
                 content_tags: vec![],
+                frontmatter_query: None,
             },
             &globals("text"),
         )
