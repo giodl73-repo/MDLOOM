@@ -274,6 +274,7 @@ pub fn signal_loss(old: &str, new: &str) -> Vec<String> {
     let old_words: std::collections::HashSet<&str> = old
         .split_whitespace()
         .filter(|w| w.len() > 2) // skip short tokens (│, ←, spaces)
+        .filter(|w| !is_structural_art_token(w))
         .collect();
     let new_words: std::collections::HashSet<&str> = new.split_whitespace().collect();
 
@@ -282,6 +283,46 @@ pub fn signal_loss(old: &str, new: &str) -> Vec<String> {
         .filter(|w| !new_words.contains(*w))
         .map(String::from)
         .collect()
+}
+
+fn is_structural_art_token(word: &str) -> bool {
+    word.chars().all(|ch| {
+        matches!(
+            ch,
+            '+' | '-'
+                | '|'
+                | ':'
+                | '='
+                | '─'
+                | '━'
+                | '│'
+                | '┃'
+                | '┌'
+                | '┐'
+                | '└'
+                | '┘'
+                | '├'
+                | '┤'
+                | '┬'
+                | '┴'
+                | '┼'
+                | '╭'
+                | '╮'
+                | '╰'
+                | '╯'
+                | '═'
+                | '║'
+                | '╔'
+                | '╗'
+                | '╚'
+                | '╝'
+                | '╠'
+                | '╣'
+                | '╦'
+                | '╩'
+                | '╬'
+        )
+    })
 }
 
 /// Classify a fix as Pattern B (annotation after closing │) vs. plain whitespace fix.
@@ -385,6 +426,20 @@ mod tests {
                 diagnostic: DiagnosticRef::default(),
             }],
         }
+    }
+
+    #[test]
+    fn signal_loss_ignores_structural_ascii_art_tokens() {
+        assert!(signal_loss("+------++", "+------+").is_empty());
+        assert!(signal_loss("┌────┬────┐", "┌────┐").is_empty());
+    }
+
+    #[test]
+    fn signal_loss_preserves_text_tokens() {
+        assert_eq!(
+            signal_loss("| keep | annotation |", "| keep |"),
+            vec!["annotation".to_string()]
+        );
     }
 
     #[test]
