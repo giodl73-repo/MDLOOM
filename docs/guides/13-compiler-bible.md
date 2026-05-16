@@ -41,8 +41,8 @@ Wave 8 directive module split
 ## Compiler phase map
 
 `compile.rs` is the facade. It owns command-visible orchestration: reading the
-source, dispatching special artifact routes, applying replacements, writing
-outputs, cache manifest updates, and public result types.
+source, dispatching special artifact routes, coordinating replacement
+application, and returning public result types.
 
 Focused modules own behavior families:
 
@@ -50,18 +50,21 @@ Focused modules own behavior families:
 |--------|-----------|
 | `compile_directive` | Directive spans, typed `Directive`, attribute parsing, collection |
 | `compile_source` | `md://` resolution, query transforms, include/table source helpers |
+| `compile_output` | Source reconstruction, frontmatter splitting, output path derivation, atomic writes |
+| `compile_cache` | Tier 3 compile cache restore/store orchestration |
 | `compile_format` | Compiled traceability wrappers |
+| `compile_figure` | Source-backed include/table/layout rendering and validation |
 | `compile_element` | `proof:element` and `proof:row` data resolution/rendering |
-| `compile_chart` | Chart data resolution from inline bodies or tables |
-| `compile_tree` | `proof:tree`, inline tree, and outline rendering |
-| `compile_toc` | TOC heading collection, section scoping, and formatting |
-| `compile_prose` | Prose-only xref and blockquote rendering |
-| `compile_symbol` | Symbol and shape rendering |
-| `compile_math` | Display and inline math rendering |
-| `compile_crop` | CROP side-info rendering and dependency cache keys |
+| `compile_chart` | Chart data resolution, rendering, diagnostics, and fallbacks |
+| `compile_tree` | `proof:tree`, inline tree/outline rendering, warnings, and fallbacks |
+| `compile_toc` | TOC source resolution, heading collection, section scoping, and formatting |
+| `compile_prose` | Prose-only xref and blockquote rendering, diagnostics, and fallbacks |
+| `compile_symbol` | Symbol and shape rendering, diagnostics, and fallbacks |
+| `compile_math` | Display/inline math rendering and diagnostics |
+| `compile_crop` | CROP side-info rendering, compile wrappers, and dependency cache keys |
 | `compile_slides` | `.slides.source.md` compile route |
 | `compile_dashboard` | `.dashboard.source.md` compile route |
-| `compile_region` | Dashboard region body and no-chrome embedded directive rendering |
+| `compile_region` | Dashboard region body/no-chrome rendering and invalid-region diagnostics |
 | `compile_validation` | Figure linting and DaVinci invariant checks |
 
 ---
