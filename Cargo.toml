@@ -41,6 +41,7 @@ proof-math   = { path = "crates/proof-math" }
 # publishes to crates.io we'll switch to a version constraint.
 mdpath = { git = "https://github.com/giodl73-repo/MDPATH", rev = "6666cb4368ebc4b1b7ec8d77169b524821e90e9c" }
 pebble = { git = "https://github.com/giodl73-repo/PEBBLE", rev = "80c6e104f99b316f0d8bca5f87a1999feee0d520" }
+slice-core = { git = "https://github.com/giodl73-repo/SLICE", package = "slice-core", rev = "9e4e52eb42c0415c5a2eacb83e909c313986e868" }
 # Figure import — image-to-ASCII conversion
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
 # SVG rasterization (optional — enable with --features svg)
@@ -50,7 +51,6 @@ pulldown-cmark = "0.12"
 [dev-dependencies]
 pretty_assertions = "1"
 tempfile = "3"
-slice-core = { git = "https://github.com/giodl73-repo/SLICE", package = "slice-core", rev = "20b64416364fad8a384eb9f17d0a0a19785a20b1" }
 
 [profile.release]
 lto = true

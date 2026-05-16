@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use proof_lib::artifact::{ArtifactDiagnostic, ArtifactRecord, ArtifactStatus};
-use serde_json::{json, Value};
-use slice_core::{FieldCatalog, ValueType};
+use proof_lib::artifact::{select_artifacts, ArtifactDiagnostic, ArtifactRecord, ArtifactStatus};
 
 #[test]
 fn slice_selects_proof_artifact_rows_after_compile() {
@@ -30,10 +28,14 @@ fn slice_selects_proof_artifact_rows_after_compile() {
         ),
     ];
 
-    let selected = select_artifact_outputs(
+    let selected = select_artifacts(
         &artifacts,
         "target eq 'html' and status eq 'written' and diagnostics_count eq 0",
-    );
+    )
+    .unwrap()
+    .into_iter()
+    .map(|artifact| artifact.output_path.display().to_string())
+    .collect::<Vec<_>>();
 
     assert_eq!(selected, ["docs/guide.html"]);
 }
@@ -57,31 +59,16 @@ fn slice_selects_proof_artifact_rows_with_diagnostics() {
         ),
     ];
 
-    let selected = select_artifact_outputs(
+    let selected = select_artifacts(
         &artifacts,
         "target eq 'markdown' and has_diagnostics eq true",
-    );
+    )
+    .unwrap()
+    .into_iter()
+    .map(|artifact| artifact.output_path.display().to_string())
+    .collect::<Vec<_>>();
 
     assert_eq!(selected, ["docs/bad.md"]);
-}
-
-fn select_artifact_outputs(artifacts: &[ArtifactRecord], expr: &str) -> Vec<String> {
-    let mut catalog = FieldCatalog::new();
-    catalog
-        .insert("source_path", ValueType::String)
-        .insert("output_path", ValueType::String)
-        .insert("target", ValueType::String)
-        .insert("status", ValueType::String)
-        .insert("from_cache", ValueType::Bool)
-        .insert("diagnostics_count", ValueType::Number)
-        .insert("has_diagnostics", ValueType::Bool);
-    let selector = slice_core::compile(expr, &catalog).unwrap();
-
-    artifacts
-        .iter()
-        .filter(|artifact| selector.matches(&artifact_row(artifact)))
-        .map(|artifact| artifact.output_path.display().to_string())
-        .collect()
 }
 
 fn artifact(
@@ -107,26 +94,5 @@ fn artifact(
                 message: "test diagnostic".to_string(),
             })
             .collect(),
-    }
-}
-
-fn artifact_row(artifact: &ArtifactRecord) -> Value {
-    json!({
-        "source_path": artifact.source_path.display().to_string(),
-        "output_path": artifact.output_path.display().to_string(),
-        "target": artifact.target,
-        "status": artifact_status(&artifact.status),
-        "from_cache": artifact.from_cache,
-        "diagnostics_count": artifact.diagnostics.len(),
-        "has_diagnostics": !artifact.diagnostics.is_empty(),
-    })
-}
-
-fn artifact_status(status: &ArtifactStatus) -> &'static str {
-    match status {
-        ArtifactStatus::Written => "written",
-        ArtifactStatus::Cached => "cached",
-        ArtifactStatus::UpToDate => "up_to_date",
-        ArtifactStatus::Error => "error",
     }
 }
