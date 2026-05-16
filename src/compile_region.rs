@@ -402,3 +402,14 @@ pub(crate) fn strip_compiled_chrome(block: &str) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_compiled_chrome_removes_html_and_fence() {
+        let block = "<!-- proof:compiled from=\"x\" -->\n```\ninner content\nrow 2\n```\n<!-- /proof:compiled -->";
+        assert_eq!(strip_compiled_chrome(block), "inner content\nrow 2");
+    }
+}

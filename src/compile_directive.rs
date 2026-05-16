@@ -1842,6 +1842,27 @@ README.md
     }
 
     #[test]
+    fn collect_directives_collects_region_body() {
+        let source = "```proof:region name=header\nHello world\nproof:element kind=label value=\"X\" width=5\n```";
+        let dirs = collect_directives(source);
+
+        assert_eq!(dirs.len(), 1);
+        match &dirs[0] {
+            Directive::Region { name, body, .. } => {
+                assert_eq!(name, "header");
+                assert_eq!(
+                    body,
+                    &vec![
+                        "Hello world".to_string(),
+                        "proof:element kind=label value=\"X\" width=5".to_string(),
+                    ]
+                );
+            }
+            other => panic!("expected Region, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn parses_include_directive_uri_and_pin() {
         let body = ["pin=body-pin", "md://figures/arch.md#:0"];
         let include = parse_include_directive("pin=arch-diagram", &body);

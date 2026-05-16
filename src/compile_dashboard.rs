@@ -165,3 +165,154 @@ pub(crate) fn compile_dashboard_file(
         written: true,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn temp_dashboard_paths(prefix: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let pid = std::process::id();
+        let source_path =
+            std::env::temp_dir().join(format!("proof-{prefix}-{pid}.dashboard.source.md"));
+        let output_path = std::env::temp_dir().join(format!("proof-{prefix}-{pid}.dashboard.md"));
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&output_path);
+        (source_path, output_path)
+    }
+
+    #[test]
+    fn dashboard_compile_two_regions_e2e() {
+        let (source_path, output_path) = temp_dashboard_paths("dash");
+        let source = "---\ndashboard:\n  width: 20\n  height: 4\n  title: \"Test\"\n  regions:\n    top: { x: 0, y: 0, width: 20, height: 2 }\n    bot: { x: 0, y: 2, width: 20, height: 2 }\n---\n\n```proof:region name=top\nHEADER LINE\n```\n\n```proof:region name=bot\nFOOTER LINE\n```\n";
+        std::fs::File::create(&source_path)
+            .expect("create tmp")
+            .write_all(source.as_bytes())
+            .expect("write tmp");
+
+        let cfg = GlintConfig::default();
+        let result =
+            compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
+                .expect("compile_dashboard_file ok");
+
+        let _ = std::fs::remove_file(&source_path);
+
+        assert!(
+            result
+                .violations
+                .iter()
+                .all(|v| v.severity != ViolationSeverity::Error),
+            "unexpected errors: {:?}",
+            result
+                .violations
+                .iter()
+                .map(|v| (v.code, &v.message))
+                .collect::<Vec<_>>()
+        );
+        assert!(result.written, "should have written output");
+
+        let written = std::fs::read_to_string(&output_path).expect("read output");
+        let _ = std::fs::remove_file(&output_path);
+
+        assert!(
+            written.contains("```dashboard"),
+            "should have dashboard fence: {}",
+            written
+        );
+        assert!(written.contains("HEADER LINE"), "top region not rendered");
+        assert!(written.contains("FOOTER LINE"), "bot region not rendered");
+
+        let inner: Vec<&str> = written
+            .lines()
+            .skip_while(|l| !l.starts_with("```dashboard"))
+            .skip(1)
+            .take_while(|l| *l != "```")
+            .collect();
+        assert_eq!(
+            inner.len(),
+            4,
+            "canvas should be height=4 lines, got {}: {:?}",
+            inner.len(),
+            inner
+        );
+        for line in &inner {
+            assert_eq!(line.chars().count(), 20, "row width != 20: {:?}", line);
+        }
+    }
+
+    #[test]
+    fn dashboard_unknown_region_emits_dashboard_004() {
+        let (source_path, output_path) = temp_dashboard_paths("dash-bad");
+        let source = "---\ndashboard:\n  width: 20\n  height: 2\n  regions:\n    header: { x: 0, y: 0, width: 20, height: 2 }\n---\n\n```proof:region name=ghost\nNo such region\n```\n";
+        std::fs::File::create(&source_path)
+            .expect("create tmp")
+            .write_all(source.as_bytes())
+            .expect("write tmp");
+
+        let cfg = GlintConfig::default();
+        let result =
+            compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
+                .expect("compile_dashboard_file ok");
+
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&output_path);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(
+            codes.contains(&"DASHBOARD-004"),
+            "expected DASHBOARD-004, got: {:?}",
+            codes
+        );
+    }
+
+    #[test]
+    fn dashboard_overlap_emits_dashboard_003() {
+        let (source_path, output_path) = temp_dashboard_paths("dash-ovl");
+        let source = "---\ndashboard:\n  width: 40\n  height: 10\n  regions:\n    a: { x: 0, y: 0, width: 30, height: 5 }\n    b: { x: 20, y: 0, width: 20, height: 5 }\n---\n";
+        std::fs::File::create(&source_path)
+            .expect("create tmp")
+            .write_all(source.as_bytes())
+            .expect("write tmp");
+
+        let cfg = GlintConfig::default();
+        let result =
+            compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
+                .expect("compile_dashboard_file ok");
+
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&output_path);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(
+            codes.contains(&"DASHBOARD-003"),
+            "expected DASHBOARD-003 (overlap), got: {:?}",
+            codes
+        );
+    }
+
+    #[test]
+    fn dashboard_wide_canvas_emits_dashboard_006() {
+        let (source_path, output_path) = temp_dashboard_paths("dash-wide");
+        let source =
+            "---\ndashboard:\n  width: 300\n  height: 10\n---\n\n```proof:region name=r1\nhello\n```\n";
+        std::fs::File::create(&source_path)
+            .expect("create tmp")
+            .write_all(source.as_bytes())
+            .expect("write tmp");
+
+        let cfg = GlintConfig::default();
+        let result =
+            compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
+                .expect("compile_dashboard_file ok");
+
+        let _ = std::fs::remove_file(&source_path);
+        let _ = std::fs::remove_file(&output_path);
+
+        let codes: Vec<&str> = result.violations.iter().map(|v| v.code).collect();
+        assert!(
+            codes.contains(&"DASHBOARD-006"),
+            "expected DASHBOARD-006 for canvas width 300 > 220, got: {:?}",
+            codes
+        );
+    }
+}
