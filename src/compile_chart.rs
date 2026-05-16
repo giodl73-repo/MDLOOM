@@ -1,7 +1,72 @@
 use std::path::Path;
 
-use crate::chart::{ChartData, ChartPoint};
+use crate::chart::{ChartAttrs, ChartData, ChartPoint};
+use crate::compile::{CompileViolation, ViolationSeverity};
+use crate::compile_output;
 use crate::compile_source::resolve_source_for_compile;
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_chart(
+    attrs: &ChartAttrs,
+    source: Option<&String>,
+    label_field: Option<&String>,
+    value_field: Option<&String>,
+    inline_body: &str,
+    root: &Path,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match resolve_chart_data(
+        source.map(|s| s.as_str()),
+        label_field.map(|s| s.as_str()),
+        value_field.map(|s| s.as_str()),
+        inline_body,
+        root,
+    ) {
+        Ok(data) => match crate::chart::render_chart(&data, attrs) {
+            Ok(lines) => {
+                *resolved_count += 1;
+                let rendered = lines.join("\n");
+                if attrs.no_chrome {
+                    format!("```\n{}\n```", rendered)
+                } else {
+                    format!(
+                        "<!-- proof:compiled from=\"proof:chart\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                        rendered
+                    )
+                }
+            }
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: e.code,
+                    severity: ViolationSeverity::Error,
+                    uri: source.cloned().unwrap_or_default(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: e.message,
+                    source_line: line_start + 1 + source_line_offset,
+                });
+                compile_output::source_fallback(source_lines, line_start, line_end)
+            }
+        },
+        Err(msg) => {
+            violations.push(CompileViolation {
+                code: "CHART-002",
+                severity: ViolationSeverity::Error,
+                uri: source.cloned().unwrap_or_default(),
+                figure_id: None,
+                invariant: String::new(),
+                message: msg,
+                source_line: line_start + 1 + source_line_offset,
+            });
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
 
 /// Resolve a proof:chart directive's data from either an md:// table source or
 /// the inline `label: value` directive body.

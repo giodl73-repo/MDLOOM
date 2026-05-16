@@ -594,55 +594,20 @@ pub fn compile_file(
                 value_field,
                 inline_body,
                 ..
-            } => {
-                let data_result = compile_chart::resolve_chart_data(
-                    source.as_deref(),
-                    label_field.as_deref(),
-                    value_field.as_deref(),
-                    inline_body,
-                    root,
-                );
-                match data_result {
-                    Ok(data) => match crate::chart::render_chart(&data, attrs) {
-                        Ok(lines) => {
-                            resolved_count += 1;
-                            let rendered = lines.join("\n");
-                            if attrs.no_chrome {
-                                format!("```\n{}\n```", rendered)
-                            } else {
-                                format!(
-                                        "<!-- proof:compiled from=\"proof:chart\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-                                        rendered
-                                    )
-                            }
-                        }
-                        Err(e) => {
-                            violations.push(CompileViolation {
-                                code: e.code,
-                                severity: ViolationSeverity::Error,
-                                uri: source.clone().unwrap_or_default(),
-                                figure_id: None,
-                                invariant: String::new(),
-                                message: e.message,
-                                source_line: line_start + 1 + source_line_offset,
-                            });
-                            source_lines[line_start..=line_end].join("\n")
-                        }
-                    },
-                    Err(msg) => {
-                        violations.push(CompileViolation {
-                            code: "CHART-002",
-                            severity: ViolationSeverity::Error,
-                            uri: source.clone().unwrap_or_default(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: msg,
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
-                }
-            }
+            } => compile_chart::compile_chart(
+                attrs,
+                source.as_ref(),
+                label_field.as_ref(),
+                value_field.as_ref(),
+                inline_body,
+                root,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
         };
 
         replacements.push((line_start, line_end, replacement));
