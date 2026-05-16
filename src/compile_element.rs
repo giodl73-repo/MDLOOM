@@ -409,3 +409,236 @@ pub(crate) fn compile_row(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn violation_messages(violations: &[CompileViolation]) -> Vec<&str> {
+        violations.iter().map(|v| v.message.as_str()).collect()
+    }
+
+    #[test]
+    fn element_value_inline_renders() {
+        let attrs = ElementAttrs {
+            width: Some(4),
+            align: "right".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec![
+            "```proof:element kind=value value=\"42\" width=4 align=right",
+            "```",
+        ];
+        let out = compile_element(
+            "value",
+            None,
+            None,
+            Some("42"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "should have no violations: {:?}",
+            violation_messages(&violations)
+        );
+        assert!(out.contains("42"), "output should contain value: {:?}", out);
+        assert_eq!(crate::layout::visual_width(&" 42"), 3);
+    }
+
+    #[test]
+    fn element_label_inline_renders() {
+        let attrs = ElementAttrs {
+            width: Some(8),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec![
+            "```proof:element kind=label value=\"McDavid\" width=8 align=left",
+            "```",
+        ];
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("McDavid"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "should have no violations: {:?}",
+            violation_messages(&violations)
+        );
+        assert!(
+            out.contains("McDavid"),
+            "output should contain label: {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn element_badge_inline_renders() {
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=badge value=\"UFA\" width=5", "```"];
+        let out = compile_element(
+            "badge",
+            None,
+            None,
+            Some("UFA"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violation_messages(&violations)
+        );
+        assert!(out.contains("UFA"), "output: {:?}", out);
+    }
+
+    #[test]
+    fn element_no_chrome_true_omits_wrapper() {
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: true,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec![
+            "```proof:element kind=label value=\"Hi\" width=5 no-chrome",
+            "```",
+        ];
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("Hi"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violation_messages(&violations)
+        );
+        assert!(
+            !out.contains("```"),
+            "no-chrome should have no fence: {:?}",
+            out
+        );
+        assert!(
+            !out.contains("<!--"),
+            "no-chrome should have no HTML comment: {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn element_no_chrome_false_has_wrapper() {
+        let attrs = ElementAttrs {
+            width: Some(5),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec!["```proof:element kind=label value=\"Hi\" width=5", "```"];
+        let out = compile_element(
+            "label",
+            None,
+            None,
+            Some("Hi"),
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            1,
+            &mut 0,
+        );
+        assert!(
+            violations.is_empty(),
+            "violations: {:?}",
+            violation_messages(&violations)
+        );
+        assert!(
+            out.contains("<!-- proof:compiled"),
+            "should have traceability comment: {:?}",
+            out
+        );
+        assert!(out.contains("```"), "should have fence: {:?}", out);
+    }
+
+    #[test]
+    fn element_missing_field_emits_element_005() {
+        let attrs = ElementAttrs {
+            width: Some(6),
+            align: "left".to_string(),
+            format: "{}".to_string(),
+            no_chrome: false,
+            ..Default::default()
+        };
+        let mut violations = Vec::new();
+        let lines = vec![
+            "```proof:element kind=value field=absent width=6",
+            "md://test",
+            "```",
+        ];
+        compile_element(
+            "value",
+            None,
+            Some("absent"),
+            None,
+            &attrs,
+            Path::new("."),
+            0,
+            &mut violations,
+            &lines,
+            2,
+            &mut 0,
+        );
+        let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+        assert!(
+            codes.contains(&"ELEMENT-005"),
+            "expected ELEMENT-005, got: {:?}",
+            codes
+        );
+    }
+}
