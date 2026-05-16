@@ -7,6 +7,7 @@ pub mod checks;
 pub mod compile;
 #[allow(dead_code)]
 pub mod compile_chart;
+pub(crate) mod compile_crop;
 #[allow(dead_code)]
 pub mod compile_directive;
 #[allow(dead_code)]

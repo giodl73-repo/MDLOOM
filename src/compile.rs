@@ -1,6 +1,7 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+use crate::compile_crop::{self, SideInfoKind};
 use crate::config::GlintConfig;
 use crate::crop_side_info;
 use crate::davinci::evaluate_invariant;
@@ -1661,9 +1662,8 @@ pub fn compile_file(
                 format,
                 ..
             } => {
-                let report_path = source.as_deref().map(|p| root.join(p)).unwrap_or_else(|| {
-                    root.join(".proof").join("side-info").join("backlinks.json")
-                });
+                let report_path =
+                    compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Backlinks);
                 match crop_side_info::render_backlinks(target, &report_path, format) {
                     Ok(rendered) => {
                         resolved_count += 1;
@@ -1693,11 +1693,9 @@ pub fn compile_file(
                 format,
                 ..
             } => {
-                let report_path = source
-                    .as_deref()
-                    .map(|p| root.join(p))
-                    .unwrap_or_else(|| root.join(".proof").join("side-info").join("links.json"));
-                let filter = link_filter(source_doc, status);
+                let report_path =
+                    compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Links);
+                let filter = compile_crop::link_filter(source_doc, status);
                 match filter
                     .and_then(|filter| crop_side_info::render_links(&report_path, &filter, format))
                 {
@@ -1728,10 +1726,8 @@ pub fn compile_file(
                 format,
                 ..
             } => {
-                let report_path = source
-                    .as_deref()
-                    .map(|p| root.join(p))
-                    .unwrap_or_else(|| root.join(".proof").join("side-info").join("headings.json"));
+                let report_path =
+                    compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Headings);
                 match crop_side_info::render_headings(source_doc, &report_path, format) {
                     Ok(rendered) => {
                         resolved_count += 1;
@@ -1762,12 +1758,12 @@ pub fn compile_file(
                 format,
                 ..
             } => {
-                let report_path = source.as_deref().map(|p| root.join(p)).unwrap_or_else(|| {
-                    root.join(".proof")
-                        .join("side-info")
-                        .join("frontmatter.json")
-                });
-                let filter = frontmatter_filter(field, value, op);
+                let report_path = compile_crop::side_info_path(
+                    root,
+                    source.as_deref(),
+                    SideInfoKind::Frontmatter,
+                );
+                let filter = compile_crop::frontmatter_filter(field, value, op);
                 match filter.and_then(|filter| {
                     crop_side_info::render_frontmatter(&report_path, &filter, format)
                 }) {
@@ -1924,24 +1920,17 @@ fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf>
     let mut paths = Vec::new();
     for directive in directives {
         let path = match directive {
-            Directive::Backlinks { source, .. } => source
-                .as_deref()
-                .map(|p| root.join(p))
-                .unwrap_or_else(|| root.join(".proof").join("side-info").join("backlinks.json")),
-            Directive::Links { source, .. } => source
-                .as_deref()
-                .map(|p| root.join(p))
-                .unwrap_or_else(|| root.join(".proof").join("side-info").join("links.json")),
-            Directive::Headings { source, .. } => source
-                .as_deref()
-                .map(|p| root.join(p))
-                .unwrap_or_else(|| root.join(".proof").join("side-info").join("headings.json")),
+            Directive::Backlinks { source, .. } => {
+                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Backlinks)
+            }
+            Directive::Links { source, .. } => {
+                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Links)
+            }
+            Directive::Headings { source, .. } => {
+                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Headings)
+            }
             Directive::Frontmatter { source, .. } => {
-                source.as_deref().map(|p| root.join(p)).unwrap_or_else(|| {
-                    root.join(".proof")
-                        .join("side-info")
-                        .join("frontmatter.json")
-                })
+                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Frontmatter)
             }
             _ => {
                 continue;
@@ -1952,35 +1941,6 @@ fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf>
         }
     }
     paths
-}
-
-fn frontmatter_filter(
-    field: &Option<String>,
-    value: &Option<String>,
-    op: &str,
-) -> Result<crop_side_info::FrontmatterFilter> {
-    let op = match op {
-        "has" => crop_side_info::FrontmatterMatch::Has,
-        "eq" => crop_side_info::FrontmatterMatch::Eq,
-        _ => bail!("frontmatter match op must be 'has' or 'eq'"),
-    };
-    Ok(crop_side_info::FrontmatterFilter {
-        field: field.clone(),
-        value: value.clone(),
-        op,
-    })
-}
-
-fn link_filter(source: &Option<String>, status: &str) -> Result<crop_side_info::LinkFilter> {
-    let status = match status {
-        "all" => Some("all".to_string()),
-        "ok" | "broken" => Some(status.to_string()),
-        _ => bail!("link status must be 'all', 'ok', or 'broken'"),
-    };
-    Ok(crop_side_info::LinkFilter {
-        source: source.clone(),
-        status,
-    })
 }
 
 fn dependency_parse_keys(
