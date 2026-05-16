@@ -400,6 +400,9 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     if !args.strict && !args.strict_on.is_empty() {
         bail!("proof crop status --strict-on requires --strict");
     }
+    for strict_on in &args.strict_on {
+        validate_status_strict_policy(strict_on)?;
+    }
 
     let mut crop_args = vec!["status".to_string()];
     if let Some(root) = args.root {
@@ -437,6 +440,16 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     }
 
     Ok(crop_args)
+}
+
+fn validate_status_strict_policy(policy: &str) -> Result<()> {
+    match policy {
+        "broken-links" | "orphan-pages" | "duplicate-anchors" => Ok(()),
+        other => bail!(
+            "proof crop status --strict-on must be broken-links, orphan-pages, or duplicate-anchors, got {:?}",
+            other
+        ),
+    }
 }
 
 fn run_list_views(
@@ -1445,6 +1458,24 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("requires --strict"));
+    }
+
+    #[test]
+    fn status_rejects_unknown_strict_policy() {
+        let err = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: true,
+            strict_on: vec!["stale-artifacts".to_string()],
+            format: Some("markdown".to_string()),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("broken-links"));
     }
 
     #[test]

@@ -41,7 +41,8 @@ proof crop status --root docs/guides --strict --output docs/STATUS.md
 
 Use repeatable `--strict-on` selectors when a gate should start with a narrower
 policy while still using CROP's strict status semantics. `--strict-on` requires
-`--strict`, so policy selectors cannot be passed as ignored advisory flags:
+`--strict` and accepts `broken-links`, `orphan-pages`, or `duplicate-anchors`,
+so policy selectors cannot be passed as ignored advisory flags:
 
 ```text
 proof crop status --root docs/guides --strict --strict-on broken-links --output docs/STATUS.md
