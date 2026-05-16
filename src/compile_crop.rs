@@ -60,6 +60,67 @@ pub(crate) fn link_filter(
     })
 }
 
+pub(crate) fn render_backlinks(
+    root: &Path,
+    side_info: Option<&str>,
+    target: &str,
+    format: &str,
+) -> Result<String> {
+    let report_path = side_info_path(root, side_info, SideInfoKind::Backlinks);
+    let rendered = crop_side_info::render_backlinks(target, &report_path, format)?;
+    Ok(format!(
+        "<!-- proof:compiled from=\"proof:backlinks\" target=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+        target, rendered
+    ))
+}
+
+pub(crate) fn render_links(
+    root: &Path,
+    side_info: Option<&str>,
+    source_doc: &Option<String>,
+    status: &str,
+    format: &str,
+) -> Result<String> {
+    let report_path = side_info_path(root, side_info, SideInfoKind::Links);
+    let filter = link_filter(source_doc, status)?;
+    let rendered = crop_side_info::render_links(&report_path, &filter, format)?;
+    Ok(format!(
+        "<!-- proof:compiled from=\"proof:links\" -->\n{}\n<!-- /proof:compiled -->",
+        rendered
+    ))
+}
+
+pub(crate) fn render_headings(
+    root: &Path,
+    side_info: Option<&str>,
+    source_doc: &str,
+    format: &str,
+) -> Result<String> {
+    let report_path = side_info_path(root, side_info, SideInfoKind::Headings);
+    let rendered = crop_side_info::render_headings(source_doc, &report_path, format)?;
+    Ok(format!(
+        "<!-- proof:compiled from=\"proof:headings\" source=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+        source_doc, rendered
+    ))
+}
+
+pub(crate) fn render_frontmatter(
+    root: &Path,
+    side_info: Option<&str>,
+    field: &Option<String>,
+    value: &Option<String>,
+    op: &str,
+    format: &str,
+) -> Result<String> {
+    let report_path = side_info_path(root, side_info, SideInfoKind::Frontmatter);
+    let filter = frontmatter_filter(field, value, op)?;
+    let rendered = crop_side_info::render_frontmatter(&report_path, &filter, format)?;
+    Ok(format!(
+        "<!-- proof:compiled from=\"proof:frontmatter\" -->\n{}\n<!-- /proof:compiled -->",
+        rendered
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
