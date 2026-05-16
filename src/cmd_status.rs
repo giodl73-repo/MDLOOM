@@ -59,47 +59,17 @@ fn build_crop_status_args(args: Args, globals: &GlobalOptions) -> Result<Vec<Str
         Some(std::env::current_dir()?.join(args.dir))
     };
 
-    let mut crop_args = vec!["status".to_string()];
-    if let Some(root) = root {
-        crop_args.push("--root".to_string());
-        crop_args.push(root.display().to_string());
-    }
-    if let Some(view) = args.view {
-        crop_args.push("--view".to_string());
-        crop_args.push(view.display().to_string());
-    }
-    for extension in args.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
-    }
-    for exclude_dir in args.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
-    }
-    if args.strict {
-        crop_args.push("--strict".to_string());
-    }
-    for strict_on in args.strict_on {
-        crop_args.push("--strict-on".to_string());
-        crop_args.push(strict_on);
-    }
-    crop_args.push("--format".to_string());
-    crop_args.push(crop_status_format(&args.crop_format)?);
-    if let Some(output) = globals.output() {
-        crop_args.push("--output".to_string());
-        crop_args.push(output.display().to_string());
-    }
-    Ok(crop_args)
-}
-
-fn crop_status_format(format: &str) -> Result<String> {
-    match format {
-        "markdown" | "json" => Ok(format.to_string()),
-        other => anyhow::bail!(
-            "proof status --crop-format must be markdown or json, got {:?}",
-            other
-        ),
-    }
+    crate::cmd_crop::build_status_request_args(crate::cmd_crop::CropStatusRequest {
+        root,
+        view: args.view,
+        title: None,
+        extensions: args.extensions,
+        exclude_dirs: args.exclude_dirs,
+        strict: args.strict,
+        strict_on: args.strict_on,
+        format: args.crop_format,
+        output: globals.output().clone(),
+    })
 }
 
 fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {

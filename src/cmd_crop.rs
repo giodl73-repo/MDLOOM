@@ -81,6 +81,18 @@ struct StatusArgs {
     output: Option<PathBuf>,
 }
 
+pub(crate) struct CropStatusRequest {
+    pub(crate) root: Option<PathBuf>,
+    pub(crate) view: Option<PathBuf>,
+    pub(crate) title: Option<String>,
+    pub(crate) extensions: Vec<String>,
+    pub(crate) exclude_dirs: Vec<String>,
+    pub(crate) strict: bool,
+    pub(crate) strict_on: Vec<String>,
+    pub(crate) format: String,
+    pub(crate) output: Option<PathBuf>,
+}
+
 #[derive(clap::Args)]
 struct InspectViewsArgs {
     /// Single crop.view.v1 recipe to inspect
@@ -304,6 +316,20 @@ fn run_status(crop_bin: PathBuf, args: StatusArgs) -> Result<()> {
 }
 
 fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
+    build_status_request_args(CropStatusRequest {
+        root: args.root,
+        view: args.view,
+        title: args.title,
+        extensions: args.extensions,
+        exclude_dirs: args.exclude_dirs,
+        strict: args.strict,
+        strict_on: args.strict_on,
+        format: args.format,
+        output: args.output,
+    })
+}
+
+pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
         bail!("proof crop status accepts either --root or --view, not both");
     }
