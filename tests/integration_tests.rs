@@ -2379,6 +2379,34 @@ include = ["src/**/*.source.md"]
 }
 
 #[test]
+fn binary_crop_view_rejects_global_markdown_format() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = dir.path().join("view.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("-f")
+        .arg("markdown")
+        .arg("crop")
+        .arg("view")
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop view");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("writes JSON artifacts"), "got: {}", stderr);
+    assert!(!output_path.exists());
+}
+
+#[test]
 fn binary_crop_side_info_delegates_to_named_crop_report() {
     let bin = debug_bin();
     if !bin.exists() {

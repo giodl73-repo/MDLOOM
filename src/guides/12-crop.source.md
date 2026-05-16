@@ -109,8 +109,9 @@ proof crop view --root src/guides --output .crop/views/ready-guides.json --name 
 and `--content-tag` to additional CROP `frontmatter_query` clauses. The
 generated `root` is written relative to the view file, so the recipe can move
 with `.crop/views`. The command also honors global `-o/--output` when local
-`--output` is omitted. The resulting view can be reused anywhere a CROP command
-accepts `--view`.
+`--output` is omitted. Because the recipe is JSON, non-JSON global formats such
+as `-f markdown` are rejected. The resulting view can be reused anywhere a CROP
+command accepts `--view`.
 
 Generate first-class authoring pages from the same view:
 
@@ -172,6 +173,8 @@ proof crop sync --view .crop/views/ready-guides.json
 
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
+`prepare` and `sync` produce JSON artifacts, so non-JSON global formats such as
+`-f markdown` are rejected.
 Use `proof crop prepare` when you want the repeatable docs preflight: it first
 strictly inspects `.crop/views` and the exact `--view` recipe, then runs the
 same side-info sync.

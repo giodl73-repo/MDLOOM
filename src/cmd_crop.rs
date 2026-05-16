@@ -299,7 +299,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status, globals),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect, globals),
-        CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare),
+        CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare, globals),
         CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
         CropCommand::LinkList(link_list) => run_link_list(link_list, globals),
@@ -318,7 +318,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         }
         CropCommand::HeadingList(heading_list) => run_heading_list(heading_list, globals),
         CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
-        CropCommand::Sync(sync) => run_sync(args.crop_bin, sync),
+        CropCommand::Sync(sync) => run_sync(args.crop_bin, sync, globals),
     }
 }
 
@@ -431,7 +431,19 @@ fn reject_non_json_inspect_format(globals: &GlobalOptions) -> Result<()> {
     }
 }
 
-fn run_prepare(crop_bin: PathBuf, args: PrepareArgs) -> Result<()> {
+fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions) -> Result<()> {
+    match globals.format() {
+        "text" | "json" => Ok(()),
+        other => bail!(
+            "proof crop {} writes JSON artifacts; use text/json output format, got {:?}",
+            command,
+            other
+        ),
+    }
+}
+
+fn run_prepare(crop_bin: PathBuf, args: PrepareArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_json_artifact_global_format("prepare", globals)?;
     let command_args = build_prepare_args(args)?;
     for crop_args in command_args {
         run_crop(crop_bin.clone(), crop_args)?;
@@ -464,6 +476,7 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
 }
 
 fn run_view(args: ViewArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_json_artifact_global_format("view", globals)?;
     let output = view_output_path(&args, globals);
     let recipe = build_view_recipe(&args, globals)?;
     if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -896,7 +909,8 @@ fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<
     Ok(crop_args)
 }
 
-fn run_sync(crop_bin: PathBuf, args: SyncArgs) -> Result<()> {
+fn run_sync(crop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_json_artifact_global_format("sync", globals)?;
     let command_args = build_sync_args(args)?;
     for crop_args in command_args {
         run_crop(crop_bin.clone(), crop_args)?;
@@ -1282,6 +1296,13 @@ mod tests {
         let err = reject_non_json_inspect_format(&globals("markdown")).unwrap_err();
 
         assert!(err.to_string().contains("emits JSON"));
+    }
+
+    #[test]
+    fn json_artifact_commands_reject_non_json_global_format() {
+        let err = reject_non_json_artifact_global_format("view", &globals("markdown")).unwrap_err();
+
+        assert!(err.to_string().contains("writes JSON artifacts"));
     }
 
     #[test]
