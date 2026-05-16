@@ -53,6 +53,13 @@ Use `--format json` when an agent, registry, or CI job should consume CROP's
 proof crop status --view .crop/views/ready-guides.json --format json --strict --strict-on broken-links --output READY_GUIDES.status.json
 ```
 
+For the same CROP-backed health surface from the top-level status command, use
+`proof status --crop`. The local `proof status` summary remains the default:
+
+```text
+proof status --crop --view .crop/views/ready-guides.json --crop-format json --strict --strict-on broken-links -o READY_GUIDES.status.json
+```
+
 You can pass the same generic filters CROP exposes:
 
 ```text

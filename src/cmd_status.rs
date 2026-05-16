@@ -12,10 +12,94 @@ pub(crate) struct Args {
     /// Directory to inspect (default: current directory)
     #[arg(default_value = ".")]
     dir: PathBuf,
+    /// Delegate corpus health to CROP status instead of the local PROOF summary
+    #[arg(long)]
+    crop: bool,
+    /// CROP executable to invoke with --crop
+    #[arg(long, default_value = "crop")]
+    crop_bin: PathBuf,
+    /// crop.view.v1 recipe to scan with --crop
+    #[arg(long)]
+    view: Option<PathBuf>,
+    /// Relay CROP strict mode with --crop
+    #[arg(long)]
+    strict: bool,
+    /// Limit --strict to selected CROP issue classes
+    #[arg(long = "strict-on")]
+    strict_on: Vec<String>,
+    /// CROP status output format with --crop: markdown or json
+    #[arg(long = "crop-format", default_value = "markdown")]
+    crop_format: String,
+    /// Restrict CROP status to one or more extensions
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename in CROP status
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
 }
 
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    if args.crop {
+        return run_crop_status(args, globals);
+    }
     run(args, globals.config())
+}
+
+fn run_crop_status(args: Args, globals: &GlobalOptions) -> Result<()> {
+    let crop_bin = args.crop_bin.clone();
+    crate::cmd_crop::run_crop(crop_bin, build_crop_status_args(args, globals)?)
+}
+
+fn build_crop_status_args(args: Args, globals: &GlobalOptions) -> Result<Vec<String>> {
+    let root = if args.view.is_some() {
+        None
+    } else if args.dir.is_absolute() {
+        Some(args.dir)
+    } else {
+        Some(std::env::current_dir()?.join(args.dir))
+    };
+
+    let mut crop_args = vec!["status".to_string()];
+    if let Some(root) = root {
+        crop_args.push("--root".to_string());
+        crop_args.push(root.display().to_string());
+    }
+    if let Some(view) = args.view {
+        crop_args.push("--view".to_string());
+        crop_args.push(view.display().to_string());
+    }
+    for extension in args.extensions {
+        crop_args.push("--extension".to_string());
+        crop_args.push(extension);
+    }
+    for exclude_dir in args.exclude_dirs {
+        crop_args.push("--exclude-dir".to_string());
+        crop_args.push(exclude_dir);
+    }
+    if args.strict {
+        crop_args.push("--strict".to_string());
+    }
+    for strict_on in args.strict_on {
+        crop_args.push("--strict-on".to_string());
+        crop_args.push(strict_on);
+    }
+    crop_args.push("--format".to_string());
+    crop_args.push(crop_status_format(&args.crop_format)?);
+    if let Some(output) = globals.output() {
+        crop_args.push("--output".to_string());
+        crop_args.push(output.display().to_string());
+    }
+    Ok(crop_args)
+}
+
+fn crop_status_format(format: &str) -> Result<String> {
+    match format {
+        "markdown" | "json" => Ok(format.to_string()),
+        other => anyhow::bail!(
+            "proof status --crop-format must be markdown or json, got {:?}",
+            other
+        ),
+    }
 }
 
 fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {
@@ -164,4 +248,83 @@ fn extract_json_u64(json: &str, key: &str) -> Option<u64> {
         .find(|c: char| !c.is_ascii_digit())
         .unwrap_or(after.len());
     after[..end].parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn globals(output: Option<PathBuf>) -> GlobalOptions {
+        GlobalOptions::new(None, "text".to_string(), false, false, output)
+    }
+
+    #[test]
+    fn crop_status_args_use_root_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = build_crop_status_args(
+            Args {
+                dir: dir.path().to_path_buf(),
+                crop: true,
+                crop_bin: PathBuf::from("crop"),
+                view: None,
+                strict: true,
+                strict_on: vec!["broken-links".to_string()],
+                crop_format: "json".to_string(),
+                extensions: vec!["md".to_string()],
+                exclude_dirs: vec!["target".to_string()],
+            },
+            &globals(Some(PathBuf::from("STATUS.json"))),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status".to_string(),
+                "--root".to_string(),
+                dir.path().display().to_string(),
+                "--extension".to_string(),
+                "md".to_string(),
+                "--exclude-dir".to_string(),
+                "target".to_string(),
+                "--strict".to_string(),
+                "--strict-on".to_string(),
+                "broken-links".to_string(),
+                "--format".to_string(),
+                "json".to_string(),
+                "--output".to_string(),
+                "STATUS.json".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn crop_status_args_can_use_view() {
+        let args = build_crop_status_args(
+            Args {
+                dir: PathBuf::from("."),
+                crop: true,
+                crop_bin: PathBuf::from("crop"),
+                view: Some(PathBuf::from(".crop\\views\\ready.json")),
+                strict: false,
+                strict_on: vec![],
+                crop_format: "markdown".to_string(),
+                extensions: vec![],
+                exclude_dirs: vec![],
+            },
+            &globals(None),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status".to_string(),
+                "--view".to_string(),
+                ".crop\\views\\ready.json".to_string(),
+                "--format".to_string(),
+                "markdown".to_string(),
+            ]
+        );
+    }
 }

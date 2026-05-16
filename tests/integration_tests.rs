@@ -1444,6 +1444,58 @@ required_h2_all = ["Decision"]
 }
 
 #[test]
+fn binary_status_crop_delegates_to_crop_status() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let output_path = dir.path().join("STATUS.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("status")
+        .arg("--crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--view")
+        .arg(".crop\\views\\ready.json")
+        .arg("--crop-format")
+        .arg("json")
+        .arg("--strict")
+        .arg("--strict-on")
+        .arg("broken-links")
+        .output()
+        .expect("failed to run proof status --crop");
+
+    assert!(
+        output.status.success(),
+        "proof status --crop failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("status"), "got: {}", args);
+    assert!(
+        args.contains("--view .crop\\views\\ready.json"),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--format json"), "got: {}", args);
+    assert!(args.contains("--strict"), "got: {}", args);
+    assert!(args.contains("--strict-on broken-links"), "got: {}", args);
+    assert!(
+        args.contains(&format!("--output {}", output_path.display())),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
 fn binary_backfill_literal_generates_source_and_report() {
     let bin = debug_bin();
     if !bin.exists() {
