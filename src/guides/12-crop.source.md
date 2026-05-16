@@ -75,6 +75,10 @@ You can pass the same generic filters CROP exposes:
 proof crop status --root docs --extension md --exclude-dir target
 ```
 
+In `--view` mode, omit those filters to preserve the recipe exactly. Supplying
+`--extension` overrides the recipe extension allow-list for that run, while
+`--exclude-dir` extends the recipe's excluded directory basenames.
+
 ---
 
 ## Use named CROP views
