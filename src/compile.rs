@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use crate::compile_crop::{self, SideInfoKind};
+use crate::compile_directive;
 use crate::config::GlintConfig;
 use crate::crop_side_info;
 use crate::davinci::evaluate_invariant;
@@ -506,6 +507,8 @@ fn collect_directives(source: &str) -> Vec<Directive> {
         if let Some(kind) = proof_directive_kind(trimmed) {
             let line_start = i;
             let info_after_backticks = trimmed[3..].to_string(); // "proof:layout gap=4 ..."
+            let info_after_attrs =
+                compile_directive::directive_header_attrs(&info_after_backticks, kind).to_string();
             let mut body: Vec<&str> = Vec::new();
             i += 1;
             while i < lines.len() {
@@ -876,121 +879,46 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                     });
                 }
                 "backlinks" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:backlinks")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let target = extract_attr_value(&info_after, "target")
-                        .or_else(|| extract_attr_value(&info_after, "uri"))
-                        .or_else(|| extract_attr_value(&info_after, "source"))
-                        .or_else(|| {
-                            body.iter().find_map(|l| {
-                                let t = l.trim();
-                                if !t.is_empty() {
-                                    Some(t.to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                        .unwrap_or_default();
-                    let source = extract_attr_value(&info_after, "side-info")
-                        .or_else(|| extract_attr_value(&info_after, "side_info"));
-                    let format = extract_attr_value(&info_after, "format")
-                        .unwrap_or_else(|| "list".to_string());
+                    let attrs =
+                        compile_directive::parse_backlinks_directive(&info_after_attrs, &body);
                     directives.push(Directive::Backlinks {
-                        target,
-                        source,
-                        format,
+                        target: attrs.target,
+                        source: attrs.source,
+                        format: attrs.format,
                         line_start,
                         line_end,
                     });
                 }
                 "links" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:links")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let source_doc = extract_attr_value(&info_after, "source").or_else(|| {
-                        body.iter().find_map(|l| {
-                            let t = l.trim();
-                            if !t.is_empty() {
-                                Some(t.to_string())
-                            } else {
-                                None
-                            }
-                        })
-                    });
-                    let source = extract_attr_value(&info_after, "side-info")
-                        .or_else(|| extract_attr_value(&info_after, "side_info"));
-                    let status = extract_attr_value(&info_after, "status")
-                        .unwrap_or_else(|| "all".to_string());
-                    let format = extract_attr_value(&info_after, "format")
-                        .unwrap_or_else(|| "list".to_string());
+                    let attrs = compile_directive::parse_links_directive(&info_after_attrs, &body);
                     directives.push(Directive::Links {
-                        source_doc,
-                        status,
-                        source,
-                        format,
+                        source_doc: attrs.source_doc,
+                        status: attrs.status,
+                        source: attrs.source,
+                        format: attrs.format,
                         line_start,
                         line_end,
                     });
                 }
                 "headings" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:headings")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let source_doc = extract_attr_value(&info_after, "source")
-                        .or_else(|| extract_attr_value(&info_after, "target"))
-                        .or_else(|| extract_attr_value(&info_after, "uri"))
-                        .or_else(|| {
-                            body.iter().find_map(|l| {
-                                let t = l.trim();
-                                if !t.is_empty() {
-                                    Some(t.to_string())
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                        .unwrap_or_default();
-                    let source = extract_attr_value(&info_after, "side-info")
-                        .or_else(|| extract_attr_value(&info_after, "side_info"));
-                    let format = extract_attr_value(&info_after, "format")
-                        .unwrap_or_else(|| "list".to_string());
+                    let attrs =
+                        compile_directive::parse_headings_directive(&info_after_attrs, &body);
                     directives.push(Directive::Headings {
-                        source_doc,
-                        source,
-                        format,
+                        source_doc: attrs.source_doc,
+                        source: attrs.source,
+                        format: attrs.format,
                         line_start,
                         line_end,
                     });
                 }
                 "frontmatter" => {
-                    let info_after = info_after_backticks
-                        .strip_prefix("proof:frontmatter")
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    let field = extract_attr_value(&info_after, "field")
-                        .or_else(|| extract_attr_value(&info_after, "key"));
-                    let value = extract_attr_value(&info_after, "value");
-                    let source = extract_attr_value(&info_after, "side-info")
-                        .or_else(|| extract_attr_value(&info_after, "side_info"));
-                    let op =
-                        extract_attr_value(&info_after, "op").unwrap_or_else(|| "has".to_string());
-                    let format = extract_attr_value(&info_after, "format")
-                        .unwrap_or_else(|| "list".to_string());
+                    let attrs = compile_directive::parse_frontmatter_directive(&info_after_attrs);
                     directives.push(Directive::Frontmatter {
-                        field,
-                        value,
-                        op,
-                        source,
-                        format,
+                        field: attrs.field,
+                        value: attrs.value,
+                        op: attrs.op,
+                        source: attrs.source,
+                        format: attrs.format,
                         line_start,
                         line_end,
                     });
