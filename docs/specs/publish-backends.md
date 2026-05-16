@@ -15,16 +15,16 @@ semantics.
 | `json-report` | supported | Machine-readable compile/report bundle. | Emits `proof.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
 | `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `proof-site.json` page manifest from a source tree. |
 | `pdf` | supported | Portable human-readable artifact. | Renders the resolved HTML publish output into a deterministic PDF with basic text and metadata. |
+| `docx` | supported | Editable Word-processing document. | Emits a native OOXML package with editable headings, paragraphs, lists, tables, code text, links, and metadata. |
 
-`html`, `pebble`, and `json-report` are fully supported within those scopes.
-They are not claims of full site generation, PDF layout fidelity,
-office-document styling, or slide deck generation.
+`html`, `pebble`, `json-report`, `site`, `pdf`, and `docx` are fully supported
+within those scopes. They are not claims of hosting/deployment, PDF layout
+fidelity, full Word styling, or slide deck generation.
 
 ## Planned targets
 
 | Target | Primary user | Backend role | First useful claim |
 |---|---|---|---|
-| `docx` | Business/document workflows | Editable Word-processing document. | Convert resolved Markdown into headings, paragraphs, lists, tables, code blocks, and document metadata. |
 | `pptx` | Presentations/executive updates | Slide deck artifact. | Convert explicit slide-oriented source into a basic deck with title/content slides, speaker notes metadata where available, and stable manifest records. |
 
 LaTeX is intentionally deferred. It remains attractive for academic/technical
@@ -69,11 +69,11 @@ and metadata, not exact cross-engine visual equivalence.
 
 ### DOCX
 
-DOCX should be an editable document target. The first version should support
-document title, headings, paragraphs, lists, tables, fenced code blocks, links,
-and basic metadata. Advanced Word features such as tracked changes, comments,
-complex section breaks, custom templates, and corporate styles belong in later
-pulses.
+DOCX is an editable document target. The first version writes a native Office
+Open XML package with document title metadata, headings, paragraphs, native
+bullet and numbered lists, tables, fenced code blocks, and link text. Advanced
+Word features such as tracked changes, comments, complex section breaks, custom
+templates, and corporate styles belong in later pulses.
 
 ### PPTX
 

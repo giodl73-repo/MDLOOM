@@ -124,6 +124,7 @@ proof compile file.source.md --target pebble -o out.pebble.json
 proof compile file.source.md --target json-report -o out.proof-report.json
 proof compile src/guides/ --target site --output-dir site/
 proof compile file.source.md --target pdf -o out.pdf
+proof compile file.source.md --target docx -o out.docx
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
@@ -158,7 +159,11 @@ ranking.
 artifact. The first PDF backend is deterministic and dependency-free for CI; it
 does not claim browser/print-engine pixel equivalence.
 
-Planned publish backends include DOCX and native PPTX decks. See
+`--target docx` writes an editable Word-processing OOXML package from resolved
+Markdown, including headings, paragraphs, native list numbering, tables, fenced
+code text, links, and basic document metadata.
+
+Planned publish backends include native PPTX decks. See
 [`docs/specs/publish-backends.md`](docs/specs/publish-backends.md) for target
 contracts and sequencing. PPTX is planned as editable native PowerPoint slides
 with real bullets/notes, not screenshots or HTML embedded in slides.

@@ -57,6 +57,7 @@ enum CompileTarget {
     JsonReport,
     Site,
     Pdf,
+    Docx,
 }
 
 impl CompileTarget {
@@ -68,6 +69,7 @@ impl CompileTarget {
             CompileTarget::JsonReport => "json-report",
             CompileTarget::Site => "site",
             CompileTarget::Pdf => "pdf",
+            CompileTarget::Docx => "docx",
         }
     }
 }
@@ -460,6 +462,9 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
         CompileTarget::Pdf => {
             output.set_extension("pdf");
         }
+        CompileTarget::Docx => {
+            output.set_extension("docx");
+        }
     }
     Some(output)
 }
@@ -480,6 +485,7 @@ fn compile_target_file(
         }
         CompileTarget::Site => compile_html_file(source_path, output_path, root, config),
         CompileTarget::Pdf => compile_pdf_file(source_path, output_path, root, config),
+        CompileTarget::Docx => compile_docx_file(source_path, output_path, root, config),
     }
 }
 
@@ -657,6 +663,43 @@ fn compile_pdf_file(
     if result.written {
         let tmp = output_path.with_extension("proof_tmp");
         std::fs::write(&tmp, pdf)?;
+        std::fs::rename(&tmp, output_path)?;
+    }
+    result.output_path = output_path.to_path_buf();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    Ok(result)
+}
+
+fn compile_docx_file(
+    source_path: &Path,
+    output_path: &Path,
+    root: &Path,
+    config: &proof_lib::GlintConfig,
+) -> Result<proof_lib::compile::CompileResult> {
+    let temp_dir = unique_temp_dir()?;
+    let markdown_path = temp_dir.join("compiled.md");
+    let mut result = compile_file(source_path, &markdown_path, root, config)?;
+    if result
+        .violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error)
+    {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        result.output_path = output_path.to_path_buf();
+        return Ok(result);
+    }
+
+    let markdown = std::fs::read_to_string(&markdown_path)?;
+    let title = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("proof document");
+    let docx = proof_lib::publish::markdown_to_docx_document(&markdown, title);
+    let current = std::fs::read(output_path).unwrap_or_default();
+    result.written = current != docx;
+    if result.written {
+        let tmp = output_path.with_extension("proof_tmp");
+        std::fs::write(&tmp, docx)?;
         std::fs::rename(&tmp, output_path)?;
     }
     result.output_path = output_path.to_path_buf();

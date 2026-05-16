@@ -40,7 +40,7 @@ ranking, or LaTeX in this wave.
 | 02 | JSON report bundle | done | Added `proof.publish.json_report.v1` as a machine-readable compile/report target for CI and agents. |
 | 03 | Static site backend | done | Added multi-page HTML site generation with navigation index and `proof-site.json` manifest. |
 | 04 | PDF backend | done | Rendered existing HTML publish output to deterministic PDF artifacts with manifest integration. |
-| 05 | DOCX backend | todo | Emit editable Word-processing documents from resolved Markdown. |
+| 05 | DOCX backend | done | Added native editable OOXML Word documents with package/XML inspection and manifest integration. |
 | 06 | PPTX backend | todo | Emit native editable PowerPoint decks from explicit slide-oriented sources, with package/XML, bullet, notes, and STAGE fidelity gates. |
 
 ## Validation gates

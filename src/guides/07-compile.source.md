@@ -58,6 +58,9 @@ proof compile src/guides/ --target site --output-dir site/
 # Publish one source file as a portable PDF
 proof compile src/guides/math.source.md --target pdf -o docs/guides/math.pdf
 
+# Publish one source file as an editable Word document
+proof compile src/guides/math.source.md --target docx -o docs/guides/math.docx
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -97,6 +100,11 @@ deployment, search ranking, and target-aware watch mode are out of scope.
 artifact. The first backend is deterministic and dependency-free for CI, with
 reasonable text output and metadata. It does not claim exact browser or print
 engine layout equivalence.
+
+`--target docx` writes a native editable Word-processing OOXML package from
+resolved Markdown. It supports headings, paragraphs, native bullets/numbering,
+tables, fenced code text, links, and basic metadata without requiring Microsoft
+Word during CI.
 
 ---
 

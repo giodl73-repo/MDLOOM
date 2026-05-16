@@ -2,7 +2,7 @@
 wave: publish-backends
 pulse: 05
 date: 2026-05-16
-status: todo
+status: done
 depends_on: ["publish-backends/pulse-04"]
 governing_roles: ["COMPOSE", "BOOK", "SCHEMA", "OFFICE", "BENCH"]
 ---
@@ -39,13 +39,13 @@ document with stable basic structure.
 
 ## Deliverables checklist
 
-- [ ] Add `docx` target dispatch and output derivation.
-- [ ] Support title, headings, paragraphs, lists, tables, fenced code, links, and
+- [x] Add `docx` target dispatch and output derivation.
+- [x] Support title, headings, paragraphs, lists, tables, fenced code, links, and
       metadata.
-- [ ] Add archive/content tests that inspect document XML for expected structure.
-- [ ] Add OFFICE review evidence for OOXML package validity and editability.
-- [ ] Preserve diagnostics and manifest behavior.
-- [ ] Update README/SPEC/spec docs.
+- [x] Add archive/content tests that inspect document XML for expected structure.
+- [x] Add OFFICE review evidence for OOXML package validity and editability.
+- [x] Preserve diagnostics and manifest behavior.
+- [x] Update README/SPEC/spec docs.
 
 ## Validation gates
 
@@ -64,4 +64,19 @@ document with stable basic structure.
 
 ## Evidence
 
-- Pending.
+- Added `proof compile --target docx` with `.docx` output derivation and manifest
+  target records.
+- Generated native OOXML package parts: `[Content_Types].xml`, `_rels/.rels`,
+  core/app properties, `word/document.xml`, relationships, styles, and numbering.
+- OFFICE review: output is a ZIP/XML package with content types and
+  relationships, editable WordprocessingML paragraphs/tables, style references,
+  and native numbering IDs for bullets and ordered lists; CI inspects package
+  parts without requiring Microsoft Word.
+- Validation:
+  - `cargo fmt --check`
+  - `cargo test binary_compile_target_docx_writes_docx`
+  - `cargo test --test integration_tests`
+  - `cargo test`
+  - `cargo build`
+  - `proof compile <fixture>.source.md --target docx -o <out>.docx`
+  - `git diff --check`

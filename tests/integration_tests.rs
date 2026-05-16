@@ -2151,6 +2151,82 @@ fn binary_compile_target_pdf_writes_pdf() {
 }
 
 #[test]
+fn binary_compile_target_docx_writes_docx() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("guide.source.md");
+    let output_path = dir.path().join("guide.docx");
+    std::fs::write(
+        &source,
+        "# Guide\n\nBody with [home](https://example.com).\n\n## Steps\n\n- one\n- two\n\n1. first\n2. second\n\n| A | B |\n|---|---|\n| x | y |\n\n```text\nlet x = 1;\n```\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("docx")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let docx = std::fs::File::open(&output_path).expect("docx output");
+    let mut archive = zip::ZipArchive::new(docx).expect("valid docx zip");
+    assert!(archive.by_name("[Content_Types].xml").is_ok());
+    assert!(archive.by_name("_rels/.rels").is_ok());
+    assert!(archive.by_name("word/styles.xml").is_ok());
+    assert!(archive.by_name("word/numbering.xml").is_ok());
+    let mut document = String::new();
+    std::io::Read::read_to_string(
+        &mut archive.by_name("word/document.xml").unwrap(),
+        &mut document,
+    )
+    .unwrap();
+    assert!(
+        document.contains(r#"<w:pStyle w:val="Heading1"/>"#),
+        "got:\n{}",
+        document
+    );
+    assert!(document.contains(">Guide<"), "got:\n{}", document);
+    assert!(
+        document.contains("home (https://example.com)"),
+        "got:\n{}",
+        document
+    );
+    assert!(
+        document.contains(r#"<w:numId w:val="1"/>"#),
+        "got:\n{}",
+        document
+    );
+    assert!(
+        document.contains(r#"<w:numId w:val="2"/>"#),
+        "got:\n{}",
+        document
+    );
+    assert!(document.contains("<w:tbl>"), "got:\n{}", document);
+    assert!(document.contains("let x = 1;"), "got:\n{}", document);
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"][0]["target"], "docx");
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

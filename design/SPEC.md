@@ -823,7 +823,7 @@ COMPILE OPTIONS
         --progress                Show a running compiled/total count
         --output-dir <DIR>        Write compiled files under DIR
         --root <DIR>              Root directory for md:// URI resolution
-        --target <TARGET>         md (default) | html | pebble | json-report | site | pdf
+        --target <TARGET>         md (default) | html | pebble | json-report | site | pdf | docx
         --tag <TAG>               Only compile source files with this tag
         --op <OP>                 Only compile source files with this operation tag
         --content-tag <TAG>       Only compile source files with this content tag
@@ -859,10 +859,16 @@ COMPILE OPTIONS
   artifact. The first backend is deterministic and dependency-free for CI. It
   does not claim exact browser or print-engine layout equivalence.
 
-  Planned publish targets include DOCX and PPTX. PPTX must be a native editable
-  Office Open XML deck with real slide text, bullets, and notes rather than
-  screenshots or HTML embedded in slides. LaTeX is deferred until after these
-  publish backends.
+  `docx` writes a native editable Office Open XML Word-processing package from
+  resolved Markdown. It supports headings, paragraphs, native bullet/numbered
+  lists, tables, fenced code text, links, and basic metadata; tracked changes,
+  comments, corporate templates, and full Word style customization are out of
+  scope for the first backend.
+
+  Planned publish targets include PPTX. PPTX must be a native editable Office
+  Open XML deck with real slide text, bullets, and notes rather than screenshots
+  or HTML embedded in slides. LaTeX is deferred until after these publish
+  backends.
 
   Non-watch compile runs write `.proof/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each

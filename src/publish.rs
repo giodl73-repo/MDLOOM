@@ -3,8 +3,10 @@ use pulldown_cmark::{html, Event, Options, Parser};
 use serde::Serialize;
 use std::{
     fmt::Write as _,
+    io::{Cursor, Write},
     path::{Path, PathBuf},
 };
+use zip::{write::FileOptions, ZipWriter};
 
 use crate::frontmatter::SourceFrontmatter;
 
@@ -171,6 +173,41 @@ pub fn html_to_pdf_document(html: &str, fallback_title: &str) -> Vec<u8> {
     build_simple_pdf(&title, &lines)
 }
 
+pub fn markdown_to_docx_document(markdown: &str, fallback_title: &str) -> Vec<u8> {
+    let title = pebble::document_title(markdown, fallback_title);
+    let blocks = markdown_to_docx_blocks(markdown);
+    let document = docx_document_xml(&blocks);
+    let core = docx_core_xml(&title);
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    for (path, content) in [
+        ("[Content_Types].xml", docx_content_types_xml()),
+        ("_rels/.rels", docx_root_relationships_xml()),
+        ("docProps/core.xml", core),
+        ("docProps/app.xml", docx_app_xml()),
+        (
+            "word/_rels/document.xml.rels",
+            docx_document_relationships_xml(),
+        ),
+        ("word/document.xml", document),
+        ("word/styles.xml", docx_styles_xml()),
+        ("word/numbering.xml", docx_numbering_xml()),
+    ] {
+        writer
+            .start_file(path, options)
+            .expect("writing DOCX package part cannot fail");
+        writer
+            .write_all(content.as_bytes())
+            .expect("writing DOCX package part cannot fail");
+    }
+
+    writer
+        .finish()
+        .expect("finalizing DOCX package cannot fail")
+        .into_inner()
+}
+
 pub fn write_static_site(site_root: &Path, mut pages: Vec<SitePage>) -> std::io::Result<()> {
     std::fs::create_dir_all(site_root)?;
     pages.sort_by(|left, right| left.href.cmp(&right.href));
@@ -221,6 +258,335 @@ fn static_site_index(manifest: &SiteManifest) -> String {
         ),
         pages
     )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DocxBlock {
+    Heading { level: usize, text: String },
+    Paragraph(String),
+    Bullet { level: usize, text: String },
+    Numbered { level: usize, text: String },
+    Code(Vec<String>),
+    Table(Vec<Vec<String>>),
+}
+
+fn markdown_to_docx_blocks(markdown: &str) -> Vec<DocxBlock> {
+    let lines = markdown.lines().collect::<Vec<_>>();
+    let mut blocks = Vec::new();
+    let mut index = 0usize;
+
+    while index < lines.len() {
+        let line = lines[index];
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            index += 1;
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            index += 1;
+            let mut code = Vec::new();
+            while index < lines.len() && !lines[index].trim_start().starts_with("```") {
+                code.push(lines[index].to_string());
+                index += 1;
+            }
+            if index < lines.len() {
+                index += 1;
+            }
+            blocks.push(DocxBlock::Code(code));
+            continue;
+        }
+        if let Some((level, title)) = markdown_heading(line) {
+            blocks.push(DocxBlock::Heading {
+                level,
+                text: inline_markdown_text(title),
+            });
+            index += 1;
+            continue;
+        }
+        if is_markdown_table_start(&lines, index) {
+            let mut rows = vec![table_cells(lines[index])];
+            index += 2;
+            while index < lines.len()
+                && lines[index].contains('|')
+                && !lines[index].trim().is_empty()
+            {
+                rows.push(table_cells(lines[index]));
+                index += 1;
+            }
+            blocks.push(DocxBlock::Table(rows));
+            continue;
+        }
+        if let Some((level, text)) = markdown_bullet(line) {
+            blocks.push(DocxBlock::Bullet {
+                level,
+                text: inline_markdown_text(text),
+            });
+            index += 1;
+            continue;
+        }
+        if let Some((level, text)) = markdown_numbered(line) {
+            blocks.push(DocxBlock::Numbered {
+                level,
+                text: inline_markdown_text(text),
+            });
+            index += 1;
+            continue;
+        }
+
+        let mut paragraph = vec![trimmed.to_string()];
+        index += 1;
+        while index < lines.len() {
+            let next = lines[index];
+            if next.trim().is_empty()
+                || next.trim_start().starts_with("```")
+                || markdown_heading(next).is_some()
+                || markdown_bullet(next).is_some()
+                || markdown_numbered(next).is_some()
+                || is_markdown_table_start(&lines, index)
+            {
+                break;
+            }
+            paragraph.push(next.trim().to_string());
+            index += 1;
+        }
+        blocks.push(DocxBlock::Paragraph(inline_markdown_text(
+            &paragraph.join(" "),
+        )));
+    }
+
+    blocks
+}
+
+fn docx_document_xml(blocks: &[DocxBlock]) -> String {
+    let mut body = String::new();
+    for block in blocks {
+        match block {
+            DocxBlock::Heading { level, text } => {
+                body.push_str(&docx_paragraph(
+                    Some(&format!("Heading{}", (*level).min(6))),
+                    None,
+                    text,
+                ));
+            }
+            DocxBlock::Paragraph(text) => body.push_str(&docx_paragraph(None, None, text)),
+            DocxBlock::Bullet { level, text } => {
+                body.push_str(&docx_paragraph(None, Some((1, *level)), text));
+            }
+            DocxBlock::Numbered { level, text } => {
+                body.push_str(&docx_paragraph(None, Some((2, *level)), text));
+            }
+            DocxBlock::Code(lines) => {
+                for line in lines {
+                    body.push_str(&docx_paragraph(Some("Code"), None, line));
+                }
+            }
+            DocxBlock::Table(rows) => body.push_str(&docx_table(rows)),
+        }
+    }
+
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+            "<w:body>{}<w:sectPr><w:pgSz w:w=\"12240\" w:h=\"15840\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\"/></w:sectPr></w:body></w:document>"
+        ),
+        body
+    )
+}
+
+fn docx_paragraph(style: Option<&str>, numbering: Option<(usize, usize)>, text: &str) -> String {
+    let mut props = String::new();
+    if let Some(style) = style {
+        let _ = write!(props, r#"<w:pStyle w:val="{}"/>"#, escape_xml(style));
+    }
+    if let Some((num_id, level)) = numbering {
+        let _ = write!(
+            props,
+            r#"<w:numPr><w:ilvl w:val="{}"/><w:numId w:val="{}"/></w:numPr>"#,
+            level.min(8),
+            num_id
+        );
+    }
+    let props = if props.is_empty() {
+        String::new()
+    } else {
+        format!("<w:pPr>{props}</w:pPr>")
+    };
+    format!(
+        "<w:p>{}<w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+        props,
+        escape_xml(text)
+    )
+}
+
+fn docx_table(rows: &[Vec<String>]) -> String {
+    let mut xml = String::from("<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>");
+    for row in rows {
+        xml.push_str("<w:tr>");
+        for cell in row {
+            xml.push_str("<w:tc>");
+            xml.push_str(&docx_paragraph(None, None, cell));
+            xml.push_str("</w:tc>");
+        }
+        xml.push_str("</w:tr>");
+    }
+    xml.push_str("</w:tbl>");
+    xml
+}
+
+fn docx_content_types_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#,
+        r#"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#,
+        r#"<Default Extension="xml" ContentType="application/xml"/>"#,
+        r#"<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>"#,
+        r#"<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#,
+        r#"<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>"#,
+        r#"<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>"#,
+        r#"<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>"#,
+        "</Types>"
+    )
+    .to_string()
+}
+
+fn docx_root_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>"#,
+        r#"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn docx_document_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn docx_core_xml(title: &str) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">"#,
+            "<dc:title>{}</dc:title><dc:creator>PROOF</dc:creator></cp:coreProperties>"
+        ),
+        escape_xml(title)
+    )
+}
+
+fn docx_app_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">"#,
+        "<Application>PROOF</Application></Properties>"
+    )
+    .to_string()
+}
+
+fn docx_styles_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/></w:rPr></w:style>"#,
+        "</w:styles>"
+    )
+    .to_string()
+}
+
+fn docx_numbering_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/></w:lvl></w:abstractNum>"#,
+        r#"<w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>"#,
+        r#"<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>"#,
+        r#"<w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num>"#,
+        "</w:numbering>"
+    )
+    .to_string()
+}
+
+fn is_markdown_table_start(lines: &[&str], index: usize) -> bool {
+    index + 1 < lines.len()
+        && lines[index].contains('|')
+        && lines[index + 1]
+            .chars()
+            .all(|c| matches!(c, '|' | '-' | ':' | ' '))
+        && lines[index + 1].contains('-')
+}
+
+fn table_cells(line: &str) -> Vec<String> {
+    line.trim()
+        .trim_matches('|')
+        .split('|')
+        .map(|cell| inline_markdown_text(cell.trim()))
+        .collect()
+}
+
+fn markdown_bullet(line: &str) -> Option<(usize, &str)> {
+    let leading = line.len() - line.trim_start().len();
+    let trimmed = line.trim_start();
+    trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+        .map(|text| (leading / 2, text.trim()))
+}
+
+fn markdown_numbered(line: &str) -> Option<(usize, &str)> {
+    let leading = line.len() - line.trim_start().len();
+    let trimmed = line.trim_start();
+    let dot = trimmed.find('.')?;
+    if dot == 0 || !trimmed[..dot].chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    trimmed[dot + 1..]
+        .strip_prefix(' ')
+        .map(|text| (leading / 2, text.trim()))
+}
+
+fn inline_markdown_text(text: &str) -> String {
+    let mut output = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('[') {
+        let Some(close) = rest[start + 1..]
+            .find("](")
+            .map(|offset| start + 1 + offset)
+        else {
+            break;
+        };
+        let Some(end) = rest[close + 2..].find(')').map(|offset| close + 2 + offset) else {
+            break;
+        };
+        output.push_str(&rest[..start]);
+        output.push_str(&rest[start + 1..close]);
+        output.push_str(" (");
+        output.push_str(&rest[close + 2..end]);
+        output.push(')');
+        rest = &rest[end + 1..];
+    }
+    output.push_str(rest);
+    output.replace('`', "")
+}
+
+fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 fn html_to_plain_text(html: &str) -> String {
