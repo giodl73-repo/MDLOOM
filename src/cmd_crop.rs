@@ -298,7 +298,7 @@ struct SyncArgs {
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status, globals),
-        CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect),
+        CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect, globals),
         CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare),
         CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
@@ -389,7 +389,12 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     Ok(crop_args)
 }
 
-fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
+fn run_inspect_views(
+    crop_bin: PathBuf,
+    mut args: InspectViewsArgs,
+    globals: &GlobalOptions,
+) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
     let crop_args = build_inspect_views_args(args);
     if let Some(output) = output {
