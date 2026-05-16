@@ -126,6 +126,37 @@ pub(crate) enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    Backlinks {
+        target: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Links {
+        source_doc: Option<String>,
+        status: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Headings {
+        source_doc: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    Frontmatter {
+        field: Option<String>,
+        value: Option<String>,
+        op: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
     /// proof:chart — full bar or line chart (distinct from sparkline elements).
     Chart {
         attrs: crate::chart::ChartAttrs,
@@ -158,6 +189,10 @@ impl Directive {
             Directive::Toc { line_start, .. } => *line_start,
             Directive::Xref { line_start, .. } => *line_start,
             Directive::Blockquote { line_start, .. } => *line_start,
+            Directive::Backlinks { line_start, .. } => *line_start,
+            Directive::Links { line_start, .. } => *line_start,
+            Directive::Headings { line_start, .. } => *line_start,
+            Directive::Frontmatter { line_start, .. } => *line_start,
             Directive::Chart { line_start, .. } => *line_start,
         }
     }
@@ -177,6 +212,10 @@ impl Directive {
             Directive::Toc { line_end, .. } => *line_end,
             Directive::Xref { line_end, .. } => *line_end,
             Directive::Blockquote { line_end, .. } => *line_end,
+            Directive::Backlinks { line_end, .. } => *line_end,
+            Directive::Links { line_end, .. } => *line_end,
+            Directive::Headings { line_end, .. } => *line_end,
+            Directive::Frontmatter { line_end, .. } => *line_end,
             Directive::Chart { line_end, .. } => *line_end,
         }
     }
@@ -329,6 +368,49 @@ pub(crate) fn collect_directives(source: &str) -> Vec<Directive> {
                     text: blockquote.text,
                     attribution: blockquote.attribution,
                     style: blockquote.style,
+                    line_start,
+                    line_end,
+                });
+            }
+            "backlinks" => {
+                let backlinks = parse_backlinks_directive(&attrs_str, &body);
+                directives.push(Directive::Backlinks {
+                    target: backlinks.target,
+                    source: backlinks.source,
+                    format: backlinks.format,
+                    line_start,
+                    line_end,
+                });
+            }
+            "links" => {
+                let links = parse_links_directive(&attrs_str, &body);
+                directives.push(Directive::Links {
+                    source_doc: links.source_doc,
+                    status: links.status,
+                    source: links.source,
+                    format: links.format,
+                    line_start,
+                    line_end,
+                });
+            }
+            "headings" => {
+                let headings = parse_headings_directive(&attrs_str, &body);
+                directives.push(Directive::Headings {
+                    source_doc: headings.source_doc,
+                    source: headings.source,
+                    format: headings.format,
+                    line_start,
+                    line_end,
+                });
+            }
+            "frontmatter" => {
+                let frontmatter = parse_frontmatter_directive(&attrs_str);
+                directives.push(Directive::Frontmatter {
+                    field: frontmatter.field,
+                    value: frontmatter.value,
+                    op: frontmatter.op,
+                    source: frontmatter.source,
+                    format: frontmatter.format,
                     line_start,
                     line_end,
                 });
@@ -727,6 +809,112 @@ pub(crate) fn parse_chart_directive(attrs_str: &str, body: &[&str]) -> ChartDire
     }
 }
 
+pub(crate) struct BacklinksDirective {
+    pub(crate) target: String,
+    pub(crate) source: Option<String>,
+    pub(crate) format: String,
+}
+
+pub(crate) fn parse_backlinks_directive(attrs_str: &str, body: &[&str]) -> BacklinksDirective {
+    let target = extract_attr_value(attrs_str, "target")
+        .or_else(|| extract_attr_value(attrs_str, "uri"))
+        .or_else(|| extract_attr_value(attrs_str, "source"))
+        .or_else(|| first_non_empty_body_line(body))
+        .unwrap_or_default();
+    let source = extract_attr_value(attrs_str, "side-info")
+        .or_else(|| extract_attr_value(attrs_str, "side_info"));
+    let format = extract_attr_value(attrs_str, "format").unwrap_or_else(|| "list".to_string());
+
+    BacklinksDirective {
+        target,
+        source,
+        format,
+    }
+}
+
+pub(crate) struct LinksDirective {
+    pub(crate) source_doc: Option<String>,
+    pub(crate) status: String,
+    pub(crate) source: Option<String>,
+    pub(crate) format: String,
+}
+
+pub(crate) fn parse_links_directive(attrs_str: &str, body: &[&str]) -> LinksDirective {
+    let source_doc =
+        extract_attr_value(attrs_str, "source").or_else(|| first_non_empty_body_line(body));
+    let source = extract_attr_value(attrs_str, "side-info")
+        .or_else(|| extract_attr_value(attrs_str, "side_info"));
+    let status = extract_attr_value(attrs_str, "status").unwrap_or_else(|| "all".to_string());
+    let format = extract_attr_value(attrs_str, "format").unwrap_or_else(|| "list".to_string());
+
+    LinksDirective {
+        source_doc,
+        status,
+        source,
+        format,
+    }
+}
+
+pub(crate) struct HeadingsDirective {
+    pub(crate) source_doc: String,
+    pub(crate) source: Option<String>,
+    pub(crate) format: String,
+}
+
+pub(crate) fn parse_headings_directive(attrs_str: &str, body: &[&str]) -> HeadingsDirective {
+    let source_doc = extract_attr_value(attrs_str, "source")
+        .or_else(|| extract_attr_value(attrs_str, "target"))
+        .or_else(|| extract_attr_value(attrs_str, "uri"))
+        .or_else(|| first_non_empty_body_line(body))
+        .unwrap_or_default();
+    let source = extract_attr_value(attrs_str, "side-info")
+        .or_else(|| extract_attr_value(attrs_str, "side_info"));
+    let format = extract_attr_value(attrs_str, "format").unwrap_or_else(|| "list".to_string());
+
+    HeadingsDirective {
+        source_doc,
+        source,
+        format,
+    }
+}
+
+pub(crate) struct FrontmatterDirective {
+    pub(crate) field: Option<String>,
+    pub(crate) value: Option<String>,
+    pub(crate) op: String,
+    pub(crate) source: Option<String>,
+    pub(crate) format: String,
+}
+
+pub(crate) fn parse_frontmatter_directive(attrs_str: &str) -> FrontmatterDirective {
+    let field =
+        extract_attr_value(attrs_str, "field").or_else(|| extract_attr_value(attrs_str, "key"));
+    let value = extract_attr_value(attrs_str, "value");
+    let op = extract_attr_value(attrs_str, "op").unwrap_or_else(|| "has".to_string());
+    let source = extract_attr_value(attrs_str, "side-info")
+        .or_else(|| extract_attr_value(attrs_str, "side_info"));
+    let format = extract_attr_value(attrs_str, "format").unwrap_or_else(|| "list".to_string());
+
+    FrontmatterDirective {
+        field,
+        value,
+        op,
+        source,
+        format,
+    }
+}
+
+fn first_non_empty_body_line(body: &[&str]) -> Option<String> {
+    body.iter().find_map(|line| {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 pub(crate) struct MathAttrs {
     pub(crate) width: usize,
     pub(crate) align: MathAlign,
@@ -1040,6 +1228,14 @@ pub fn proof_directive_kind(line: &str) -> Option<&'static str> {
         Some("xref")
     } else if rest.starts_with("blockquote") {
         Some("blockquote")
+    } else if rest.starts_with("backlinks") {
+        Some("backlinks")
+    } else if rest.starts_with("links") {
+        Some("links")
+    } else if rest.starts_with("headings") {
+        Some("headings")
+    } else if rest.starts_with("frontmatter") {
+        Some("frontmatter")
     } else if rest.starts_with("chart") {
         Some("chart")
     } else if rest.starts_with("numbered-list") || rest.starts_with("ol") {
@@ -1146,6 +1342,19 @@ mod tests {
             proof_directive_kind("  ```proof:chart kind=bar"),
             Some("chart")
         );
+        assert_eq!(proof_directive_kind("```proof:links"), Some("links"));
+        assert_eq!(
+            proof_directive_kind("```proof:backlinks target=README.md"),
+            Some("backlinks")
+        );
+        assert_eq!(
+            proof_directive_kind("```proof:headings source=README.md"),
+            Some("headings")
+        );
+        assert_eq!(
+            proof_directive_kind("```proof:frontmatter field=tags"),
+            Some("frontmatter")
+        );
     }
 
     #[test]
@@ -1223,6 +1432,74 @@ mod tests {
             Some("name".to_string())
         );
         assert_eq!(extract_attr_value(attrs, "missing"), None);
+    }
+
+    #[test]
+    fn parses_crop_side_info_directives() {
+        let source = r#"```proof:links source="README.md" status=broken format=count side-info="reports/links.json"
+```
+
+```proof:backlinks target="README.md" format=table
+```
+
+```proof:headings format=count
+README.md
+```
+
+```proof:frontmatter field=tags value=guide op=has format=table side_info="reports/frontmatter.json"
+```"#;
+
+        let dirs = collect_directives(source);
+
+        assert_eq!(dirs.len(), 4);
+        match &dirs[0] {
+            Directive::Links {
+                source_doc,
+                status,
+                source,
+                format,
+                ..
+            } => {
+                assert_eq!(source_doc.as_deref(), Some("README.md"));
+                assert_eq!(status, "broken");
+                assert_eq!(source.as_deref(), Some("reports/links.json"));
+                assert_eq!(format, "count");
+            }
+            other => panic!("expected links directive, got {other:?}"),
+        }
+        match &dirs[1] {
+            Directive::Backlinks { target, format, .. } => {
+                assert_eq!(target, "README.md");
+                assert_eq!(format, "table");
+            }
+            other => panic!("expected backlinks directive, got {other:?}"),
+        }
+        match &dirs[2] {
+            Directive::Headings {
+                source_doc, format, ..
+            } => {
+                assert_eq!(source_doc, "README.md");
+                assert_eq!(format, "count");
+            }
+            other => panic!("expected headings directive, got {other:?}"),
+        }
+        match &dirs[3] {
+            Directive::Frontmatter {
+                field,
+                value,
+                op,
+                source,
+                format,
+                ..
+            } => {
+                assert_eq!(field.as_deref(), Some("tags"));
+                assert_eq!(value.as_deref(), Some("guide"));
+                assert_eq!(op, "has");
+                assert_eq!(source.as_deref(), Some("reports/frontmatter.json"));
+                assert_eq!(format, "table");
+            }
+            other => panic!("expected frontmatter directive, got {other:?}"),
+        }
     }
 
     #[test]
