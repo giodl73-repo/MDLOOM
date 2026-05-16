@@ -1749,12 +1749,10 @@ exclude = ["target/**", "node_modules/**"]
         )
         .unwrap();
 
-        let expected_root = if cfg!(windows) {
+        assert_eq!(
+            recipe.root,
             PathBuf::from("..").join("..").display().to_string()
-        } else {
-            ".".to_string()
-        };
-        assert_eq!(recipe.root, expected_root);
+        );
     }
 
     #[test]
@@ -1778,10 +1776,12 @@ exclude = ["target/**", "node_modules/**"]
         )
         .unwrap();
 
-        assert_eq!(
-            recipe.root,
+        let expected_root = if cfg!(windows) {
             PathBuf::from("..").join("..").display().to_string()
-        );
+        } else {
+            ".".to_string()
+        };
+        assert_eq!(recipe.root, expected_root);
     }
 
     #[test]
