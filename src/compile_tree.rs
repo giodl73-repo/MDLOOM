@@ -366,3 +366,182 @@ fn parse_outline_number_prefix(s: &str) -> Option<(usize, String, String)> {
     };
     Some((dot_count, normalized, label))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inline_tree_two_space_indent_renders_nested() {
+        let body = "root: Plugin runtime channels\n\
+                    - Typed plugin hooks\n  \
+                    - File: src/plugins/hook-types.ts\n  \
+                    - Style: pull, modify\n\
+                    - Diagnostic event stream\n  \
+                    - File: src/infra/diagnostic-events.ts\n  \
+                    - Style: push, observe";
+        let out = render_inline_tree(body, 4).expect("render must succeed");
+
+        assert!(
+            out.starts_with("Plugin runtime channels"),
+            "root must come first: {}",
+            out
+        );
+        assert!(
+            out.contains("├── Typed plugin hooks"),
+            "first parent should be Tee:\n{}",
+            out
+        );
+        assert!(
+            out.contains("└── Diagnostic event stream"),
+            "second parent should be Corner:\n{}",
+            out
+        );
+        assert!(
+            out.contains("│   ├── File: src/plugins/hook-types.ts"),
+            "first parent's first child should be Tee under │:\n{}",
+            out
+        );
+        assert!(
+            out.contains("│   └── Style: pull, modify"),
+            "first parent's last child should be Corner under │:\n{}",
+            out
+        );
+        assert!(
+            out.contains("    ├── File: src/infra/diagnostic-events.ts"),
+            "second parent's first child should be Tee under spaces:\n{}",
+            out
+        );
+        assert!(
+            out.contains("    └── Style: push, observe"),
+            "second parent's last child should be Corner under spaces:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_tree_four_space_indent_also_nests() {
+        let body = "root: Top\n\
+                    - One\n    \
+                    - One.A\n\
+                    - Two";
+        let out = render_inline_tree(body, 4).unwrap();
+        assert!(out.contains("├── One"), "got:\n{}", out);
+        assert!(out.contains("│   └── One.A"), "got:\n{}", out);
+        assert!(out.contains("└── Two"), "got:\n{}", out);
+    }
+
+    #[test]
+    fn inline_tree_last_sibling_uses_corner() {
+        let body = "root: R\n- A\n  - A1\n  - A2\n- B";
+        let out = render_inline_tree(body, 4).unwrap();
+        assert!(
+            out.contains("│   └── A2"),
+            "last child A2 should be Corner under non-last parent A:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_outline_dash_bullets_warn_and_promote() {
+        let body = "root: Plugin lifecycle\n- 1 Discovery\n- 2 Manifest read\n- 3 Activation";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut warnings).expect("must render");
+
+        assert_eq!(
+            warnings.len(),
+            1,
+            "expected exactly one warning, got {:?}",
+            warnings.iter().map(|v| v.code).collect::<Vec<_>>()
+        );
+        assert_eq!(warnings[0].code, "TREE-001");
+        assert!(
+            warnings[0].message.contains("kind=taxonomy"),
+            "warning should suggest kind=taxonomy: {}",
+            warnings[0].message
+        );
+        assert!(
+            out.contains("├──") || out.contains("└──"),
+            "must contain tree connectors:\n{}",
+            out
+        );
+        assert!(
+            out.contains("Plugin lifecycle"),
+            "root must appear:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_outline_no_bullets_no_warning() {
+        let body = "1. First\n1.1 Sub\n2. Second";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 4, 1, &mut warnings).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "no warnings expected for numbered body"
+        );
+        assert!(out.contains("1. First"));
+    }
+
+    #[test]
+    fn inline_outline_numbered_bullets_auto_indent() {
+        let body =
+            "1. Installation\n1.1 From source\n1.2 From crates.io\n2. Configuration\n2.1 Basics";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut warnings).unwrap();
+        assert!(warnings.is_empty(), "no warnings for numbered input");
+        let expected =
+            "1. Installation\n   1.1 From source\n   1.2 From crates.io\n2. Configuration\n   2.1 Basics";
+        assert_eq!(out, expected, "depth-based indent normalization");
+    }
+
+    #[test]
+    fn inline_outline_numbered_three_levels() {
+        let body = "1. A\n1.1 B\n1.1.1 C\n2. D";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut warnings).unwrap();
+        let expected = "1. A\n   1.1 B\n      1.1.1 C\n2. D";
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn inline_outline_preserves_trailing_period_only_at_depth_zero() {
+        let body = "1. A\n1.1. B";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut warnings).unwrap();
+        assert!(out.contains("1. A"));
+        assert!(
+            out.contains("1.1 B"),
+            "trailing period dropped at depth 1: got\n{}",
+            out
+        );
+        assert!(
+            !out.contains("1.1. B"),
+            "trailing period must not survive: got\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn inline_outline_unnumbered_line_passes_through() {
+        let body = "Project plan:\n1. Phase one\n1.1 Step";
+        let mut warnings = Vec::new();
+        let out = render_inline_outline(body, 3, 1, &mut warnings).unwrap();
+        assert!(
+            out.starts_with("Project plan:"),
+            "header preserved at top:\n{}",
+            out
+        );
+        assert!(
+            out.contains("\n1. Phase one"),
+            "depth-0 numbered line at column 0:\n{}",
+            out
+        );
+        assert!(
+            out.contains("\n   1.1 Step"),
+            "depth-1 numbered line indented:\n{}",
+            out
+        );
+    }
+}
