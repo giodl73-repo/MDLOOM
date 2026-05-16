@@ -2,7 +2,7 @@
 wave: publish-backends
 pulse: 03
 date: 2026-05-16
-status: todo
+status: done
 depends_on: ["publish-backends/pulse-02"]
 governing_roles: ["COMPOSE", "BOOK", "SIGNAL", "BENCH"]
 ---
@@ -40,13 +40,13 @@ plus a site manifest.
 
 ## Deliverables checklist
 
-- [ ] Add command surface for site generation.
-- [ ] Compile each source through resolved Markdown then HTML.
-- [ ] Generate index/navigation from source titles and output paths.
-- [ ] Emit a site manifest with pages, source paths, diagnostics, and generation
+- [x] Add command surface for site generation.
+- [x] Compile each source through resolved Markdown then HTML.
+- [x] Generate index/navigation from source titles and output paths.
+- [x] Emit a site manifest with pages, source paths, diagnostics, and generation
       metadata.
-- [ ] Add integration tests for multi-page output and manifest.
-- [ ] Update README/SPEC/spec docs.
+- [x] Add integration tests for multi-page output and manifest.
+- [x] Update README/SPEC/spec docs.
 
 ## Validation gates
 
@@ -65,4 +65,14 @@ plus a site manifest.
 
 ## Evidence
 
-- Pending.
+- Added `proof compile --target site --output-dir <site-dir>`.
+- Generated per-source HTML pages through the existing HTML target path.
+- Added output `index.html` navigation and `proof-site.json` with page metadata.
+- Added integration coverage for multi-page output, site manifest, and artifact
+  manifest target.
+- Validation passed:
+  - `cargo fmt --check`
+  - `cargo test binary_compile_target_site_writes_static_site`
+  - `cargo test --test integration_tests`
+  - `proof compile <fixture-dir> --target site --output-dir <site-dir>`
+  - `git diff --check`

@@ -13,6 +13,7 @@ semantics.
 | `html` | supported | Standalone human-readable web document. | Resolves through Markdown, escapes raw HTML, emits common Markdown blocks with a small stylesheet. |
 | `pebble` | supported | Agent/retrieval context transfer. | Emits `pebble.v1` JSON with source path, title, refs, stable section IDs, heading paths, line numbers, and resolved Markdown text. |
 | `json-report` | supported | Machine-readable compile/report bundle. | Emits `proof.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
+| `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `proof-site.json` page manifest from a source tree. |
 
 `html`, `pebble`, and `json-report` are fully supported within those scopes.
 They are not claims of full site generation, PDF layout fidelity,
@@ -22,7 +23,6 @@ office-document styling, or slide deck generation.
 
 | Target | Primary user | Backend role | First useful claim |
 |---|---|---|---|
-| `site` | Docs publishers | Multi-page static documentation site. | Compile a source tree to HTML pages, index/navigation, assets, and a site manifest. |
 | `pdf` | Report readers | Portable human-readable artifact. | Render the HTML publish output to PDF with deterministic metadata and manifest entries. |
 | `docx` | Business/document workflows | Editable Word-processing document. | Convert resolved Markdown into headings, paragraphs, lists, tables, code blocks, and document metadata. |
 | `pptx` | Presentations/executive updates | Slide deck artifact. | Convert explicit slide-oriented source into a basic deck with title/content slides, speaker notes metadata where available, and stable manifest records. |
@@ -57,9 +57,9 @@ retrieval schema.
 
 ### Static site
 
-The site backend builds on HTML. It owns page layout, navigation, index files,
-asset copying, and site manifests. It does not own CROP graph cuts, search
-ranking, hosting, deployment, authentication, or browser pixel equivalence.
+The site backend builds on HTML. It owns page layout, navigation index files and
+site manifests. It does not own CROP graph cuts, search ranking, hosting,
+deployment, authentication, or browser pixel equivalence.
 
 ### PDF
 

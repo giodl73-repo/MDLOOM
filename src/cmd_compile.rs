@@ -55,6 +55,7 @@ enum CompileTarget {
     Html,
     Pebble,
     JsonReport,
+    Site,
 }
 
 impl CompileTarget {
@@ -64,6 +65,7 @@ impl CompileTarget {
             CompileTarget::Html => "html",
             CompileTarget::Pebble => "pebble",
             CompileTarget::JsonReport => "json-report",
+            CompileTarget::Site => "site",
         }
     }
 }
@@ -405,6 +407,9 @@ fn run_once(
         eprintln!();
     } // clear progress line
     if !check_only {
+        if target == CompileTarget::Site {
+            write_static_site(&artifacts, &root)?;
+        }
         let manifest = artifact::write_manifest(&root, artifacts)?;
         if !progress {
             eprintln!("  manifest: {}", manifest.display());
@@ -447,6 +452,9 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
         CompileTarget::JsonReport => {
             output.set_extension("proof-report.json");
         }
+        CompileTarget::Site => {
+            output.set_extension("html");
+        }
     }
     Some(output)
 }
@@ -465,6 +473,7 @@ fn compile_target_file(
         CompileTarget::JsonReport => {
             compile_json_report_file(source_path, output_path, root, config)
         }
+        CompileTarget::Site => compile_html_file(source_path, output_path, root, config),
     }
 }
 
@@ -609,6 +618,67 @@ fn compile_json_report_file(
     result.output_path = output_path.to_path_buf();
     let _ = std::fs::remove_dir_all(&temp_dir);
     Ok(result)
+}
+
+fn write_static_site(artifacts: &[ArtifactRecord], root: &Path) -> Result<()> {
+    let site_root = site_root_for_artifacts(artifacts, root);
+    let pages = artifacts
+        .iter()
+        .map(|artifact| {
+            let title = std::fs::read_to_string(&artifact.output_path)
+                .ok()
+                .and_then(|html| proof_lib::publish::html_document_title(&html))
+                .unwrap_or_else(|| title_from_path(&artifact.source_path));
+            proof_lib::publish::SitePage {
+                title,
+                source_path: artifact.source_path.display().to_string(),
+                output_path: artifact.output_path.display().to_string(),
+                href: relative_href(&site_root, &artifact.output_path),
+                status: artifact_status_name(&artifact.status).to_string(),
+                diagnostics_count: artifact.diagnostics.len(),
+            }
+        })
+        .collect::<Vec<_>>();
+    proof_lib::publish::write_static_site(&site_root, pages)?;
+    Ok(())
+}
+
+fn site_root_for_artifacts(artifacts: &[ArtifactRecord], root: &Path) -> PathBuf {
+    let mut parents = artifacts
+        .iter()
+        .filter_map(|artifact| artifact.output_path.parent())
+        .collect::<Vec<_>>();
+    parents.dedup();
+    match parents.as_slice() {
+        [parent] => parent.to_path_buf(),
+        _ => root.to_path_buf(),
+    }
+}
+
+fn relative_href(site_root: &Path, output_path: &Path) -> String {
+    output_path
+        .strip_prefix(site_root)
+        .unwrap_or(output_path)
+        .display()
+        .to_string()
+        .replace('\\', "/")
+}
+
+fn title_from_path(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("Untitled")
+        .trim_end_matches(".source")
+        .to_string()
+}
+
+fn artifact_status_name(status: &ArtifactStatus) -> &'static str {
+    match status {
+        ArtifactStatus::Written => "written",
+        ArtifactStatus::Cached => "cached",
+        ArtifactStatus::UpToDate => "up_to_date",
+        ArtifactStatus::Error => "error",
+    }
 }
 
 fn unique_temp_dir() -> Result<PathBuf> {

@@ -136,6 +136,82 @@ pub struct JsonReportDiagnostic {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SiteManifest {
+    pub schema: String,
+    pub generated_by: String,
+    pub page_count: usize,
+    pub pages: Vec<SitePage>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SitePage {
+    pub title: String,
+    pub source_path: String,
+    pub output_path: String,
+    pub href: String,
+    pub status: String,
+    pub diagnostics_count: usize,
+}
+
+pub fn html_document_title(html: &str) -> Option<String> {
+    let start = html.find("<title>")? + "<title>".len();
+    let end = html[start..].find("</title>")? + start;
+    Some(html[start..end].to_string())
+}
+
+pub fn write_static_site(site_root: &Path, mut pages: Vec<SitePage>) -> std::io::Result<()> {
+    std::fs::create_dir_all(site_root)?;
+    pages.sort_by(|left, right| left.href.cmp(&right.href));
+    let manifest = SiteManifest {
+        schema: "proof.publish.site.v1".to_string(),
+        generated_by: "proof compile --target site".to_string(),
+        page_count: pages.len(),
+        pages,
+    };
+    let manifest_json = serde_json::to_string_pretty(&manifest).map_err(std::io::Error::other)?;
+    std::fs::write(site_root.join("proof-site.json"), manifest_json)?;
+    std::fs::write(site_root.join("index.html"), static_site_index(&manifest))?;
+    Ok(())
+}
+
+fn static_site_index(manifest: &SiteManifest) -> String {
+    let pages = manifest
+        .pages
+        .iter()
+        .map(|page| {
+            format!(
+                "<li><a href=\"{}\">{}</a> <span>{}</span></li>\n",
+                escape_html(&page.href),
+                escape_html(&page.title),
+                escape_html(&page.status),
+            )
+        })
+        .collect::<String>();
+    format!(
+        concat!(
+            "<!doctype html>\n",
+            "<html lang=\"en\">\n",
+            "<head>\n",
+            "<meta charset=\"utf-8\">\n",
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
+            "<title>PROOF Site</title>\n",
+            "<style>body {{ font-family: system-ui, sans-serif; line-height: 1.55; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }} span {{ color: #666; }}</style>\n",
+            "</head>\n",
+            "<body>\n",
+            "<h1>PROOF Site</h1>\n",
+            "<nav aria-label=\"Site pages\">\n",
+            "<ul>\n",
+            "{}",
+            "</ul>\n",
+            "</nav>\n",
+            "</body>\n",
+            "</html>\n",
+        ),
+        pages
+    )
+}
+
 fn markdown_to_html_fragment(markdown: &str) -> String {
     let parser = Parser::new_ext(markdown, markdown_options()).map(|event| match event {
         Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),

@@ -122,6 +122,7 @@ proof compile file.source.md -o out.md   # single file, explicit output
 proof compile file.source.md --target html -o out.html
 proof compile file.source.md --target pebble -o out.pebble.json
 proof compile file.source.md --target json-report -o out.proof-report.json
+proof compile src/guides/ --target site --output-dir site/
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
@@ -147,8 +148,12 @@ artifact summary, resolved Markdown, section summaries, source metadata,
 dependency refs, diagnostics, and compile counts without replacing Pebble's
 compact retrieval schema.
 
-Planned publish backends include static sites, PDF, DOCX, and native PPTX decks.
-See
+`--target site` compiles a source tree to static HTML pages and writes a
+navigation `index.html` plus `proof-site.json` site manifest in the output
+directory. It is a local static site artifact, not deployment, hosting, or search
+ranking.
+
+Planned publish backends include PDF, DOCX, and native PPTX decks. See
 [`docs/specs/publish-backends.md`](docs/specs/publish-backends.md) for target
 contracts and sequencing. PPTX is planned as editable native PowerPoint slides
 with real bullets/notes, not screenshots or HTML embedded in slides.

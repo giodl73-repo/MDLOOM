@@ -52,6 +52,9 @@ proof compile src/guides/math.source.md --target pebble -o context/math.pebble.j
 # Compile one source file into a machine-readable report bundle
 proof compile src/guides/math.source.md --target json-report -o reports/math.proof-report.json
 
+# Compile a source tree into a local static site
+proof compile src/guides/ --target site --output-dir site/
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -81,6 +84,11 @@ artifact summary, resolved Markdown, section summaries, source metadata,
 dependency refs, diagnostics, and compile counts. It is intentionally more
 verbose than Pebble and is not a replacement for Pebble's compact retrieval
 format.
+
+`--target site` compiles a source tree to static HTML pages and writes a
+navigation `index.html` plus `proof-site.json` site manifest in the output
+directory. It is intended for local/static documentation publishing; hosting,
+deployment, search ranking, and target-aware watch mode are out of scope.
 
 ---
 

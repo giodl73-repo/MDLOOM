@@ -823,7 +823,7 @@ COMPILE OPTIONS
         --progress                Show a running compiled/total count
         --output-dir <DIR>        Write compiled files under DIR
         --root <DIR>              Root directory for md:// URI resolution
-        --target <TARGET>         md (default) | html | pebble | json-report
+        --target <TARGET>         md (default) | html | pebble | json-report | site
         --tag <TAG>               Only compile source files with this tag
         --op <OP>                 Only compile source files with this operation tag
         --content-tag <TAG>       Only compile source files with this content tag
@@ -850,15 +850,20 @@ COMPILE OPTIONS
   dependency refs, diagnostics, and compile counts. It is intentionally more
   verbose than Pebble and does not replace Pebble's compact retrieval schema.
 
-  Planned publish targets include static sites, PDF, DOCX, and PPTX. PPTX must
-  be a native editable Office Open XML deck with real slide text, bullets, and
-  notes rather than screenshots or HTML embedded in slides. LaTeX is deferred
-  until after these publish backends.
+  `site` compiles source trees to static HTML pages, a navigation `index.html`,
+  and a `proof-site.json` manifest with page/source/output/diagnostic metadata.
+  It is a local static site artifact, not deployment, hosting, search ranking, or
+  target-aware watch mode.
+
+  Planned publish targets include PDF, DOCX, and PPTX. PPTX must be a native
+  editable Office Open XML deck with real slide text, bullets, and notes rather
+  than screenshots or HTML embedded in slides. LaTeX is deferred until after
+  these publish backends.
 
   Non-watch compile runs write `.proof/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each
   entry records source path, output path, target (`md`, `html`, `pebble`,
-  `json-report`, future publish backends), status (`written`, `cached`,
+  `json-report`, `site`, future publish backends), status (`written`, `cached`,
   `up_to_date`, `error`), resolved
   directive count, cache usage, and diagnostics. The manifest is provenance for
   status, stale-output checks, cutover planning, and future PPTX/site/PDF

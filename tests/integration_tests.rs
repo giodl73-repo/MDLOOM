@@ -2029,6 +2029,77 @@ fn binary_compile_target_json_report_writes_bundle() {
 }
 
 #[test]
+fn binary_compile_target_site_writes_static_site() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source_dir = dir.path().join("src");
+    let site_dir = dir.path().join("site");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::write(
+        source_dir.join("alpha.source.md"),
+        "# Alpha\n\nFirst page.\n\n## Details\n\nAlpha details.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source_dir.join("beta.source.md"),
+        "# Beta\n\nSecond page.\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source_dir)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("site")
+        .arg("--output-dir")
+        .arg(&site_dir)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let alpha = std::fs::read_to_string(site_dir.join("alpha.html")).unwrap();
+    let beta = std::fs::read_to_string(site_dir.join("beta.html")).unwrap();
+    let index = std::fs::read_to_string(site_dir.join("index.html")).unwrap();
+    let site_manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(site_dir.join("proof-site.json")).unwrap())
+            .unwrap();
+
+    assert!(alpha.contains("<h1>Alpha</h1>"), "got:\n{}", alpha);
+    assert!(beta.contains("<h1>Beta</h1>"), "got:\n{}", beta);
+    assert!(
+        index.contains("<a href=\"alpha.html\">Alpha</a>"),
+        "got:\n{}",
+        index
+    );
+    assert!(
+        index.contains("<a href=\"beta.html\">Beta</a>"),
+        "got:\n{}",
+        index
+    );
+    assert_eq!(site_manifest["schema"], "proof.publish.site.v1");
+    assert_eq!(site_manifest["page_count"], 2);
+    assert_eq!(site_manifest["pages"][0]["href"], "alpha.html");
+    assert_eq!(site_manifest["pages"][1]["title"], "Beta");
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"].as_array().unwrap().len(), 2);
+    assert_eq!(manifest["artifacts"][0]["target"], "site");
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

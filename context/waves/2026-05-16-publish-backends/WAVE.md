@@ -38,7 +38,7 @@ ranking, or LaTeX in this wave.
 |------:|-------|--------|---------|
 | 01 | Backend spec and sequence | done | Captured supported targets, planned target contracts, invariants, and pulse sequence. |
 | 02 | JSON report bundle | done | Added `proof.publish.json_report.v1` as a machine-readable compile/report target for CI and agents. |
-| 03 | Static site backend | todo | Add multi-page HTML site generation with navigation and a site manifest. |
+| 03 | Static site backend | done | Added multi-page HTML site generation with navigation index and `proof-site.json` manifest. |
 | 04 | PDF backend | todo | Render existing HTML publish output to PDF with manifest integration. |
 | 05 | DOCX backend | todo | Emit editable Word-processing documents from resolved Markdown. |
 | 06 | PPTX backend | todo | Emit native editable PowerPoint decks from explicit slide-oriented sources, with package/XML, bullet, notes, and STAGE fidelity gates. |
