@@ -5,6 +5,7 @@ use proof_lib::crop_side_info;
 use proof_lib::lint::load_config_for_path as load_config;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
@@ -106,6 +107,9 @@ struct InspectViewsArgs {
     /// Exit non-zero when any view recipe fails inspection
     #[arg(long)]
     strict: bool,
+    /// Optional JSON output path. Defaults to CROP stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -386,7 +390,13 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
 }
 
 fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
-    run_crop(crop_bin, build_inspect_views_args(args))
+    let output = args.output.clone();
+    let crop_args = build_inspect_views_args(args);
+    if let Some(output) = output {
+        run_crop_to_output(crop_bin, crop_args, output)
+    } else {
+        run_crop(crop_bin, crop_args)
+    }
 }
 
 fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
@@ -419,11 +429,13 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
         file: None,
         dir: args.dir,
         strict: true,
+        output: None,
     })];
     commands.push(build_inspect_views_args(InspectViewsArgs {
         file: Some(view.clone()),
         dir: PathBuf::from(".crop\\views"),
         strict: true,
+        output: None,
     }));
     commands.extend(build_sync_args(SyncArgs {
         root: None,
@@ -940,6 +952,35 @@ pub(crate) fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
     Ok(())
 }
 
+fn run_crop_to_output(crop_bin: PathBuf, args: Vec<String>, output: PathBuf) -> Result<()> {
+    let child_output = Command::new(&crop_bin)
+        .args(&args)
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to invoke CROP executable '{}'; install crop or pass --crop-bin",
+                crop_bin.display()
+            )
+        })?;
+
+    if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+    std::fs::write(&output, &child_output.stdout)
+        .with_context(|| format!("writing {}", output.display()))?;
+    io::stderr().write_all(&child_output.stderr)?;
+
+    if let Some(code) = child_output.status.code() {
+        if code != 0 {
+            process::exit(code);
+        }
+    } else if !child_output.status.success() {
+        process::exit(1);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1181,6 +1222,7 @@ mod tests {
             file: None,
             dir: PathBuf::from(".crop\\views"),
             strict: true,
+            output: None,
         });
 
         assert_eq!(
@@ -1195,6 +1237,7 @@ mod tests {
             file: Some(PathBuf::from(".crop\\views\\ready.json")),
             dir: PathBuf::from(".crop\\views"),
             strict: false,
+            output: None,
         });
 
         assert_eq!(

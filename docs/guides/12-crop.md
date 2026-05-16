@@ -136,6 +136,10 @@ Preflight one recipe while authoring it:
 proof crop inspect-views --file .crop/views/ready-guides.json
 ```
 
+Add `--output inspect.json` to save CROP's JSON inspection report as a CI or
+review artifact; PROOF writes the captured report even when strict inspection
+returns a non-zero exit code.
+
 ---
 
 ## Generate side-info reports

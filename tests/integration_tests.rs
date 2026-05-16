@@ -2075,6 +2075,123 @@ fn binary_crop_inspect_views_can_inspect_single_file() {
 }
 
 #[test]
+fn binary_crop_inspect_views_writes_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = if cfg!(windows) {
+        dir.path().join("crop.cmd")
+    } else {
+        dir.path().join("crop")
+    };
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\necho %* >> \"{}\"\r\necho {{\"ok\":true}}\r\nexit /b 0\r\n",
+            args_file.display()
+        )
+    } else {
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nprintf '%s\\n' '{{\"ok\":true}}'\nexit 0\n",
+            args_file.display()
+        )
+    };
+    std::fs::write(&crop_bin, script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&crop_bin, perms).unwrap();
+    }
+    let output_path = dir.path().join("inspect").join("views.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("inspect-views")
+        .arg("--dir")
+        .arg(dir.path())
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop inspect-views");
+
+    assert!(
+        output.status.success(),
+        "proof crop inspect-views failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        std::fs::read_to_string(&output_path).unwrap().trim(),
+        "{\"ok\":true}"
+    );
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("view --inspect"), "got: {}", args);
+    assert!(
+        !args.contains("--output"),
+        "CROP view has no output flag: {}",
+        args
+    );
+}
+
+#[test]
+fn binary_crop_inspect_views_writes_output_on_failure() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let crop_bin = if cfg!(windows) {
+        dir.path().join("crop.cmd")
+    } else {
+        dir.path().join("crop")
+    };
+    let script = if cfg!(windows) {
+        "@echo off\r\necho {\"failed_count\":1}\r\necho strict failed 1>&2\r\nexit /b 7\r\n"
+            .to_string()
+    } else {
+        "#!/bin/sh\nprintf '%s\\n' '{\"failed_count\":1}'\nprintf '%s\\n' 'strict failed' >&2\nexit 7\n"
+            .to_string()
+    };
+    std::fs::write(&crop_bin, script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&crop_bin, perms).unwrap();
+    }
+    let output_path = dir.path().join("inspect.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("inspect-views")
+        .arg("--dir")
+        .arg(dir.path())
+        .arg("--strict")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop inspect-views");
+
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(
+        std::fs::read_to_string(&output_path).unwrap().trim(),
+        "{\"failed_count\":1}"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("strict failed"));
+}
+
+#[test]
 fn binary_crop_view_writes_crop_view_recipe() {
     let bin = debug_bin();
     if !bin.exists() {
