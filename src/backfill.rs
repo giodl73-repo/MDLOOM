@@ -717,29 +717,39 @@ fn looks_chart_like(line: &str) -> bool {
 
 fn looks_diagram_like(line: &str) -> bool {
     let trimmed = line.trim();
-    !trimmed.starts_with('#')
-        && (trimmed.contains("->")
-            || trimmed.contains("-->")
-            || trimmed.contains("=>")
-            || trimmed.chars().any(|c| {
-                matches!(
-                    c,
-                    '│' | '─'
-                        | '┌'
-                        | '┐'
-                        | '└'
-                        | '┘'
-                        | '├'
-                        | '┤'
-                        | '┬'
-                        | '┴'
-                        | '┼'
-                        | '▶'
-                        | '◀'
-                        | '→'
-                        | '←'
-                )
-            }))
+    if trimmed.starts_with('#') {
+        return false;
+    }
+
+    if trimmed.chars().any(|c| {
+        matches!(
+            c,
+            '│' | '─'
+                | '┌'
+                | '┐'
+                | '└'
+                | '┘'
+                | '├'
+                | '┤'
+                | '┬'
+                | '┴'
+                | '┼'
+                | '▶'
+                | '◀'
+        )
+    }) {
+        return true;
+    }
+
+    let leading_whitespace = line.chars().take_while(|c| c.is_whitespace()).count();
+    let has_ascii_arrow =
+        trimmed.contains("->") || trimmed.contains("-->") || trimmed.contains("=>");
+    let has_unicode_arrow = trimmed.chars().any(|c| matches!(c, '→' | '←'));
+
+    (has_ascii_arrow || has_unicode_arrow)
+        && leading_whitespace >= 2
+        && !trimmed.contains("**")
+        && !trimmed.ends_with('.')
 }
 
 fn literal_source(original_path: &Path, original: &str) -> String {

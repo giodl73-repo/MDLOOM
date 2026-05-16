@@ -1712,7 +1712,7 @@ fn binary_backfill_report_classifies_candidate_blocks() {
     let report_path = dir.path().join("backfill-report.json");
     std::fs::write(
         dir.path().join("mixed.md"),
-        "# Mixed\n\n```text\n+---+---+\n| A | B |\n+---+---+\n```\n\nLoad ### 42\n\nA -> B\n",
+        "# Mixed\n\n```text\n+---+---+\n| A | B |\n+---+---+\n```\n\nLoad ### 42\n\n  A -> B\n",
     )
     .unwrap();
 
@@ -1821,7 +1821,7 @@ fn binary_backfill_extract_tables_writes_structured_block_sidecar() {
     let report_path = dir.path().join("backfill-report.json");
     std::fs::write(
         dir.path().join("visuals.md"),
-        "# Visuals\n\n```text\n+---+---+\n| A | B |\n+---+---+\n```\n\n## Flow → Direction\n\nA -> B\n\nLoad ### 42\n",
+        "# Visuals\n\n```text\n+---+---+\n| A | B |\n+---+---+\n```\n\n## Flow → Direction\n\n  A -> B\n\nLoad ### 42\n",
     )
     .unwrap();
 
