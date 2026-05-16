@@ -1,12 +1,13 @@
 use std::path::Path;
 
-use crate::compile::{lint_figure, validate_davinci, CompileViolation, ViolationSeverity};
+use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_chart;
 use crate::compile_directive::{collect_directives, Directive, ElementAttrs};
 use crate::compile_math;
 use crate::compile_source;
 use crate::compile_symbol;
 use crate::compile_tree;
+use crate::compile_validation::{lint_figure, validate_davinci};
 use crate::config::GlintConfig;
 use crate::layout::extract_content_lines;
 use crate::runner::Runner;

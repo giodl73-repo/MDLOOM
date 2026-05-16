@@ -25,6 +25,7 @@ pub(crate) mod compile_symbol;
 pub mod compile_toc;
 #[allow(dead_code)]
 pub mod compile_tree;
+pub(crate) mod compile_validation;
 pub mod config;
 pub mod crop_side_info;
 pub mod dashboard;
