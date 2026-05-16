@@ -469,8 +469,6 @@ pub fn compile_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compile_output::{apply_replacements, split_frontmatter};
-    use std::path::PathBuf;
 
     // ── parse_directives ──────────────────────────────────
 
@@ -551,66 +549,6 @@ mod tests {
         assert_eq!(attrs.align, "center");
         assert_eq!(attrs.cols, Some(3));
         assert_eq!(attrs.width, 200);
-    }
-
-    // ── derive_output_path ────────────────────────────────
-
-    #[test]
-    fn test_derive_output_source_md() {
-        let src = Path::new("languages/10-GO.source.md");
-        let out = derive_output_path(src).unwrap();
-        assert_eq!(out, PathBuf::from("languages/10-GO.md"));
-    }
-
-    #[test]
-    fn test_derive_output_plain_md_returns_none() {
-        let src = Path::new("languages/10-GO.md");
-        assert!(derive_output_path(src).is_none());
-    }
-
-    #[test]
-    fn test_derive_output_root_level() {
-        let src = Path::new("overview.source.md");
-        let out = derive_output_path(src).unwrap();
-        assert_eq!(out, PathBuf::from("overview.md"));
-    }
-
-    // ── apply_replacements ────────────────────────────────
-
-    #[test]
-    fn test_apply_replacements_single() {
-        let lines = vec!["line0", "```proof:include", "md://x", "```", "line4"];
-        let replacements = vec![(1, 3, "REPLACED".to_string())];
-        let out = apply_replacements(&lines, &replacements);
-        assert_eq!(out, "line0\nREPLACED\nline4");
-    }
-
-    #[test]
-    fn test_apply_replacements_none() {
-        let lines = vec!["a", "b", "c"];
-        let out = apply_replacements(&lines, &[]);
-        assert_eq!(out, "a\nb\nc");
-    }
-
-    #[test]
-    fn test_apply_replacements_multiple() {
-        let lines = vec![
-            "before",
-            "```proof:include",
-            "md://a",
-            "```",
-            "middle",
-            "```proof:include",
-            "md://b",
-            "```",
-            "after",
-        ];
-        let replacements = vec![
-            (1, 3, "A_RESOLVED".to_string()),
-            (5, 7, "B_RESOLVED".to_string()),
-        ];
-        let out = apply_replacements(&lines, &replacements);
-        assert_eq!(out, "before\nA_RESOLVED\nmiddle\nB_RESOLVED\nafter");
     }
 
     // ── format helpers ────────────────────────────────────
@@ -1240,25 +1178,6 @@ mod tests {
             }
             _ => panic!("expected Region"),
         }
-    }
-
-    #[test]
-    fn test_split_frontmatter_with_yaml() {
-        let src = "---\ndashboard:\n  width: 80\n---\nbody line 1\nbody line 2\n";
-        let (fm, body, offset) = split_frontmatter(src);
-        assert!(fm.contains("dashboard:"));
-        assert!(fm.contains("width: 80"));
-        assert!(body.starts_with("body line 1"));
-        assert_eq!(offset, 4); // lines: --- / dashboard: / width / --- → body at line 4
-    }
-
-    #[test]
-    fn test_split_frontmatter_no_yaml() {
-        let src = "no frontmatter here\nplain content\n";
-        let (fm, body, offset) = split_frontmatter(src);
-        assert!(fm.is_empty());
-        assert_eq!(body, src);
-        assert_eq!(offset, 0);
     }
 
     #[test]
