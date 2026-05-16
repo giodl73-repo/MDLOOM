@@ -466,8 +466,8 @@ pub fn snapshot_save(root: &Path, name: &str) -> std::io::Result<SnapshotManifes
     };
     manifest.integrity_hash = compute_integrity_hash(&manifest);
     let manifest_path = tmp.join("manifest.json");
-    let manifest_json = serde_json::to_string_pretty(&manifest)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).map_err(|e| std::io::Error::other(e))?;
     std::fs::write(&manifest_path, manifest_json)?;
 
     // Atomic rename: tmp → snap_root

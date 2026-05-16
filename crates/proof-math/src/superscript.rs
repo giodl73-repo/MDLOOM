@@ -1,4 +1,4 @@
-/// Unicode super/subscript mapping for Tier 2 rendering.
+//! Unicode super/subscript mapping for Tier 2 rendering.
 
 const SUPERSCRIPT_MAP: &[(char, char)] = &[
     ('0', '⁰'), ('1', '¹'), ('2', '²'), ('3', '³'), ('4', '⁴'),

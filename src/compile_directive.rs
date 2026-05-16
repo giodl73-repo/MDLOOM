@@ -600,7 +600,7 @@ impl TreeAttrs {
                 rest = next.trim_start();
             } else {
                 let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-                rest = &rest[end..].trim_start();
+                rest = rest[end..].trim_start();
             }
         }
         out

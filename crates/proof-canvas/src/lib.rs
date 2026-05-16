@@ -137,11 +137,11 @@ impl Canvas {
 
         // top and bottom edges
         let top_row: String = std::iter::once('┌')
-            .chain(std::iter::repeat('─').take(w - 2))
+            .chain(std::iter::repeat_n('─', w - 2))
             .chain(std::iter::once('┐'))
             .collect();
         let bot_row: String = std::iter::once('└')
-            .chain(std::iter::repeat('─').take(w - 2))
+            .chain(std::iter::repeat_n('─', w - 2))
             .chain(std::iter::once('┘'))
             .collect();
 

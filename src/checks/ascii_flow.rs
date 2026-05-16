@@ -437,7 +437,7 @@ fn check_vertical_connectors(path: &Path, lines: &[&str], line_offset: usize) ->
 
         // For each connector in the current line, check it aligns with one in previous
         for &curr_col in curr {
-            let aligned = prev.iter().any(|&p| p == curr_col);
+            let aligned = prev.contains(&curr_col);
             if !aligned && !prev.is_empty() {
                 // Only flag if we're clearly in a connector section (both lines have connectors)
                 let closest = prev.iter().min_by_key(|&&p| p.abs_diff(curr_col));

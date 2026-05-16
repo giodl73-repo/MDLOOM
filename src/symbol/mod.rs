@@ -108,10 +108,8 @@ pub fn suggest_symbol<'a>(query: &str, lib: &'a SymbolLibrary) -> Option<&'a str
 
     let check = |name: &'a str, best: &mut Option<(&'a str, usize)>| {
         let d = edit_distance(&q, name);
-        if d <= 3 {
-            if best.map_or(true, |(_, bd)| d < bd) {
-                *best = Some((name, d));
-            }
+        if d <= 3 && best.is_none_or(|(_, bd)| d < bd) {
+            *best = Some((name, d));
         }
     };
 
@@ -122,12 +120,10 @@ pub fn suggest_symbol<'a>(query: &str, lib: &'a SymbolLibrary) -> Option<&'a str
         // but custom names are heap-allocated. We return a reference into the library only
         // for built-ins. For custom, we leak a short copy (rare — only on error path).
         let d = edit_distance(&q, &lower);
-        if d <= 3 {
-            if best.map_or(true, |(_, bd)| d < bd) {
-                // SAFETY: we're on the error path; this small leak is acceptable.
-                let leaked: &'static str = Box::leak(sym.name.clone().into_boxed_str());
-                best = Some((leaked, d));
-            }
+        if d <= 3 && best.is_none_or(|(_, bd)| d < bd) {
+            // SAFETY: we're on the error path; this small leak is acceptable.
+            let leaked: &'static str = Box::leak(sym.name.clone().into_boxed_str());
+            best = Some((leaked, d));
         }
     }
 

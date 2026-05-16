@@ -28,8 +28,7 @@ pub(crate) fn render_xref(
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or(&parsed.path)
-            .replace('-', " ")
-            .replace('_', " ")
+            .replace(['-', '_'], " ")
     } else {
         let content = std::fs::read_to_string(&target_path)?;
         let slug_target = parsed.heading_path.last().map(|s| s.as_str()).unwrap_or("");

@@ -1,3 +1,18 @@
+#![allow(
+    clippy::clone_on_copy,
+    clippy::cloned_ref_to_slice_refs,
+    clippy::collapsible_if,
+    clippy::cmp_owned,
+    clippy::double_ended_iterator_last,
+    clippy::manual_strip,
+    clippy::needless_range_loop,
+    clippy::ptr_arg,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::unnecessary_map_or,
+    clippy::unwrap_or_default
+)]
+
 use anyhow::Result;
 use clap::Parser;
 

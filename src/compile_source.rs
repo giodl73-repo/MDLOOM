@@ -146,12 +146,12 @@ pub(crate) fn apply_md_query(raw: &str, query: &[(String, String)]) -> Result<St
                     .parse::<f64>()
                     .ok()
                     .zip(target.parse::<f64>().ok())
-                    .map_or(false, |(a, b)| a > b),
+                    .is_some_and(|(a, b)| a > b),
                 FilterOp::Lt => cell
                     .parse::<f64>()
                     .ok()
                     .zip(target.parse::<f64>().ok())
-                    .map_or(false, |(a, b)| a < b),
+                    .is_some_and(|(a, b)| a < b),
             }
         });
     }

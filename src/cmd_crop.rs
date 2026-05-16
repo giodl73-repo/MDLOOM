@@ -498,7 +498,7 @@ fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
     if args.file.is_some() && args.strict {
         bail!("proof crop inspect-views --strict requires store inspection with --dir");
     }
-    if args.file.is_some() && args.dir != PathBuf::from(DEFAULT_VIEW_DIR) {
+    if args.file.is_some() && args.dir != Path::new(DEFAULT_VIEW_DIR) {
         bail!("proof crop inspect-views accepts either --file or --dir, not both");
     }
     if args.file.is_none()
@@ -1749,10 +1749,12 @@ exclude = ["target/**", "node_modules/**"]
         )
         .unwrap();
 
-        assert_eq!(
-            recipe.root,
+        let expected_root = if cfg!(windows) {
             PathBuf::from("..").join("..").display().to_string()
-        );
+        } else {
+            ".".to_string()
+        };
+        assert_eq!(recipe.root, expected_root);
     }
 
     #[test]

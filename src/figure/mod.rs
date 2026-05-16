@@ -15,21 +15,16 @@ use crate::figure::shape::{apply_mask, build_mask, enforce_minimum_size, ShapeMa
 // Public enums — available even without --features figure
 // ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum DitherMode {
     Density,
+    #[default]
     Block,
     HalfBlock,
     QuarterBlock,
     Braille,
     Binary,
     Edge,
-}
-
-impl Default for DitherMode {
-    fn default() -> Self {
-        DitherMode::Block
-    }
 }
 
 impl DitherMode {
@@ -77,17 +72,12 @@ impl ShapeKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum LabelPos {
     Center,
     Top,
+    #[default]
     Bottom,
-}
-
-impl Default for LabelPos {
-    fn default() -> Self {
-        LabelPos::Bottom
-    }
 }
 
 // ─────────────────────────────────────────────────────────

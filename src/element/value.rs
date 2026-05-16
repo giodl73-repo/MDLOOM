@@ -95,8 +95,7 @@ fn parse_format_spec(fmt: &str) -> FormatSpec {
     let spec = strip_align_and_width(spec);
 
     // Strip zero-padding flag `0` followed by width digits
-    let spec = if spec.starts_with('0') {
-        let rest = &spec[1..];
+    let spec = if let Some(rest) = spec.strip_prefix('0') {
         let skip = rest.chars().take_while(|c| c.is_ascii_digit()).count();
         &rest[skip..]
     } else {

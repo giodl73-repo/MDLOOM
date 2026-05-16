@@ -31,17 +31,12 @@ pub use parser::{parse_slide_doc, SlideError};
 /// - `Off` — no footer (default)
 /// - `Auto` — compose "author · date" from deck-level author/date fields on the title slide
 /// - `Custom(s)` — render `s` verbatim as the footer text
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum FooterMode {
+    #[default]
     Off,
     Auto,
     Custom(String),
-}
-
-impl Default for FooterMode {
-    fn default() -> Self {
-        FooterMode::Off
-    }
 }
 
 #[derive(Debug, Clone)]

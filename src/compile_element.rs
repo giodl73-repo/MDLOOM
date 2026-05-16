@@ -367,7 +367,7 @@ pub(crate) fn compile_row(
             severity: ViolationSeverity::Error,
             uri: source_uri.to_string(),
             figure_id: None,
-            invariant: format!("R-1: sum(widths) + (n-1)*sep_len = row_width"),
+            invariant: "R-1: sum(widths) + (n-1)*sep_len = row_width".to_string(),
             message: format!(
                 "ELEMENT-004: row width mismatch — found={} expected={} (sum of element widths + separators must equal declared width={})",
                 found, expected, expected

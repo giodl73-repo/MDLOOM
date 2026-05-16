@@ -1,4 +1,4 @@
-/// Tier 3: matrix and cases environments.
+//! Tier 3: matrix and cases environments.
 
 use super::fraction::{RenderedExpr, left_align_in, right_align_in, center_in};
 

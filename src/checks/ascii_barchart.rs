@@ -82,7 +82,7 @@ struct BarChart {
 
 /// True if char is a bar fill character.
 fn is_bar_char(c: char, allowed: &[String]) -> bool {
-    allowed.iter().any(|s| s.chars().next() == Some(c))
+    allowed.iter().any(|s| s.starts_with(c))
 }
 
 #[allow(dead_code)]
@@ -341,7 +341,7 @@ fn validate_chart(path: &Path, chart: &BarChart, config: &AsciiBarchartConfig) -
                 .rows
                 .iter()
                 .filter_map(|r| {
-                    let val = r.value.as_deref().and_then(|v| parse_numeric_value(v))?;
+                    let val = r.value.as_deref().and_then(parse_numeric_value)?;
                     Some((r.bar_width, val))
                 })
                 .collect();

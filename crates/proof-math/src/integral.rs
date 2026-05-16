@@ -1,4 +1,4 @@
-/// Tier 3: integral, sum, and product renderers.
+//! Tier 3: integral, sum, and product renderers.
 
 use super::fraction::{RenderedExpr, center_in};
 
@@ -25,9 +25,9 @@ pub fn render_int(
     let mut lines: Vec<String> = Vec::new();
 
     // Upper limit line (if present)
-    let upper_line_idx = if upper.is_some() {
+    let upper_line_idx = if let Some(upper) = &upper {
         let idx = lines.len();
-        for l in &upper.as_ref().unwrap().lines {
+        for l in &upper.lines {
             lines.push(l.clone());
         }
         Some(idx)

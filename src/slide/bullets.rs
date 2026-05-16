@@ -81,10 +81,11 @@ pub fn render_bullets(
 
         // Continuation paragraph: indented prose under a bullet (no `-`/`*` marker).
         // Requires a preceding bullet — without one, falls through to bullet handling.
-        if !is_bullet && leading >= config.indent_width && last_bullet_content_col.is_some() {
-            let content_col = last_bullet_content_col.unwrap();
-            lines.extend(wrap_continuation(trimmed, content_col, width));
-            continue;
+        if !is_bullet && leading >= config.indent_width {
+            if let Some(content_col) = last_bullet_content_col {
+                lines.extend(wrap_continuation(trimmed, content_col, width));
+                continue;
+            }
         }
 
         // Detect indent level: count leading spaces / indent_width
@@ -237,7 +238,7 @@ fn word_wrap_hanging(s: &str, hanging: usize, width: usize) -> Vec<String> {
 /// `rest` is the line with the `[N]` prefix stripped but with leading indent
 /// preserved so level detection still works.  Lines without a `[N]` prefix
 /// return `(1, original_line)`.
-pub fn parse_reveal_step<'a>(line: &'a str) -> (usize, &'a str) {
+pub fn parse_reveal_step(line: &str) -> (usize, &str) {
     let trimmed = line.trim_start();
     if !trimmed.starts_with('[') {
         return (1, line);

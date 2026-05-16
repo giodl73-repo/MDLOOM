@@ -56,9 +56,7 @@ pub fn validate_r1(
     separator_len: usize,
     declared_width: Option<usize>,
 ) -> Option<(usize, usize)> {
-    let Some(expected) = declared_width else {
-        return None;
-    };
+    let expected = declared_width?;
     let n = elements.len();
     let sum_widths: usize = elements.iter().map(|e| e.width).sum();
     let sep_total = if n > 0 { separator_len * (n - 1) } else { 0 };

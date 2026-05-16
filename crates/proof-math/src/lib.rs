@@ -108,7 +108,9 @@ pub fn expand_inline_math(line: &str) -> (String, Vec<MathDiag>) {
             }
             match found_close {
                 None => {
-                    for k in open..n { out.push(chars[k]); }
+                    for ch in chars.iter().take(n).skip(open) {
+                        out.push(*ch);
+                    }
                     i = n;
                 }
                 Some(close) => {
@@ -225,8 +227,8 @@ fn expand_command(
     use tokenizer::Token;
     use symbols::{lookup_symbol, is_font_command, is_unsupported};
 
-    if cmd.starts_with("prime") {
-        let n: usize = cmd["prime".len()..].parse().unwrap_or(1);
+    if let Some(rest) = cmd.strip_prefix("prime") {
+        let n: usize = rest.parse().unwrap_or(1);
         out.push_str(match n { 1 => "′", 2 => "″", _ => "‴" });
         return;
     }

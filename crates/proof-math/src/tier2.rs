@@ -1,5 +1,5 @@
-/// Tier 2: single-line ASCII art constructs for display math.
-/// All constructs here produce a single String (no multi-line output).
+//! Tier 2: single-line ASCII art constructs for display math.
+//! All constructs here produce a single String (no multi-line output).
 
 use super::tokenizer::Token;
 use super::{tokens_to_plain, consume_group, expand_tokens};

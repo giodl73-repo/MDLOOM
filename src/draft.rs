@@ -336,10 +336,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
 
     // --- Deterministic: table separator too short ---
     // "separator column N has M dashes — need at least 3"
-    if codes_on_line
-        .iter()
-        .any(|&c| c == "md_table_separator_invalid")
-    {
+    if codes_on_line.contains(&"md_table_separator_invalid") {
         if let Some(fixed) = fix_table_separator(old_string) {
             return (fixed, true);
         }
@@ -347,7 +344,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
 
     // --- Deterministic: table cell padding ---
     // Now safe: uses escaped-pipe-aware parser that handles \|, code spans, ||, |>
-    if codes_on_line.iter().any(|&c| c == "md_table_cell_padding") {
+    if codes_on_line.contains(&"md_table_cell_padding") {
         if let Some(fixed) = fix_table_cell_padding(old_string) {
             return (fixed, true);
         }
@@ -356,7 +353,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // --- Deterministic: box width ±1 (trailing space) ---
     // "row width N ≠ box width M (box opened at line L)"
     // For ±1: add or remove a trailing space in the last cell before closing │/|
-    if codes_on_line.iter().any(|&c| c == "ascii_box_width") {
+    if codes_on_line.contains(&"ascii_box_width") {
         // Only handle ±1 cases — larger diffs need AI judgment
         let all_width_diags: Vec<&&Diagnostic> = diags
             .iter()
@@ -373,7 +370,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // --- Deterministic: ASCII art box cell padding (missing space against │) ---
     // "cell N missing right padding" or "cell N missing left padding"
     // These rows have content butting against │ with 0 spaces. Add 1 space.
-    if codes_on_line.iter().any(|&c| c == "ascii_cell_padding")
+    if codes_on_line.contains(&"ascii_cell_padding")
         && !codes_on_line
             .iter()
             .any(|&c| c == "ascii_box_width" || c == "ascii_box_col")
@@ -389,9 +386,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     //   - drift == 1 (single column off)
     //   - No width error on the same line (width errors are fixed by box_width logic)
     //   - The rich context has expected_cols and actual_cols
-    if codes_on_line.iter().any(|&c| c == "ascii_box_col")
-        && !codes_on_line.iter().any(|&c| c == "ascii_box_width")
-    {
+    if codes_on_line.contains(&"ascii_box_col") && !codes_on_line.contains(&"ascii_box_width") {
         let col_diag = diags
             .iter()
             .find(|d| d.span.line == line_no && d.code == "ascii_box_col");
@@ -408,7 +403,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
 
     // --- Deterministic: bar chart scale (proportionality) ---
     // Parse "expected ~N chars" from the message
-    if codes_on_line.iter().any(|&c| c == "ascii_barchart_scale") {
+    if codes_on_line.contains(&"ascii_barchart_scale") {
         for diag in diags
             .iter()
             .filter(|d| d.span.line == line_no && d.code == "ascii_barchart_scale")
@@ -422,7 +417,7 @@ fn compute_auto_fix(diags: &[&Diagnostic], line_no: usize, old_string: &str) -> 
     // --- Deterministic: md_table_missing_link with auto_link_pattern ---
     // "directory" pattern: `computing/` → `[computing/](../computing/00-OVERVIEW.md)`
     // "file" pattern: `01-PKG.md` → `[01-PKG.md](../dirname/01-PKG.md)`
-    if codes_on_line.iter().any(|&c| c == "md_table_missing_link") {
+    if codes_on_line.contains(&"md_table_missing_link") {
         // The fix strategy comes from the schema config via the diagnostic message
         // For now, detect bare directory (ends with /) or bare file (ends with .md)
         // and generate the standard link
@@ -511,7 +506,7 @@ fn fix_barchart_scale(line: &str, message: &str) -> Option<String> {
 
     let before = &line[..bar_start_byte];
     let after = &line[bar_end_byte..];
-    let new_bar: String = std::iter::repeat(bar_char).take(expected_n).collect();
+    let new_bar: String = std::iter::repeat_n(bar_char, expected_n).collect();
 
     // Adjust whitespace gap to keep value at same visual column
     let after_trimmed = after.trim_start();
@@ -881,9 +876,7 @@ fn fix_box_col_one(line: &str, expected_cols: &[usize], actual_cols: &[usize]) -
 
         if is_vertical && !fixed && cur_col_1 == act_first {
             if need_insert {
-                for _ in 0..drift {
-                    result.push(' ');
-                }
+                result.extend(std::iter::repeat_n(' ', drift));
             } else if need_remove {
                 // Remove up to `drift` trailing spaces from result
                 let mut removed = 0;
@@ -926,8 +919,8 @@ fn parse_width_diff(message: &str) -> Option<(usize, usize)> {
     if parts.len() < 3 {
         return None;
     }
-    let actual: usize = parts[1].trim().split_whitespace().next()?.parse().ok()?;
-    let expected: usize = parts[2].trim().split_whitespace().next()?.parse().ok()?;
+    let actual: usize = parts[1].split_whitespace().next()?.parse().ok()?;
+    let expected: usize = parts[2].split_whitespace().next()?.parse().ok()?;
     Some((actual, expected))
 }
 

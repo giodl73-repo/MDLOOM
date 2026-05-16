@@ -66,7 +66,7 @@ impl Check for MarkdownCheck {
                 .config
                 .required_h2
                 .iter()
-                .any(|req| h2_headings.iter().any(|h| *h == req.as_str()));
+                .any(|req| h2_headings.contains(&req.as_str()));
             if !found_any {
                 diags.push(Diagnostic::warning(
                     path.to_path_buf(),
@@ -236,7 +236,7 @@ impl Check for MarkdownCheck {
                         ln,
                         1,
                         "md_heading_format",
-                        format!("heading missing space after `#` — use `# Title` not `#Title`"),
+                        "heading missing space after `#` — use `# Title` not `#Title`".to_string(),
                     ));
                 } else if after_hashes.starts_with("  ") {
                     diags.push(Diagnostic::warning(

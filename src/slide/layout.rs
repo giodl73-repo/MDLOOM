@@ -269,11 +269,7 @@ pub fn word_wrap(s: &str, width: usize) -> Vec<String> {
             current_w += 1 + word_w;
         } else {
             // Flush current line with indent
-            lines.push(format!(
-                "{}{}",
-                if lines.is_empty() { &indent } else { &indent },
-                current
-            ));
+            lines.push(format!("{}{}", &indent, current));
             current = word.to_string();
             current_w = word_w;
         }
@@ -499,7 +495,7 @@ pub fn render_comparison(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 
     // Column widths: equal split of remaining grid width (after y-axis column).
     let grid_w = w.saturating_sub(y_axis_cols);
-    let col_a_width = (grid_w + 1) / 2;
+    let col_a_width = grid_w.div_ceil(2);
     let col_b_width = grid_w.saturating_sub(col_a_width);
 
     let tl_lines = lines_to_canvas(

@@ -58,9 +58,8 @@ pub fn render_bar_chart(data: &ChartData, attrs: &ChartAttrs) -> Vec<String> {
         };
         let filled = filled.min(bar_area);
         let label = pad_left(&point.label, label_w);
-        let bar: String = std::iter::repeat(BAR_FILL)
-            .take(filled)
-            .chain(std::iter::repeat(BAR_EMPTY).take(bar_area - filled))
+        let bar: String = std::iter::repeat_n(BAR_FILL, filled)
+            .chain(std::iter::repeat_n(BAR_EMPTY, bar_area - filled))
             .collect();
         let value = pad_left_str(value_str, value_w);
         out.push(format!("{}  \u{2502} {} {}", label, bar, value));

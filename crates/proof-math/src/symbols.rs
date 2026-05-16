@@ -1,4 +1,4 @@
-/// Tier 1: direct LaTeX command → Unicode character mappings.
+//! Tier 1: direct LaTeX command -> Unicode character mappings.
 
 pub static LATEX_SYMBOLS: &[(&str, &str)] = &[
     // Greek lowercase

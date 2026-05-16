@@ -283,10 +283,8 @@ fn suggest_similar_file(missing: &str, root: &Path) -> Option<String> {
             continue;
         }
         let d = edit_distance_str(&missing_lower, &rel.to_lowercase());
-        if d <= 3 {
-            if best.as_ref().map_or(true, |(_, bd)| d < *bd) {
-                best = Some((rel, d));
-            }
+        if d <= 3 && best.as_ref().is_none_or(|(_, bd)| d < *bd) {
+            best = Some((rel, d));
         }
     }
 

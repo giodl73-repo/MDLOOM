@@ -4,7 +4,7 @@ use colored::Colorize;
 use proof_lib::frontmatter::FrontmatterTagCounts;
 use proof_lib::lint::load_config_for_path;
 use proof_lib::GlintConfig;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(clap::Args)]
@@ -53,7 +53,7 @@ fn reject_crop_only_options(args: &Args) -> Result<()> {
         || !args.extensions.is_empty()
         || !args.exclude_dirs.is_empty()
         || args.crop_format.is_some()
-        || args.crop_bin != PathBuf::from("crop")
+        || args.crop_bin != Path::new("crop")
     {
         bail!("proof status CROP options require --crop");
     }
@@ -66,7 +66,7 @@ fn run_crop_status(args: Args, globals: &GlobalOptions) -> Result<()> {
 }
 
 fn build_crop_status_args(args: Args, globals: &GlobalOptions) -> Result<Vec<String>> {
-    if args.view.is_some() && args.dir != PathBuf::from(".") {
+    if args.view.is_some() && args.dir != Path::new(".") {
         bail!("proof status --crop accepts either a positional directory or --view, not both");
     }
     let root = if args.view.is_some() {
@@ -142,7 +142,7 @@ fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {
                         if src_mod > out_mod {
                             stale_count += 1;
                         }
-                        if last_compile.map_or(true, |lc| out_mod > lc) {
+                        if last_compile.is_none_or(|lc| out_mod > lc) {
                             last_compile = Some(out_mod);
                         }
                     }

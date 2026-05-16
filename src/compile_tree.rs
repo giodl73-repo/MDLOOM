@@ -256,7 +256,7 @@ pub(crate) fn render_inline_tree(content: &str, indent_width: usize) -> Result<S
         let is_last = nodes[i + 1..]
             .iter()
             .find(|(d, _)| *d <= *depth)
-            .map_or(true, |(d, _)| *d < *depth);
+            .is_none_or(|(d, _)| *d < *depth);
         let connector = if is_last { "└── " } else { "├── " };
         out.push_str(&prefix);
         out.push_str(connector);

@@ -1,6 +1,4 @@
-/// Tier 3: stacked fraction renderer.
-
-
+//! Tier 3: stacked fraction renderer.
 
 /// A multi-line rendered expression with a baseline for vertical alignment.
 #[derive(Debug, Clone)]

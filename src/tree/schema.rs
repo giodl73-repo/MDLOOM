@@ -224,7 +224,7 @@ pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<Stri
     let first = arr[0]
         .as_object()
         .ok_or_else(|| anyhow::anyhow!("JSON array elements must be objects"))?;
-    let headers: Vec<String> = first.keys().map(|k| k.clone()).collect();
+    let headers: Vec<String> = first.keys().cloned().collect();
 
     let mut rows = Vec::new();
     for item in arr {
@@ -280,10 +280,9 @@ pub(crate) fn build_dfs_tree(rows: &[SourceRow], map: &FieldMap) -> Result<Vec<T
             if !row.parent.is_empty()
                 && !map.is_root_marker(&row.parent)
                 && !named.contains(&row.parent)
+                && seen.insert(row.parent.clone())
             {
-                if seen.insert(row.parent.clone()) {
-                    synth.push(row.parent.clone());
-                }
+                synth.push(row.parent.clone());
             }
         }
         synth

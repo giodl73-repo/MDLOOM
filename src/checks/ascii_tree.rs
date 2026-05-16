@@ -195,8 +195,7 @@ pub(crate) fn classify_line(line: &str, indent_width: usize) -> (usize, Connecto
             } else {
                 None
             }
-        } else if remaining.starts_with('|') {
-            let after = &remaining[1..];
+        } else if let Some(after) = remaining.strip_prefix('|') {
             let spaces = after.chars().take(iw - 1).all(|c| c == ' ');
             if spaces && after.len() >= iw - 1 {
                 Some(iw)
@@ -485,7 +484,7 @@ fn validate_t4_t12(nodes: &[TreeNode], path: &Path) -> Vec<Diagnostic> {
         let mut next_real: Option<&TreeNode> = None;
         for next in &nodes[i + 1..] {
             if next.connector == Connector::Continuation {
-                if next.indent_level >= node.indent_level + 1 && !saw_implied_child {
+                if next.indent_level > node.indent_level && !saw_implied_child {
                     saw_implied_child = true;
                     implied_line = next.line_no;
                 }

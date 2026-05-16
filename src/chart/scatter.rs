@@ -67,7 +67,7 @@ pub fn render_scatter_chart(data: &ChartData, attrs: &ChartAttrs) -> Vec<String>
         let row_str: String = row.iter().collect();
         out.push(format!("{} {} {}", label, TICK_TOP, row_str));
     }
-    let baseline_str: String = std::iter::repeat(HORIZ).take(plot_w).collect();
+    let baseline_str: String = std::iter::repeat_n(HORIZ, plot_w).collect();
     out.push(format!(
         "{} {}{}",
         " ".repeat(y_axis_w),

@@ -1,5 +1,4 @@
-/// Display math entry point: parse + render + width/align padding.
-
+//! Display math entry point: parse + render + width/align padding.
 
 use super::tokenizer::{self, Token, MathDiag, DiagSeverity};
 use super::fraction::{RenderedExpr, render_frac, center_in, left_align_in};
@@ -203,11 +202,11 @@ fn hconcat(parts: Vec<RenderedExpr>) -> RenderedExpr {
             lines[row].push_str(line);
         }
         // Fill blank space above and below this part
-        for row in 0..offset {
-            lines[row].push_str(&" ".repeat(part.width));
+        for line in lines.iter_mut().take(offset) {
+            line.push_str(&" ".repeat(part.width));
         }
-        for row in (offset + part_height)..total_lines {
-            lines[row].push_str(&" ".repeat(part.width));
+        for line in lines.iter_mut().take(total_lines).skip(offset + part_height) {
+            line.push_str(&" ".repeat(part.width));
         }
     }
 
@@ -227,8 +226,8 @@ fn render_display_command(
     base_col: usize,
 ) -> RenderedExpr {
     // Prime
-    if cmd.starts_with("prime") {
-        let n: usize = cmd["prime".len()..].parse().unwrap_or(1);
+    if let Some(rest) = cmd.strip_prefix("prime") {
+        let n: usize = rest.parse().unwrap_or(1);
         let sym = match n { 1 => "′", 2 => "″", _ => "‴" };
         return RenderedExpr::leaf(sym);
     }
@@ -286,15 +285,15 @@ fn render_display_command(
 
     // \int
     if cmd == "int" {
-        return render_int_command(tokens, pos, diags, base_col);
+        return render_int_command(tokens, pos);
     }
 
     // \sum, \prod
     if cmd == "sum" {
-        return render_sum_command('∑', tokens, pos, diags, base_col);
+        return render_sum_command('∑', tokens, pos);
     }
     if cmd == "prod" {
-        return render_sum_command('∏', tokens, pos, diags, base_col);
+        return render_sum_command('∏', tokens, pos);
     }
 
     // Font commands: strip, pass content
@@ -341,8 +340,6 @@ fn render_display_command(
 fn render_int_command(
     tokens: &[Token],
     pos: &mut usize,
-    diags: &mut Vec<MathDiag>,
-    base_col: usize,
 ) -> RenderedExpr {
     let (lower_toks, upper_toks) = consume_limit_args(tokens, pos);
     // Everything remaining until end of tokens is the integrand
@@ -369,8 +366,6 @@ fn render_sum_command(
     op: char,
     tokens: &[Token],
     pos: &mut usize,
-    diags: &mut Vec<MathDiag>,
-    base_col: usize,
 ) -> RenderedExpr {
     let (lower_toks, upper_toks) = consume_limit_args(tokens, pos);
     let mut body_text = String::new();

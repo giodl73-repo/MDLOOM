@@ -57,7 +57,7 @@ fn validate_entry(entry: &DaVinciEntry, root: &Path) -> Result<Vec<Diagnostic>, 
                 file: file.clone(),
                 span: crate::diagnostic::Span { line, col: 1 },
                 end_span: None,
-                severity: severity.clone(),
+                severity: severity,
                 code: "fig_invariant_violated",
                 message: format!(
                     "DaVinci '{}' [{} rule={}]: {}",
@@ -270,7 +270,7 @@ fn detect_border_widths(lines: &[&str]) -> Vec<usize> {
 fn count_boxes(lines: &[&str]) -> usize {
     let borders = detect_border_widths(lines);
     // Each box has top + bottom border → approximately borders.len() / 2
-    (borders.len() + 1) / 2
+    borders.len().div_ceil(2)
 }
 
 fn detect_column_counts(lines: &[&str]) -> Vec<usize> {
