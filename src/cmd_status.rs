@@ -66,6 +66,9 @@ fn run_crop_status(args: Args, globals: &GlobalOptions) -> Result<()> {
 }
 
 fn build_crop_status_args(args: Args, globals: &GlobalOptions) -> Result<Vec<String>> {
+    if args.view.is_some() && args.dir != PathBuf::from(".") {
+        bail!("proof status --crop accepts either a positional directory or --view, not both");
+    }
     let root = if args.view.is_some() {
         None
     } else if args.dir.is_absolute() {
@@ -325,6 +328,29 @@ mod tests {
                 "markdown".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn crop_status_rejects_dir_with_view() {
+        let err = build_crop_status_args(
+            Args {
+                dir: PathBuf::from("docs"),
+                crop: true,
+                crop_bin: PathBuf::from("crop"),
+                view: Some(PathBuf::from(".crop\\views\\ready.json")),
+                strict: false,
+                strict_on: vec![],
+                crop_format: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+            },
+            &globals(None),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("either a positional directory or --view"));
     }
 
     #[test]

@@ -62,6 +62,10 @@ For the same CROP-backed health surface from the top-level status command, use
 proof status --crop --view .crop/views/ready-guides.json --crop-format json --strict --strict-on broken-links -o READY_GUIDES.status.json
 ```
 
+When using `proof status --crop`, pass either a positional directory for root
+mode or `--view` for named-view mode; PROOF rejects combining both so a local
+status directory is not silently ignored.
+
 `proof crop status` also honors PROOF's global `-o/--output` and `-f/--format`
 when command-local `--output` or `--format` values are not supplied.
 
