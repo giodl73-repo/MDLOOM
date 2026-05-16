@@ -394,6 +394,9 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     if args.root.is_some() && args.view.is_some() {
         bail!("proof crop status accepts either --root or --view, not both");
     }
+    if args.root.is_none() && args.view.is_none() {
+        bail!("proof crop status requires --root or --view");
+    }
     if !args.strict && !args.strict_on.is_empty() {
         bail!("proof crop status --strict-on requires --strict");
     }
@@ -1006,6 +1009,9 @@ fn build_side_info_args(
             command
         );
     }
+    if args.root.is_none() && args.view.is_none() {
+        bail!("proof crop {} requires --root or --view", command);
+    }
 
     let mut crop_args = vec![command.to_string()];
     if let Some(root) = args.root {
@@ -1043,6 +1049,9 @@ fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<
     if args.root.is_some() && args.manifest.is_some() {
         bail!("proof crop artifacts accepts either --root or --manifest, not both");
     }
+    if args.root.is_none() && args.manifest.is_none() {
+        bail!("proof crop artifacts requires --root or --manifest");
+    }
 
     let mut crop_args = vec!["artifacts".to_string()];
     if let Some(root) = args.root {
@@ -1077,6 +1086,9 @@ fn run_sync(crop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Resul
 fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
     if args.root.is_some() && args.view.is_some() {
         bail!("proof crop sync accepts either --root or --view, not both");
+    }
+    if args.root.is_none() && args.view.is_none() {
+        bail!("proof crop sync requires --root or --view");
     }
 
     std::fs::create_dir_all(&args.output_dir)
@@ -1379,6 +1391,24 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("either --root or --view"));
+    }
+
+    #[test]
+    fn status_requires_root_or_view() {
+        let err = build_status_args(StatusArgs {
+            root: None,
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: Some("markdown".to_string()),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --root or --view"));
     }
 
     #[test]
@@ -1904,6 +1934,24 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
+    fn side_info_requires_root_or_view() {
+        let err = build_side_info_args(
+            "links",
+            SideInfoArgs {
+                root: None,
+                view: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: None,
+            },
+            &globals("text"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --root or --view"));
+    }
+
+    #[test]
     fn artifacts_args_map_to_crop_artifacts() {
         let args = build_artifacts_args(
             ArtifactsArgs {
@@ -1956,6 +2004,21 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
+    fn artifacts_requires_root_or_manifest() {
+        let err = build_artifacts_args(
+            ArtifactsArgs {
+                root: None,
+                manifest: None,
+                output: None,
+            },
+            &globals("text"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --root or --manifest"));
+    }
+
+    #[test]
     fn sync_args_generate_all_side_info_commands() {
         let dir = tempfile::tempdir().unwrap();
         let output_dir = dir.path().join("side-info");
@@ -1984,5 +2047,20 @@ exclude = ["target/**", "node_modules/**"]
             assert!(crop_args.contains(&"target".to_string()));
         }
         assert!(args[1].contains(&output_dir.join("backlinks.json").display().to_string()));
+    }
+
+    #[test]
+    fn sync_requires_root_or_view() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = build_sync_args(SyncArgs {
+            root: None,
+            view: None,
+            output_dir: dir.path().join("side-info"),
+            extensions: vec![],
+            exclude_dirs: vec![],
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --root or --view"));
     }
 }

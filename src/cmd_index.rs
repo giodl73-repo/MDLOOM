@@ -96,6 +96,9 @@ fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
             command
         );
     }
+    if page.root.is_none() && page.view.is_none() {
+        bail!("proof {} requires --root or --view", command);
+    }
 
     let mut crop_args = vec![command.to_string()];
     if let Some(root) = page.root {
@@ -293,5 +296,23 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("either --root or --view"));
+    }
+
+    #[test]
+    fn index_requires_root_or_view() {
+        let err = build_crop_page_args(
+            "index",
+            args(CorpusPageArgs {
+                root: None,
+                view: None,
+                title: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: None,
+            }),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --root or --view"));
     }
 }

@@ -370,9 +370,10 @@ artifact health through its PROOF manifest adapter:
 proof crop artifacts --manifest .proof/artifacts.json --format markdown --output ARTIFACTS.md
 ```
 
-Use this for missing, stale, cached, or diagnostic artifact rows. Generic corpus
-status pages should still use `proof crop status`; artifact health is a
-PROOF-manifest adapter over generated outputs.
+Use this for missing, stale, cached, or diagnostic artifact rows. Pass either
+`--manifest` or `--root`; PROOF rejects missing or combined selectors before
+invoking CROP. Generic corpus status pages should still use `proof crop status`;
+artifact health is a PROOF-manifest adapter over generated outputs.
 
 ---
 
