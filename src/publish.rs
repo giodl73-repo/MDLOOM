@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn pebble_backend_chunks_markdown_for_transfer() {
         let pebble = markdown_to_pebble_document(
-            "# Guide\n\nIntro.\n\n## Steps\n\n- one\n- two\n",
+            "---\ntags: [proof, guide]\nstatus: ready\n---\n\n# Guide\n\nIntro.\n\n## Steps\n\n- one\n- two\n",
             "fallback",
             Path::new("guide.source.md"),
             &[PathBuf::from(".proof\\side-info\\links.json")],
@@ -134,12 +134,18 @@ mod tests {
         assert_eq!(json["schema"], "pebble.v1");
         assert_eq!(json["title"], "Guide");
         assert_eq!(json["source"], "guide.source.md");
+        assert_eq!(json["metadata"]["status"], "ready");
         assert_eq!(json["refs"].as_array().unwrap().len(), 1);
         assert_eq!(json["sections"][0]["id"], "guide");
+        assert_eq!(json["sections"][0]["metadata"]["tags"], "[proof, guide]");
         assert_eq!(json["sections"][1]["path"][1], "Steps");
         assert!(json["sections"][1]["text"]
             .as_str()
             .unwrap()
             .contains("- one"));
+        assert!(!json["sections"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("status: ready"));
     }
 }

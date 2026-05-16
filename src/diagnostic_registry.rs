@@ -76,6 +76,12 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCode] = &[
         description: "Vertical connector columns drift between connector-only lines.",
     },
     DiagnosticCode {
+        code: "ascii_table_candidate",
+        default_severity: Severity::Warning,
+        family: "backfill",
+        description: "Backfill inventory detected an ASCII table candidate block.",
+    },
+    DiagnosticCode {
         code: "ascii_unclosed_fence",
         default_severity: Severity::Warning,
         family: "ascii_box",

@@ -748,7 +748,7 @@ dependencies = [
 [[package]]
 name = "pebble"
 version = "0.1.0"
-source = "git+https://github.com/giodl73-repo/PEBBLE?rev=ec4ac5a1995b1d49a2070d345e4bad8975602178#ec4ac5a1995b1d49a2070d345e4bad8975602178"
+source = "git+https://github.com/giodl73-repo/PEBBLE?rev=80c6e104f99b316f0d8bca5f87a1999feee0d520#80c6e104f99b316f0d8bca5f87a1999feee0d520"
 dependencies = [
  "serde",
  "serde_json",
