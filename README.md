@@ -4,6 +4,10 @@
 
 **Series:** [Tools & Infrastructure](https://github.com/giodl73-repo/giodl73-repo/blob/main/series/tools-infrastructure.md).
 
+**Review roles:** This repo uses
+[ROLES](https://github.com/giodl73-repo/ROLES), the `.roles` convention for
+repository-local review panels.
+
 proof is a full markdown compilation toolchain — LaTeX math, ASCII slide decks,
 live dashboards, tree diagrams, sparkline charts, cross-referenced guides — all
 authored in plain text, compiled to terminal-perfect output.
