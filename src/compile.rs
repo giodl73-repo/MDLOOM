@@ -415,77 +415,54 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => match compile_crop::render_backlinks(root, source.as_deref(), target, format) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: target.clone(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("backlinks error: {}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    compile_output::source_fallback(&source_lines, line_start, line_end)
-                }
-            },
+            } => compile_crop::compile_backlinks(
+                root,
+                source.as_ref(),
+                target,
+                format,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
             Directive::Links {
                 source_doc,
                 status,
                 source,
                 format,
                 ..
-            } => match compile_crop::render_links(
+            } => compile_crop::compile_links(
                 root,
-                source.as_deref(),
+                source.as_ref(),
                 source_doc,
                 status,
                 format,
-            ) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: source_doc.clone().unwrap_or_default(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("links error: {}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    compile_output::source_fallback(&source_lines, line_start, line_end)
-                }
-            },
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
             Directive::Headings {
                 source_doc,
                 source,
                 format,
                 ..
-            } => match compile_crop::render_headings(root, source.as_deref(), source_doc, format) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: source_doc.clone(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("headings error: {}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    compile_output::source_fallback(&source_lines, line_start, line_end)
-                }
-            },
+            } => compile_crop::compile_headings(
+                root,
+                source.as_ref(),
+                source_doc,
+                format,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
             Directive::Frontmatter {
                 field,
                 value,
@@ -493,31 +470,20 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => match compile_crop::render_frontmatter(
+            } => compile_crop::compile_frontmatter(
                 root,
-                source.as_deref(),
+                source.as_ref(),
                 field,
                 value,
                 op,
                 format,
-            ) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: field.clone().unwrap_or_default(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("frontmatter error: {}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    compile_output::source_fallback(&source_lines, line_start, line_end)
-                }
-            },
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Chart {
                 attrs,

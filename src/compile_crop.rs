@@ -1,7 +1,9 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
+use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::Directive;
+use crate::compile_output;
 use crate::crop_side_info;
 
 #[derive(Clone, Copy)]
@@ -160,6 +162,169 @@ pub(crate) fn render_frontmatter(
         "<!-- proof:compiled from=\"proof:frontmatter\" -->\n{}\n<!-- /proof:compiled -->",
         rendered
     ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_backlinks(
+    root: &Path,
+    side_info: Option<&String>,
+    target: &str,
+    format: &str,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match render_backlinks(root, side_info.map(|s| s.as_str()), target, format) {
+        Ok(rendered) => {
+            *resolved_count += 1;
+            rendered
+        }
+        Err(e) => {
+            push_crop_error(
+                "backlinks",
+                target.to_string(),
+                e,
+                line_start,
+                source_line_offset,
+                violations,
+            );
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_links(
+    root: &Path,
+    side_info: Option<&String>,
+    source_doc: &Option<String>,
+    status: &str,
+    format: &str,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match render_links(
+        root,
+        side_info.map(|s| s.as_str()),
+        source_doc,
+        status,
+        format,
+    ) {
+        Ok(rendered) => {
+            *resolved_count += 1;
+            rendered
+        }
+        Err(e) => {
+            push_crop_error(
+                "links",
+                source_doc.clone().unwrap_or_default(),
+                e,
+                line_start,
+                source_line_offset,
+                violations,
+            );
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_headings(
+    root: &Path,
+    side_info: Option<&String>,
+    source_doc: &str,
+    format: &str,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match render_headings(root, side_info.map(|s| s.as_str()), source_doc, format) {
+        Ok(rendered) => {
+            *resolved_count += 1;
+            rendered
+        }
+        Err(e) => {
+            push_crop_error(
+                "headings",
+                source_doc.to_string(),
+                e,
+                line_start,
+                source_line_offset,
+                violations,
+            );
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_frontmatter(
+    root: &Path,
+    side_info: Option<&String>,
+    field: &Option<String>,
+    value: &Option<String>,
+    op: &str,
+    format: &str,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match render_frontmatter(
+        root,
+        side_info.map(|s| s.as_str()),
+        field,
+        value,
+        op,
+        format,
+    ) {
+        Ok(rendered) => {
+            *resolved_count += 1;
+            rendered
+        }
+        Err(e) => {
+            push_crop_error(
+                "frontmatter",
+                field.clone().unwrap_or_default(),
+                e,
+                line_start,
+                source_line_offset,
+                violations,
+            );
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
+
+fn push_crop_error(
+    kind: &str,
+    uri: String,
+    error: anyhow::Error,
+    line_start: usize,
+    source_line_offset: usize,
+    violations: &mut Vec<CompileViolation>,
+) {
+    violations.push(CompileViolation {
+        code: "COMPILE-002",
+        severity: ViolationSeverity::Error,
+        uri,
+        figure_id: None,
+        invariant: String::new(),
+        message: format!("{} error: {}", kind, error),
+        source_line: line_start + 1 + source_line_offset,
+    });
 }
 
 #[cfg(test)]
