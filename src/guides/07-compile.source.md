@@ -64,7 +64,7 @@ code. Raw HTML in source Markdown is escaped rather than passed through, so the
 publish backend stays safe by default. Watch mode remains Markdown-only until
 target-aware watch manifests are modeled.
 
-`--target pebble` writes **Proof Pebbles**: compact `proof.pebble.v1` JSON
+`--target pebble` writes **Pebbles**: compact `pebble.v1` JSON
 documents optimized for agents, retrieval, and transfer rather than visual
 presentation. A pebble contains the source path, title, resolved dependency refs,
 and section chunks with stable IDs, heading paths, line numbers, and resolved

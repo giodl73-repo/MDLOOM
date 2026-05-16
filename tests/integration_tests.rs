@@ -1844,7 +1844,7 @@ fn binary_compile_target_pebble_writes_ai_context_pack() {
 
     let pebble: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
-    assert_eq!(pebble["schema"], "proof.pebble.v1");
+    assert_eq!(pebble["schema"], "pebble.v1");
     assert_eq!(pebble["kind"], "document");
     assert_eq!(pebble["title"], "Guide");
     assert_eq!(pebble["format"], "markdown");

@@ -22,8 +22,8 @@ every chart, every diagram: authored in `.source.md`, compiled to `.md` by proof
 ```
 
 Think of it as a static site generator for terminal-first content: markdown is
-the primary artifact, HTML is the first human publish target, and **Proof
-Pebbles** (`proof.pebble.v1`) are compact AI/context transfer artifacts. Richer
+the primary artifact, HTML is the first human publish target, and **Pebbles**
+(`pebble.v1`) are compact AI/context transfer artifacts. Richer
 targets such as PPTX belong behind the same compile graph rather than a separate
 workflow.
 
@@ -130,7 +130,7 @@ and fenced code. Raw HTML is escaped by default. Successful compile runs also
 write `.proof/artifacts.json`, a target-aware manifest of source files, output
 paths, diagnostics, cache status, and resolved directive counts.
 
-`--target pebble` writes a compact `proof.pebble.v1` JSON document for agents,
+`--target pebble` writes a compact `pebble.v1` JSON document for agents,
 retrieval, and transfer. Pebbles preserve stable section IDs, heading paths,
 line numbers, resolved Markdown text, source path, and resolved dependency refs.
 CROP can support the same schema for corpus slices, so a CROP view pack and a

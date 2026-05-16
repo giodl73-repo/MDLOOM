@@ -42,7 +42,7 @@ pub fn markdown_to_pebble_document(
 ) -> String {
     let title = document_title(markdown, fallback_title);
     let pebble = PebbleDocument {
-        schema: "proof.pebble.v1",
+        schema: "pebble.v1",
         kind: "document",
         title,
         source: path_string(source_path),
@@ -53,7 +53,7 @@ pub fn markdown_to_pebble_document(
             .map(|path| path_string(path))
             .collect(),
     };
-    serde_json::to_string(&pebble).expect("serializing Proof Pebble document cannot fail")
+    serde_json::to_string(&pebble).expect("serializing Pebble document cannot fail")
 }
 
 #[derive(Serialize)]
@@ -301,7 +301,7 @@ mod tests {
         );
         let json: serde_json::Value = serde_json::from_str(&pebble).unwrap();
 
-        assert_eq!(json["schema"], "proof.pebble.v1");
+        assert_eq!(json["schema"], "pebble.v1");
         assert_eq!(json["title"], "Guide");
         assert_eq!(json["source"], "guide.source.md");
         assert_eq!(json["refs"].as_array().unwrap().len(), 1);

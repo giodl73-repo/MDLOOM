@@ -836,7 +836,7 @@ COMPILE OPTIONS
   including headings, lists, tables, links, task lists, strikethrough, and fenced
   code; raw HTML is escaped rather than passed through.
 
-  `pebble` writes Proof Pebbles (`proof.pebble.v1`): compact JSON context
+  `pebble` writes Pebbles (`pebble.v1`): compact JSON context
   transfer artifacts optimized for agents rather than human presentation. A
   pebble records source path, title, format, resolved dependency refs, and
   section chunks with stable IDs, heading paths, source line numbers, and resolved
