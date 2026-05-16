@@ -167,7 +167,7 @@ pub fn classify_region_line(line: &str) -> RegionLine<'_> {
 
 /// Render region content lines into a Canvas.
 ///
-/// By the time content reaches this function, `compile.rs::render_region_body`
+/// By the time content reaches this function, `compile_region::render_region_body`
 /// has already resolved every embedded `proof:*` directive and written the
 /// rendered glyph rows back into `content_lines`. So at this stage every line
 /// is treated as literal: clipped to region width, padded, and pasted.

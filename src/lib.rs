@@ -16,6 +16,7 @@ pub(crate) mod compile_format;
 pub(crate) mod compile_math;
 #[allow(dead_code)]
 pub mod compile_prose;
+pub(crate) mod compile_region;
 pub(crate) mod compile_slides;
 #[allow(dead_code)]
 pub mod compile_source;

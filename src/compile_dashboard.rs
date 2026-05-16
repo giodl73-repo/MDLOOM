@@ -1,10 +1,9 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::compile::{
-    render_region_body, split_frontmatter, CompileResult, CompileViolation, ViolationSeverity,
-};
+use crate::compile::{split_frontmatter, CompileResult, CompileViolation, ViolationSeverity};
 use crate::compile_directive::{collect_directives, Directive};
+use crate::compile_region::render_region_body;
 use crate::config::GlintConfig;
 use crate::dashboard::region::{
     compile_dashboard, parse_dashboard_frontmatter, DashboardError, RegionGeometry,

@@ -989,102 +989,10 @@ pub(crate) fn split_frontmatter(source: &str) -> (String, &str, usize) {
     (fm, body, body_offset_lines)
 }
 
-/// Render the body of a proof:region directive: literal lines kept verbatim,
-/// directive lines (proof:element/proof:row/proof:tree/proof:symbol/proof:shape)
-/// dispatched through the same per-directive renderers used by compile_file —
-/// with `no-chrome` implied so the canvas paste sees raw glyphs only.
-pub(crate) fn render_region_body(
-    body: &[String],
-    root: &Path,
-    config: &GlintConfig,
-    runner: &Runner,
-    abs_line: usize,
-    violations: &mut Vec<CompileViolation>,
-    resolved_count: &mut usize,
-) -> Vec<String> {
-    let mut output: Vec<String> = Vec::new();
-    let mut i = 0;
-    while i < body.len() {
-        let line = &body[i];
-        if let Some(header) = top_level_region_directive_header(line) {
-            // Gobble body lines until the next column-0 directive header or end.
-            // Indented proof:* lines stay with the parent (e.g. proof:row + indented
-            // proof:element children). Blank and literal lines are also body.
-            let mut j = i + 1;
-            while j < body.len() && top_level_region_directive_header(&body[j]).is_none() {
-                j += 1;
-            }
-            let body_slice: Vec<String> = body[i + 1..j].to_vec();
-            let synth = if body_slice.is_empty() {
-                format!("```{}\n```", header)
-            } else {
-                format!("```{}\n{}\n```", header, body_slice.join("\n"))
-            };
-            let nested = collect_directives(&synth);
-            if let Some(directive) = nested.into_iter().next() {
-                let rendered = render_one_directive_no_chrome(
-                    &directive,
-                    root,
-                    config,
-                    runner,
-                    abs_line + i,
-                    violations,
-                    resolved_count,
-                );
-                for rline in rendered.lines() {
-                    output.push(rline.to_string());
-                }
-            } else {
-                // Couldn't synthesize — fall back to literal lines so the user sees something.
-                output.push(line.clone());
-                for b in &body_slice {
-                    output.push(b.clone());
-                }
-            }
-            i = j;
-        } else {
-            output.push(line.clone());
-            i += 1;
-        }
-    }
-    output
-}
-
-/// Return the directive header (trimmed of the leading column-0 anchor) if
-/// `line` begins at column 0 with a known proof:* directive name. Returns
-/// None for indented lines (they belong to the enclosing directive body) and
-/// for plain text. The set must match `classify_region_line`.
-fn top_level_region_directive_header(line: &str) -> Option<&str> {
-    if line.starts_with(' ') || line.starts_with('\t') {
-        return None;
-    }
-    const HEADERS: &[&str] = &[
-        "proof:element",
-        "proof:tree",
-        "proof:chart",
-        "proof:row",
-        "proof:symbol",
-        "proof:shape",
-        "proof:bullets",
-        "proof:centered",
-        "proof:stat",
-    ];
-    for h in HEADERS {
-        if line.starts_with(h) {
-            // Require word-boundary so e.g. "proof:rowx" doesn't match "proof:row".
-            let next = line.as_bytes().get(h.len()).copied();
-            if next.is_none() || next == Some(b' ') || next == Some(b'\t') {
-                return Some(line);
-            }
-        }
-    }
-    None
-}
-
 /// Render a single directive with `no-chrome` semantics — strips the
 /// traceability HTML comments and the surrounding fence so the canvas
 /// paste sees raw glyph rows. Returns the inner text (may be multi-line).
-fn render_one_directive_no_chrome(
+pub(crate) fn render_one_directive_no_chrome(
     directive: &Directive,
     root: &Path,
     config: &GlintConfig,
