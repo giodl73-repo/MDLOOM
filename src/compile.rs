@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+use crate::compile_chart;
 use crate::compile_crop::{self, SideInfoKind};
 use crate::compile_directive;
 use crate::compile_math;
@@ -1696,7 +1697,7 @@ pub fn compile_file(
                 inline_body,
                 ..
             } => {
-                let data_result = resolve_chart_data(
+                let data_result = compile_chart::resolve_chart_data(
                     source.as_deref(),
                     label_field.as_deref(),
                     value_field.as_deref(),
@@ -2587,63 +2588,6 @@ fn parse_filter_term(term: &str) -> Option<(&str, FilterOp, String)> {
 // ─────────────────────────────────────────────────────────
 // proof:element compile arm
 // ─────────────────────────────────────────────────────────
-
-/// Resolve a proof:chart directive's data — either from an md:// table or
-/// from the inline `label: value` body.
-fn resolve_chart_data(
-    source: Option<&str>,
-    label_field: Option<&str>,
-    value_field: Option<&str>,
-    inline_body: &str,
-    root: &Path,
-) -> std::result::Result<crate::chart::ChartData, String> {
-    if let Some(uri) = source {
-        let label_col = label_field
-            .ok_or_else(|| "proof:chart with source= requires label-field=".to_string())?;
-        let value_col = value_field
-            .ok_or_else(|| "proof:chart with source= requires value-field=".to_string())?;
-        let content = resolve_source_for_compile(uri, root)
-            .map_err(|e| format!("chart source error: {}", e))?;
-        chart_data_from_table(&content, label_col, value_col)
-            .map_err(|e| format!("chart table error: {}", e))
-    } else {
-        crate::chart::render::parse_inline_body(inline_body)
-            .map_err(|(line, msg)| format!("chart body line {}: {}", line + 1, msg))
-    }
-}
-
-/// Parse a markdown table and extract `(label_col, value_col)` as a `ChartData`.
-/// Delegates to `tree::schema::parse_md_table` so the chart consumer accepts
-/// the same lenient table forms (bounded `| a | b |` and inner-pipe `a | b`)
-/// as every other md:// table consumer.
-fn chart_data_from_table(
-    content: &str,
-    label_col: &str,
-    value_col: &str,
-) -> std::result::Result<crate::chart::ChartData, String> {
-    let (headers, table_rows) =
-        crate::tree::schema::parse_md_table(content).map_err(|e| format!("{}", e))?;
-    if !headers.iter().any(|h| h == label_col) {
-        return Err(format!("label column {:?} not found in header", label_col));
-    }
-    if !headers.iter().any(|h| h == value_col) {
-        return Err(format!("value column {:?} not found in header", value_col));
-    }
-    let mut points = Vec::new();
-    for (i, row) in table_rows.iter().enumerate() {
-        let label = row.get(label_col).cloned().unwrap_or_default();
-        let value_str = row.get(value_col).cloned().unwrap_or_default();
-        let value: f64 = value_str
-            .parse()
-            .map_err(|_| format!("row {}: invalid number {:?}", i + 1, value_str))?;
-        points.push(crate::chart::ChartPoint {
-            label,
-            value,
-            extras: Vec::new(),
-        });
-    }
-    Ok(crate::chart::ChartData(points))
-}
 
 #[allow(clippy::too_many_arguments)]
 /// Safe fallback: return source lines for the directive block, guarded against OOB.
@@ -3777,7 +3721,7 @@ fn render_one_directive_no_chrome(
             inline_body,
             ..
         } => {
-            let data_result = resolve_chart_data(
+            let data_result = compile_chart::resolve_chart_data(
                 source.as_deref(),
                 label_field.as_deref(),
                 value_field.as_deref(),

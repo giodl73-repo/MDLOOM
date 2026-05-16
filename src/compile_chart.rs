@@ -27,54 +27,30 @@ pub(crate) fn resolve_chart_data(
     }
 }
 
-/// Parse a markdown pipe table and extract `(label_col, value_col)` as
-/// `ChartData`. Header row determines column order; values must parse as f64.
+/// Parse a markdown table and extract `(label_col, value_col)` as a `ChartData`.
+/// Delegates to `tree::schema::parse_md_table` so chart directives accept the
+/// same lenient table forms as every other md:// table consumer.
 fn chart_data_from_table(
     content: &str,
     label_col: &str,
     value_col: &str,
 ) -> std::result::Result<ChartData, String> {
-    let mut rows: Vec<Vec<String>> = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('|') {
-            continue;
-        }
-        let cells: Vec<String> = trimmed
-            .trim_matches('|')
-            .split('|')
-            .map(|c| c.trim().to_string())
-            .collect();
-        rows.push(cells);
+    let (headers, table_rows) =
+        crate::tree::schema::parse_md_table(content).map_err(|e| format!("{}", e))?;
+    if !headers.iter().any(|h| h == label_col) {
+        return Err(format!("label column {:?} not found in header", label_col));
     }
-    if rows.len() < 2 {
-        return Err("expected pipe table with header + separator + body rows".to_string());
+    if !headers.iter().any(|h| h == value_col) {
+        return Err(format!("value column {:?} not found in header", value_col));
     }
-    let header = &rows[0];
-    let label_idx = header
-        .iter()
-        .position(|h| h == label_col)
-        .ok_or_else(|| format!("label column {:?} not found in header", label_col))?;
-    let value_idx = header
-        .iter()
-        .position(|h| h == value_col)
-        .ok_or_else(|| format!("value column {:?} not found in header", value_col))?;
 
     let mut points = Vec::new();
-    for (i, row) in rows.iter().enumerate().skip(1) {
-        if row.iter().all(|c| {
-            c.chars()
-                .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
-        }) {
-            continue;
-        }
-        if row.len() <= label_idx.max(value_idx) {
-            continue;
-        }
-        let label = row[label_idx].clone();
-        let value: f64 = row[value_idx]
+    for (i, row) in table_rows.iter().enumerate() {
+        let label = row.get(label_col).cloned().unwrap_or_default();
+        let value_str = row.get(value_col).cloned().unwrap_or_default();
+        let value: f64 = value_str
             .parse()
-            .map_err(|_| format!("row {}: invalid number {:?}", i, row[value_idx]))?;
+            .map_err(|_| format!("row {}: invalid number {:?}", i + 1, value_str))?;
         points.push(ChartPoint {
             label,
             value,
