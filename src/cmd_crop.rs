@@ -25,6 +25,8 @@ pub(crate) struct Args {
 enum CropCommand {
     /// Generate a CROP corpus status page for a root or named view
     Status(StatusArgs),
+    /// List CROP view recipes in a view store
+    ListViews(ListViewsArgs),
     /// Validate one CROP view recipe or every recipe in a view store
     InspectViews(InspectViewsArgs),
     /// Inspect CROP views and sync compiler side-info in one preflight step
@@ -96,6 +98,16 @@ pub(crate) struct CropStatusRequest {
     pub(crate) strict_on: Vec<String>,
     pub(crate) format: String,
     pub(crate) output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+struct ListViewsArgs {
+    /// View store directory to list. Defaults to .crop\views
+    #[arg(long, default_value = ".crop\\views")]
+    dir: PathBuf,
+    /// Optional JSON output path. Defaults to CROP stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -322,6 +334,7 @@ struct SyncArgs {
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status, globals),
+        CropCommand::ListViews(list) => run_list_views(args.crop_bin, list, globals),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect, globals),
         CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare, globals),
         CropCommand::View(view) => run_view(view, globals),
@@ -412,6 +425,31 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     }
 
     Ok(crop_args)
+}
+
+fn run_list_views(
+    crop_bin: PathBuf,
+    mut args: ListViewsArgs,
+    globals: &GlobalOptions,
+) -> Result<()> {
+    reject_non_json_artifact_global_format("list-views", globals)?;
+    apply_global_output(&mut args.output, globals);
+    let output = args.output.clone();
+    let crop_args = build_list_views_args(args);
+    if let Some(output) = output {
+        run_crop_to_output(crop_bin, crop_args, output)
+    } else {
+        run_crop(crop_bin, crop_args)
+    }
+}
+
+fn build_list_views_args(args: ListViewsArgs) -> Vec<String> {
+    vec![
+        "view".to_string(),
+        "--list".to_string(),
+        "--dir".to_string(),
+        args.dir.display().to_string(),
+    ]
 }
 
 fn run_inspect_views(
@@ -1321,6 +1359,16 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("requires --strict"));
+    }
+
+    #[test]
+    fn list_views_args_map_to_crop_view_list() {
+        let args = build_list_views_args(ListViewsArgs {
+            dir: PathBuf::from(".crop\\views"),
+            output: None,
+        });
+
+        assert_eq!(args, vec!["view", "--list", "--dir", ".crop\\views"]);
     }
 
     #[test]

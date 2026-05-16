@@ -1991,6 +1991,127 @@ fn binary_crop_status_rejects_strict_on_without_strict() {
 }
 
 #[test]
+fn binary_crop_list_views_delegates_to_crop_view_list() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let views_dir = dir.path().join(".crop").join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("list-views")
+        .arg("--dir")
+        .arg(&views_dir)
+        .output()
+        .expect("failed to run proof crop list-views");
+
+    assert!(
+        output.status.success(),
+        "proof crop list-views failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("view"), "got: {}", args);
+    assert!(args.contains("--list"), "got: {}", args);
+    assert!(args.contains("--dir"), "got: {}", args);
+    assert!(
+        args.contains(&views_dir.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
+fn binary_crop_list_views_writes_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let crop_bin = if cfg!(windows) {
+        dir.path().join("crop.cmd")
+    } else {
+        dir.path().join("crop")
+    };
+    let script = if cfg!(windows) {
+        "@echo off\r\necho [{\"name\":\"ready\"}]\r\nexit /b 0\r\n".to_string()
+    } else {
+        "#!/bin/sh\nprintf '%s\\n' '[{\"name\":\"ready\"}]'\nexit 0\n".to_string()
+    };
+    std::fs::write(&crop_bin, script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&crop_bin, perms).unwrap();
+    }
+    let views_dir = dir.path().join(".crop").join("views");
+    let output_path = dir.path().join("views.json");
+    std::fs::create_dir_all(&views_dir).unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("list-views")
+        .arg("--dir")
+        .arg(&views_dir)
+        .output()
+        .expect("failed to run proof crop list-views");
+
+    assert!(
+        output.status.success(),
+        "proof crop list-views failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        std::fs::read_to_string(&output_path).unwrap().trim(),
+        "[{\"name\":\"ready\"}]"
+    );
+}
+
+#[test]
+fn binary_crop_list_views_rejects_global_markdown_format() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("-f")
+        .arg("markdown")
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("list-views")
+        .output()
+        .expect("failed to run proof crop list-views");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("writes JSON artifacts"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
     let bin = debug_bin();
     if !bin.exists() {

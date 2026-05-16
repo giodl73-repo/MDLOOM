@@ -113,6 +113,17 @@ with `.crop/views`. The command also honors global `-o/--output` when local
 as `-f markdown` are rejected. The resulting view can be reused anywhere a CROP
 command accepts `--view`.
 
+List the recipes in a view store when a CI job, registry, or review workflow
+needs the machine-readable inventory:
+
+```text
+proof crop list-views --dir .crop/views -o CROP_VIEWS.json
+```
+
+`proof crop list-views` delegates to CROP's `view --list` surface, honors global
+`-o/--output` when local `--output` is omitted, and rejects non-JSON global
+formats before invoking CROP.
+
 Run the named view as a JSON context pack when an agent or review workflow needs
 the corpus slice itself:
 
