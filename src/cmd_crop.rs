@@ -2088,6 +2088,36 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
+    fn artifacts_rejects_root_and_manifest() {
+        let err = build_artifacts_args(
+            ArtifactsArgs {
+                root: Some(PathBuf::from(".")),
+                manifest: Some(PathBuf::from(".proof\\artifacts.json")),
+                output: None,
+            },
+            &globals("text"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("either --root or --manifest"));
+    }
+
+    #[test]
+    fn artifacts_rejects_unsupported_global_format() {
+        let err = build_artifacts_args(
+            ArtifactsArgs {
+                root: Some(PathBuf::from(".")),
+                manifest: None,
+                output: None,
+            },
+            &globals("rich"),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("json or markdown"));
+    }
+
+    #[test]
     fn sync_args_generate_all_side_info_commands() {
         let dir = tempfile::tempdir().unwrap();
         let output_dir = dir.path().join("side-info");

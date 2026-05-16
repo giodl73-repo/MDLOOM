@@ -384,8 +384,10 @@ proof crop artifacts --manifest .proof/artifacts.json --format markdown --output
 
 Use this for missing, stale, cached, or diagnostic artifact rows. Pass either
 `--manifest` or `--root`; PROOF rejects missing or combined selectors before
-invoking CROP. Generic corpus status pages should still use `proof crop status`;
-artifact health is a PROOF-manifest adapter over generated outputs.
+invoking CROP. Artifact reports use CROP's `json`/`markdown` format contract, so
+unsupported global formats such as `-f rich` are rejected before invoking CROP.
+Generic corpus status pages should still use `proof crop status`; artifact
+health is a PROOF-manifest adapter over generated outputs.
 
 ---
 
