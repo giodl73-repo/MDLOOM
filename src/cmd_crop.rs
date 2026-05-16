@@ -30,6 +30,8 @@ enum CropCommand {
     View(ViewArgs),
     /// Generate local link side-info
     Links(SideInfoArgs),
+    /// Render local link audit rows from CROP link side-info
+    LinkList(LinkListArgs),
     /// Generate backlink and orphan side-info
     Backlinks(SideInfoArgs),
     /// Render inbound links for one target from CROP backlinks side-info
@@ -172,6 +174,25 @@ struct BacklinkListArgs {
 }
 
 #[derive(clap::Args)]
+struct LinkListArgs {
+    /// CROP links JSON report to consume
+    #[arg(long = "side-info", default_value = ".proof\\side-info\\links.json")]
+    side_info: PathBuf,
+    /// Optional source/page to render outbound links for
+    #[arg(long)]
+    source: Option<String>,
+    /// Link status to include: all, ok, or broken
+    #[arg(long, default_value = "all")]
+    status: String,
+    /// Render format: list, table, or count
+    #[arg(long, default_value = "list")]
+    format: String,
+    /// Optional output path. Defaults to stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct HeadingListArgs {
     /// Source/page to render headings for
     #[arg(long)]
@@ -251,6 +272,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare),
         CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
+        CropCommand::LinkList(link_list) => run_link_list(link_list),
         CropCommand::Backlinks(side_info) => {
             run_side_info(args.crop_bin, "backlinks", side_info, globals)
         }
@@ -599,6 +621,24 @@ fn run_side_info(
 fn run_backlink_list(args: BacklinkListArgs) -> Result<()> {
     let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
+}
+
+fn run_link_list(args: LinkListArgs) -> Result<()> {
+    let status = link_status_filter(&args.status)?;
+    let filter = crop_side_info::LinkFilter {
+        source: args.source,
+        status,
+    };
+    let rendered = crop_side_info::render_links(&args.side_info, &filter, &args.format)?;
+    write_snippet(rendered, args.output)
+}
+
+fn link_status_filter(status: &str) -> Result<Option<String>> {
+    match status {
+        "all" => Ok(Some("all".to_string())),
+        "ok" | "broken" => Ok(Some(status.to_string())),
+        _ => bail!("link status must be 'all', 'ok', or 'broken'"),
+    }
 }
 
 fn run_heading_list(args: HeadingListArgs) -> Result<()> {

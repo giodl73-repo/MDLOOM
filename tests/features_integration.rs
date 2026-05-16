@@ -564,6 +564,129 @@ fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
 }
 
 #[test]
+fn links_directive_renders_default_crop_side_info() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("links.json"),
+        r#"{
+  "schema_version": "crop.markdown-link-audit.v1",
+  "links": [
+    { "source": "guide.source.md", "target": "reference.source.md#reference", "status": "ok", "resolved_source": "reference.source.md" },
+    { "source": "guide.source.md", "target": "missing.source.md", "status": "broken", "error": "missing target" },
+    { "source": "other.source.md", "target": "guide.source.md", "status": "ok", "resolved_source": "guide.source.md" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let src = "# Guide\n\n```proof:links source=\"md://guide.source.md#guide\"\n```\n";
+    let (out, violations) = compile_str(src, "guide.source.md", dir.path());
+
+    assert!(violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(out.contains(
+        "- `guide.source.md` -> `reference.source.md#reference` [ok] -> reference.source.md"
+    ));
+    assert!(out.contains("- `guide.source.md` -> `missing.source.md` [broken] (missing target)"));
+    assert!(!out.contains("other.source.md"));
+}
+
+#[test]
+fn links_directive_supports_count_table_and_empty_formats() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("links.json"),
+        r#"{
+  "links": [
+    { "source": "guide.source.md", "target": "reference.source.md", "status": "ok", "resolved_source": "reference.source.md" },
+    { "source": "guide.source.md", "target": "missing.source.md", "status": "broken", "error": "missing target" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let count_src = "# Guide\n\n```proof:links status=broken format=count\n```\n";
+    let (count_out, count_violations) = compile_str(count_src, "guide.source.md", dir.path());
+    assert!(count_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(count_out.contains("\n1\n"));
+
+    let table_src = "# Guide\n\n```proof:links status=broken format=table\n```\n";
+    let (table_out, table_violations) = compile_str(table_src, "guide.source.md", dir.path());
+    assert!(table_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(table_out.contains("| Source | Target | Status | Resolved | Error |"));
+    assert!(table_out
+        .contains("| `guide.source.md` | `missing.source.md` | `broken` | `` | missing target |"));
+
+    let empty_src = "# Missing\n\n```proof:links source=\"missing.source.md\"\n```\n";
+    let (empty_out, empty_violations) = compile_str(empty_src, "missing.source.md", dir.path());
+    assert!(empty_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(empty_out.contains("_No links._"));
+}
+
+#[test]
+fn links_directive_tracks_side_info_and_invalidates_compile_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    let links_path = side_info.join("links.json");
+    std::fs::write(
+        &links_path,
+        r#"{
+  "links": [
+    { "source": "guide.source.md", "target": "missing.source.md", "status": "broken" }
+  ]
+}"#,
+    )
+    .unwrap();
+    let src_path = dir.path().join("guide.source.md");
+    let out_path = dir.path().join("guide.md");
+    std::fs::write(
+        &src_path,
+        "# Guide\n\n```proof:links status=broken format=count\n```\n",
+    )
+    .unwrap();
+    let cfg = GlintConfig::default();
+
+    let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!first.from_cache);
+    assert_eq!(first.resolved_files, vec![links_path.clone()]);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n1\n"));
+
+    let second = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(second.from_cache);
+
+    std::fs::write(
+        &links_path,
+        r#"{
+  "links": [
+    { "source": "guide.source.md", "target": "missing.source.md", "status": "broken" },
+    { "source": "reference.source.md", "target": "gone.source.md", "status": "broken" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let third = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!third.from_cache);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n2\n"));
+}
+
+#[test]
 fn source_frontmatter_is_stripped_from_compile_output() {
     let dir = tempfile::tempdir().unwrap();
     let src = "---\ntags: [ops, runbook]\nops: [compile]\n---\n# Tagged Source\n\nBody.\n";

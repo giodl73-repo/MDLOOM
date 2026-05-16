@@ -172,6 +172,15 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    /// proof:links - render local link audit rows from CROP side-info.
+    Links {
+        source_doc: Option<String>,
+        status: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
     /// proof:headings - render headings for a source from CROP side-info.
     Headings {
         source_doc: String,
@@ -348,6 +357,7 @@ impl Directive {
             Directive::Xref { line_start, .. } => *line_start,
             Directive::Blockquote { line_start, .. } => *line_start,
             Directive::Backlinks { line_start, .. } => *line_start,
+            Directive::Links { line_start, .. } => *line_start,
             Directive::Headings { line_start, .. } => *line_start,
             Directive::Frontmatter { line_start, .. } => *line_start,
             Directive::Chart { line_start, .. } => *line_start,
@@ -369,6 +379,7 @@ impl Directive {
             Directive::Xref { line_end, .. } => *line_end,
             Directive::Blockquote { line_end, .. } => *line_end,
             Directive::Backlinks { line_end, .. } => *line_end,
+            Directive::Links { line_end, .. } => *line_end,
             Directive::Headings { line_end, .. } => *line_end,
             Directive::Frontmatter { line_end, .. } => *line_end,
             Directive::Chart { line_end, .. } => *line_end,
@@ -895,6 +906,37 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         line_end,
                     });
                 }
+                "links" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:links")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let source_doc = extract_attr_value(&info_after, "source").or_else(|| {
+                        body.iter().find_map(|l| {
+                            let t = l.trim();
+                            if !t.is_empty() {
+                                Some(t.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                    let source = extract_attr_value(&info_after, "side-info")
+                        .or_else(|| extract_attr_value(&info_after, "side_info"));
+                    let status = extract_attr_value(&info_after, "status")
+                        .unwrap_or_else(|| "all".to_string());
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "list".to_string());
+                    directives.push(Directive::Links {
+                        source_doc,
+                        status,
+                        source,
+                        format,
+                        line_start,
+                        line_end,
+                    });
+                }
                 "headings" => {
                     let info_after = info_after_backticks
                         .strip_prefix("proof:headings")
@@ -1078,6 +1120,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
         Some("blockquote")
     } else if rest.starts_with("backlinks") {
         Some("backlinks")
+    } else if rest.starts_with("links") {
+        Some("links")
     } else if rest.starts_with("headings") {
         Some("headings")
     } else if rest.starts_with("frontmatter") {
@@ -1642,6 +1686,42 @@ pub fn compile_file(
                     }
                 }
             }
+            Directive::Links {
+                source_doc,
+                status,
+                source,
+                format,
+                ..
+            } => {
+                let report_path = source
+                    .as_deref()
+                    .map(|p| root.join(p))
+                    .unwrap_or_else(|| root.join(".proof").join("side-info").join("links.json"));
+                let filter = link_filter(source_doc, status);
+                match filter
+                    .and_then(|filter| crop_side_info::render_links(&report_path, &filter, format))
+                {
+                    Ok(rendered) => {
+                        resolved_count += 1;
+                        format!(
+                            "<!-- proof:compiled from=\"proof:links\" -->\n{}\n<!-- /proof:compiled -->",
+                            rendered
+                        )
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: source_doc.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("links error: {}", e),
+                            source_line: line_start + 1 + source_line_offset,
+                        });
+                        source_fallback(&source_lines, line_start, line_end)
+                    }
+                }
+            }
             Directive::Headings {
                 source_doc,
                 source,
@@ -1848,6 +1928,10 @@ fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf>
                 .as_deref()
                 .map(|p| root.join(p))
                 .unwrap_or_else(|| root.join(".proof").join("side-info").join("backlinks.json")),
+            Directive::Links { source, .. } => source
+                .as_deref()
+                .map(|p| root.join(p))
+                .unwrap_or_else(|| root.join(".proof").join("side-info").join("links.json")),
             Directive::Headings { source, .. } => source
                 .as_deref()
                 .map(|p| root.join(p))
@@ -1884,6 +1968,18 @@ fn frontmatter_filter(
         field: field.clone(),
         value: value.clone(),
         op,
+    })
+}
+
+fn link_filter(source: &Option<String>, status: &str) -> Result<crop_side_info::LinkFilter> {
+    let status = match status {
+        "all" => Some("all".to_string()),
+        "ok" | "broken" => Some(status.to_string()),
+        _ => bail!("link status must be 'all', 'ok', or 'broken'"),
+    };
+    Ok(crop_side_info::LinkFilter {
+        source: source.clone(),
+        status,
     })
 }
 

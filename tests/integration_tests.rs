@@ -2144,6 +2144,93 @@ fn binary_crop_backlink_list_renders_target_snippet() {
 }
 
 #[test]
+fn binary_crop_link_list_renders_filtered_snippet() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("links.json");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "links": [
+    { "source": "README.md", "target": "docs/guide.md", "status": "ok", "resolved_source": "docs/guide.md" },
+    { "source": "README.md", "target": "missing.md", "status": "broken", "error": "missing target" },
+    { "source": "docs/guide.md", "target": "README.md", "status": "ok", "resolved_source": "README.md" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("link-list")
+        .arg("--source")
+        .arg("md://README.md#overview")
+        .arg("--status")
+        .arg("broken")
+        .arg("--side-info")
+        .arg(&side_info)
+        .output()
+        .expect("failed to run proof crop link-list");
+
+    assert!(
+        output.status.success(),
+        "proof crop link-list failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("- `README.md` -> `missing.md` [broken] (missing target)"));
+    assert!(!stdout.contains("docs/guide.md"));
+}
+
+#[test]
+fn binary_crop_link_list_writes_table_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("links.json");
+    let output_path = dir.path().join("snippets").join("LINKS.md");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "links": [
+    { "source": "README.md", "target": "missing.md", "status": "broken", "error": "missing target" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("link-list")
+        .arg("--status")
+        .arg("broken")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--format")
+        .arg("table")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop link-list --output");
+
+    assert!(
+        output.status.success(),
+        "proof crop link-list --output failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = std::fs::read_to_string(&output_path).unwrap();
+    assert!(rendered.contains("| Source | Target | Status | Resolved | Error |"));
+    assert!(rendered.contains("| `README.md` | `missing.md` | `broken` | `` | missing target |"));
+}
+
+#[test]
 fn binary_crop_backlink_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {

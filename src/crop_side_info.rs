@@ -51,6 +51,23 @@ struct FrontmatterPage {
     fields: BTreeMap<String, String>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct LinkAudit {
+    #[serde(default)]
+    links: Vec<LinkEntry>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LinkEntry {
+    source: String,
+    target: String,
+    status: String,
+    #[serde(default)]
+    resolved_source: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrontmatterFilter {
     pub field: Option<String>,
@@ -62,6 +79,12 @@ pub struct FrontmatterFilter {
 pub enum FrontmatterMatch {
     Has,
     Eq,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkFilter {
+    pub source: Option<String>,
+    pub status: Option<String>,
 }
 
 pub fn render_backlinks(target: &str, report_path: &Path, format: &str) -> Result<String> {
@@ -90,6 +113,14 @@ pub fn render_frontmatter(
     let inventory: FrontmatterInventory = serde_json::from_str(&content)
         .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
     render_frontmatter_inventory(&inventory, filter, format)
+}
+
+pub fn render_links(report_path: &Path, filter: &LinkFilter, format: &str) -> Result<String> {
+    let content = std::fs::read_to_string(report_path)
+        .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
+    let audit: LinkAudit = serde_json::from_str(&content)
+        .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
+    render_link_audit(&audit, filter, format)
 }
 
 fn render_backlinks_report(target: &str, report: &BacklinksReport, format: &str) -> Result<String> {
@@ -305,6 +336,82 @@ fn frontmatter_page_matches(page: &FrontmatterPage, filter: &FrontmatterFilter) 
     }
 }
 
+fn render_link_audit(audit: &LinkAudit, filter: &LinkFilter, format: &str) -> Result<String> {
+    let links: Vec<_> = audit
+        .links
+        .iter()
+        .filter(|link| link_matches(link, filter))
+        .collect();
+
+    if links.is_empty() {
+        return if format == "count" {
+            Ok("0".to_string())
+        } else {
+            Ok("_No links._".to_string())
+        };
+    }
+
+    match format {
+        "count" => Ok(links.len().to_string()),
+        "table" => {
+            let mut lines = vec![
+                "| Source | Target | Status | Resolved | Error |".to_string(),
+                "|--------|--------|--------|----------|-------|".to_string(),
+            ];
+            for link in links {
+                lines.push(format!(
+                    "| `{}` | `{}` | `{}` | `{}` | {} |",
+                    escape_table_cell(&link.source),
+                    escape_table_cell(&link.target),
+                    escape_table_cell(&link.status),
+                    escape_table_cell(link.resolved_source.as_deref().unwrap_or("")),
+                    escape_table_cell(link.error.as_deref().unwrap_or(""))
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+        _ => {
+            let mut lines = Vec::new();
+            for link in links {
+                let suffix = if link.status == "ok" {
+                    link.resolved_source
+                        .as_deref()
+                        .map(|resolved| format!(" -> {}", resolved))
+                        .unwrap_or_default()
+                } else {
+                    link.error
+                        .as_deref()
+                        .map(|error| format!(" ({})", error))
+                        .unwrap_or_default()
+                };
+                lines.push(format!(
+                    "- `{}` -> `{}` [{}]{}",
+                    link.source, link.target, link.status, suffix
+                ));
+            }
+            Ok(lines.join("\n"))
+        }
+    }
+}
+
+fn link_matches(link: &LinkEntry, filter: &LinkFilter) -> bool {
+    if let Some(source) = &filter.source {
+        if normalize_source(&link.source) != normalize_source(source) {
+            return false;
+        }
+    }
+    if let Some(status) = &filter.status {
+        if status != "all" && link.status != *status {
+            return false;
+        }
+    }
+    true
+}
+
+fn escape_table_cell(value: &str) -> String {
+    value.replace('|', "\\|")
+}
+
 fn normalize_backlink_target(target: &str) -> String {
     let target = target.trim().trim_matches('"').trim_matches('\'');
     let target = target.strip_prefix("md://").unwrap_or(target);
@@ -373,6 +480,19 @@ mod tests {
       "keys": ["status", "tags", "title"],
       "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
     }
+  ]
+}"#,
+        )
+        .unwrap()
+    }
+
+    fn link_audit() -> LinkAudit {
+        serde_json::from_str(
+            r#"{
+  "links": [
+    { "source": "guide.source.md", "target": "reference.source.md#reference", "status": "ok", "resolved_source": "reference.source.md" },
+    { "source": "guide.source.md", "target": "missing.source.md", "status": "broken", "error": "missing target" },
+    { "source": "other.source.md", "target": "guide.source.md", "status": "ok", "resolved_source": "guide.source.md" }
   ]
 }"#,
         )
@@ -468,6 +588,50 @@ mod tests {
         assert_eq!(
             render_frontmatter_inventory(&frontmatter_inventory(), &missing, "list").unwrap(),
             "_No frontmatter matches._"
+        );
+    }
+
+    #[test]
+    fn renders_links_list_count_table_and_empty_state() {
+        let filter = LinkFilter {
+            source: Some("md://guide.source.md#guide".to_string()),
+            status: Some("all".to_string()),
+        };
+        let list = render_link_audit(&link_audit(), &filter, "list").unwrap();
+        assert!(list.contains(
+            "- `guide.source.md` -> `reference.source.md#reference` [ok] -> reference.source.md"
+        ));
+        assert!(
+            list.contains("- `guide.source.md` -> `missing.source.md` [broken] (missing target)")
+        );
+        assert!(!list.contains("other.source.md"));
+
+        let broken = LinkFilter {
+            source: None,
+            status: Some("broken".to_string()),
+        };
+        assert_eq!(
+            render_link_audit(&link_audit(), &broken, "count").unwrap(),
+            "1"
+        );
+
+        let table = render_link_audit(&link_audit(), &broken, "table").unwrap();
+        assert!(table.contains("| Source | Target | Status | Resolved | Error |"));
+        assert!(table.contains(
+            "| `guide.source.md` | `missing.source.md` | `broken` | `` | missing target |"
+        ));
+
+        let missing = LinkFilter {
+            source: Some("missing.source.md".to_string()),
+            status: None,
+        };
+        assert_eq!(
+            render_link_audit(&link_audit(), &missing, "count").unwrap(),
+            "0"
+        );
+        assert_eq!(
+            render_link_audit(&link_audit(), &missing, "list").unwrap(),
+            "_No links._"
         );
     }
 }
