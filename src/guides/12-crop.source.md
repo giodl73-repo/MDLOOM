@@ -119,6 +119,12 @@ Preflight every recipe in a view store:
 proof crop inspect-views --dir .crop/views --strict
 ```
 
+Preflight one recipe while authoring it:
+
+```text
+proof crop inspect-views --file .crop/views/ready-guides.json
+```
+
 ---
 
 ## Generate side-info reports

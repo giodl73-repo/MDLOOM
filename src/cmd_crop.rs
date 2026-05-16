@@ -22,7 +22,7 @@ pub(crate) struct Args {
 enum CropCommand {
     /// Generate a CROP corpus status page for a root or named view
     Status(StatusArgs),
-    /// Validate CROP view recipes in a view store
+    /// Validate one CROP view recipe or every recipe in a view store
     InspectViews(InspectViewsArgs),
     /// Inspect CROP views and sync compiler side-info in one preflight step
     Prepare(PrepareArgs),
@@ -83,6 +83,9 @@ struct StatusArgs {
 
 #[derive(clap::Args)]
 struct InspectViewsArgs {
+    /// Single crop.view.v1 recipe to inspect
+    #[arg(long)]
+    file: Option<PathBuf>,
     /// View store directory. Defaults to .crop\views
     #[arg(long, default_value = ".crop\\views")]
     dir: PathBuf,
@@ -348,12 +351,14 @@ fn run_inspect_views(crop_bin: PathBuf, args: InspectViewsArgs) -> Result<()> {
 }
 
 fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
-    let mut crop_args = vec![
-        "view".to_string(),
-        "--inspect".to_string(),
-        "--dir".to_string(),
-        args.dir.display().to_string(),
-    ];
+    let mut crop_args = vec!["view".to_string(), "--inspect".to_string()];
+    if let Some(file) = args.file {
+        crop_args.push("--file".to_string());
+        crop_args.push(file.display().to_string());
+    } else {
+        crop_args.push("--dir".to_string());
+        crop_args.push(args.dir.display().to_string());
+    }
     if args.strict {
         crop_args.push("--strict".to_string());
     }
@@ -371,6 +376,7 @@ fn run_prepare(crop_bin: PathBuf, args: PrepareArgs) -> Result<()> {
 
 fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
     let mut commands = vec![build_inspect_views_args(InspectViewsArgs {
+        file: None,
         dir: args.dir,
         strict: true,
     })];
@@ -960,6 +966,7 @@ mod tests {
     #[test]
     fn inspect_views_args_map_to_crop_view_inspect() {
         let args = build_inspect_views_args(InspectViewsArgs {
+            file: None,
             dir: PathBuf::from(".crop\\views"),
             strict: true,
         });
@@ -967,6 +974,20 @@ mod tests {
         assert_eq!(
             args,
             vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
+        );
+    }
+
+    #[test]
+    fn inspect_views_args_can_inspect_single_view_file() {
+        let args = build_inspect_views_args(InspectViewsArgs {
+            file: Some(PathBuf::from(".crop\\views\\ready.json")),
+            dir: PathBuf::from(".crop\\views"),
+            strict: false,
+        });
+
+        assert_eq!(
+            args,
+            vec!["view", "--inspect", "--file", ".crop\\views\\ready.json"]
         );
     }
 

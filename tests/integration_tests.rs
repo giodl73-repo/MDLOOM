@@ -1932,6 +1932,48 @@ fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
 }
 
 #[test]
+fn binary_crop_inspect_views_can_inspect_single_file() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("inspect-views")
+        .arg("--file")
+        .arg(&view_file)
+        .output()
+        .expect("failed to run proof crop inspect-views --file");
+
+    assert!(
+        output.status.success(),
+        "proof crop inspect-views --file failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("view"), "got: {}", args);
+    assert!(args.contains("--inspect"), "got: {}", args);
+    assert!(args.contains("--file"), "got: {}", args);
+    assert!(
+        args.contains(&view_file.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(!args.contains("--dir"), "got: {}", args);
+}
+
+#[test]
 fn binary_crop_view_writes_crop_view_recipe() {
     let bin = debug_bin();
     if !bin.exists() {
