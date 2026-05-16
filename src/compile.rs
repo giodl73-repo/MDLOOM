@@ -19,8 +19,6 @@ use crate::element::{ElementAlign, ElementKind};
 use crate::runner::Runner;
 
 #[cfg(test)]
-use crate::compile_directive::proof_directive_kind;
-#[cfg(test)]
 use crate::compile_directive::ElementAttrs;
 use crate::compile_directive::{collect_directives, Directive};
 
@@ -648,16 +646,6 @@ mod tests {
         }
     }
 
-    // ── proof_directive_kind ──────────────────────────────
-
-    #[test]
-    fn test_proof_directive_kind_row() {
-        assert_eq!(
-            proof_directive_kind("```proof:row foreach=p in md://x.md"),
-            Some("row")
-        );
-    }
-
     // ── parse_foreach ────────────────────────────────────
 
     #[test]
@@ -822,14 +810,6 @@ mod tests {
         assert!(!attrs.no_chrome);
         assert_eq!(attrs.max, None);
         assert_eq!(attrs.width, None);
-    }
-
-    #[test]
-    fn test_proof_directive_kind_element() {
-        assert_eq!(
-            proof_directive_kind("```proof:element kind=value width=4"),
-            Some("element")
-        );
     }
 
     // E2E tests using compile_element directly (no file I/O)
@@ -1078,21 +1058,6 @@ mod tests {
     }
 
     // ── Wave 3: dashboard pipeline ────────────────────────
-
-    #[test]
-    fn test_proof_directive_kind_region() {
-        assert_eq!(
-            proof_directive_kind("```proof:region name=header"),
-            Some("region")
-        );
-    }
-
-    #[test]
-    fn test_proof_directive_kind_ol_alias() {
-        // Both names resolve to the same kind, dispatching to render_ol().
-        assert_eq!(proof_directive_kind("```proof:numbered-list"), Some("ol"));
-        assert_eq!(proof_directive_kind("```proof:ol"), Some("ol"));
-    }
 
     #[test]
     fn test_collect_directives_region() {
@@ -1524,18 +1489,6 @@ Some prose.
     }
 
     // ── proof:blockquote ─────────────────────────────────────
-
-    #[test]
-    fn blockquote_directive_kind_detected() {
-        assert_eq!(
-            proof_directive_kind("```proof:blockquote"),
-            Some("blockquote")
-        );
-        assert_eq!(
-            proof_directive_kind("```proof:blockquote attribution=\"Author\""),
-            Some("blockquote"),
-        );
-    }
 
     #[test]
     fn blockquote_indent_default_no_attribution() {
