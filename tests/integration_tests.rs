@@ -1810,6 +1810,61 @@ fn binary_backfill_extract_tables_writes_sidecar_data() {
 }
 
 #[test]
+fn binary_backfill_extract_tables_writes_structured_block_sidecar() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source_dir = dir.path().join("generated");
+    let report_path = dir.path().join("backfill-report.json");
+    std::fs::write(
+        dir.path().join("visuals.md"),
+        "# Visuals\n\n```text\n+---+---+\n| A | B |\n+---+---+\n```\n\n## Flow → Direction\n\nA -> B\n\nLoad ### 42\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("backfill")
+        .arg(dir.path().join("visuals.md"))
+        .arg("--output-source")
+        .arg(&source_dir)
+        .arg("--report")
+        .arg(&report_path)
+        .arg("--literal-first")
+        .arg("--extract-tables")
+        .output()
+        .expect("failed to run proof backfill");
+
+    assert!(
+        output.status.success(),
+        "proof backfill failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let block_sidecar = source_dir.join("visuals.blocks.json");
+    let sidecar: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&block_sidecar).unwrap()).unwrap();
+    let blocks = sidecar["blocks"].as_array().unwrap();
+    assert_eq!(blocks.len(), 3);
+    assert_eq!(blocks[0]["kind"], "ascii_table_candidate");
+    assert_eq!(blocks[0]["line"], 3);
+    assert_eq!(blocks[1]["kind"], "diagram_like");
+    assert_eq!(blocks[1]["heading_context"], "## Flow → Direction");
+    assert_eq!(blocks[2]["kind"], "chart_like");
+
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).unwrap()).unwrap();
+    assert_eq!(report["summary"]["structured_blocks_extracted"], 3);
+    assert!(report["files"][0]["extractions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["kind"] == "ascii_table_candidate"));
+}
+
+#[test]
 fn binary_compile_target_html_writes_html_document() {
     let bin = debug_bin();
     if !bin.exists() {

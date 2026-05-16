@@ -32,6 +32,7 @@ pub struct BackfillSummary {
     pub roundtrip_passed: usize,
     pub roundtrip_failed: usize,
     pub tables_extracted: usize,
+    pub structured_blocks_extracted: usize,
     pub blocks: BackfillBlockCounts,
 }
 
@@ -64,6 +65,24 @@ pub struct BackfillTableDataset {
     pub schema_version: String,
     pub source_markdown: PathBuf,
     pub tables: Vec<BackfillExtractedTable>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackfillStructuredBlockDataset {
+    pub schema_version: String,
+    pub source_markdown: PathBuf,
+    pub blocks: Vec<BackfillStructuredBlock>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackfillStructuredBlock {
+    pub id: String,
+    pub kind: String,
+    pub line: usize,
+    pub heading_context: Option<String>,
+    pub confidence: String,
+    pub text: String,
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,9 +176,15 @@ pub fn run(options: BackfillOptions) -> Result<BackfillReport> {
         report.summary.blocks.add(&file_report.blocks);
 
         if options.extract_tables {
-            let extraction = extract_markdown_tables(&original, &input.path, &generated_path)?;
-            report.summary.tables_extracted += extraction.reports.len();
-            file_report.extractions.extend(extraction.reports);
+            let table_extraction =
+                extract_markdown_tables(&original, &input.path, &generated_path)?;
+            report.summary.tables_extracted += table_extraction.reports.len();
+            file_report.extractions.extend(table_extraction.reports);
+
+            let block_extraction =
+                extract_structured_blocks(&original, &input.path, &generated_path)?;
+            report.summary.structured_blocks_extracted += block_extraction.reports.len();
+            file_report.extractions.extend(block_extraction.reports);
         }
 
         if options.check_roundtrip {
@@ -269,6 +294,212 @@ fn table_sidecar_path(generated_path: &Path) -> Result<PathBuf> {
     let mut path = generated_path.to_path_buf();
     path.set_file_name(table_name);
     Ok(path)
+}
+
+fn block_sidecar_path(generated_path: &Path) -> Result<PathBuf> {
+    let Some(file_name) = generated_path.file_name().and_then(|name| name.to_str()) else {
+        anyhow::bail!(
+            "cannot derive block sidecar name for {}",
+            generated_path.display()
+        );
+    };
+    let block_name = file_name
+        .strip_suffix(".source.md")
+        .map(|stem| format!("{}.blocks.json", stem))
+        .unwrap_or_else(|| format!("{}.blocks.json", file_name));
+    let mut path = generated_path.to_path_buf();
+    path.set_file_name(block_name);
+    Ok(path)
+}
+
+fn extract_structured_blocks(
+    original: &str,
+    original_path: &Path,
+    generated_path: &Path,
+) -> Result<TableExtraction> {
+    let lines: Vec<&str> = original.lines().collect();
+    let blocks = collect_structured_blocks(&lines);
+    if blocks.is_empty() {
+        return Ok(TableExtraction::default());
+    }
+
+    let block_path = block_sidecar_path(generated_path)?;
+    if let Some(parent) = block_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
+    }
+
+    let reports = blocks
+        .iter()
+        .map(|block| BackfillExtractionReport {
+            kind: block.kind.clone(),
+            generated_path: block_path.clone(),
+            confidence: block.confidence.clone(),
+            line: block.line,
+            columns: 0,
+            rows: block.text.lines().count(),
+            notes: block.notes.clone(),
+        })
+        .collect();
+
+    let dataset = BackfillStructuredBlockDataset {
+        schema_version: "1".to_string(),
+        source_markdown: original_path.to_path_buf(),
+        blocks,
+    };
+    let json = serde_json::to_string_pretty(&dataset)?;
+    std::fs::write(&block_path, json)
+        .with_context(|| format!("writing {}", block_path.display()))?;
+
+    Ok(TableExtraction { reports })
+}
+
+fn collect_structured_blocks(lines: &[&str]) -> Vec<BackfillStructuredBlock> {
+    let mut blocks = Vec::new();
+    let mut index = 0usize;
+
+    while index < lines.len() {
+        let line = lines[index];
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            index += 1;
+            continue;
+        }
+
+        if let Some(fence) = fence_marker(trimmed) {
+            let start = index + 1;
+            let mut body = Vec::new();
+            index += 1;
+            while index < lines.len() {
+                let inner = lines[index];
+                if inner.trim_start().starts_with(fence) {
+                    index += 1;
+                    break;
+                }
+                body.push(inner);
+                index += 1;
+            }
+            if let Some(kind) = structured_block_kind(&body) {
+                blocks.push(make_structured_block(
+                    blocks.len() + 1,
+                    kind,
+                    start,
+                    heading_context(lines, start.saturating_sub(1)),
+                    body.join("\n"),
+                    "fenced visual/source block",
+                ));
+            }
+            continue;
+        }
+
+        if is_markdown_table_start(lines, index) {
+            index += 2;
+            while index < lines.len() && looks_like_pipe_row(lines[index]) {
+                index += 1;
+            }
+            continue;
+        }
+
+        if looks_like_ascii_table_line(line) {
+            let start = index;
+            index += 1;
+            while index < lines.len() && looks_like_ascii_table_line(lines[index]) {
+                index += 1;
+            }
+            blocks.push(make_structured_block(
+                blocks.len() + 1,
+                "ascii_table_candidate",
+                start + 1,
+                heading_context(lines, start),
+                lines[start..index].join("\n"),
+                "detected from ASCII table borders or pipe-aligned rows",
+            ));
+            continue;
+        }
+
+        if looks_chart_like(line) {
+            let start = index;
+            index += 1;
+            while index < lines.len() && looks_chart_like(lines[index]) {
+                index += 1;
+            }
+            blocks.push(make_structured_block(
+                blocks.len() + 1,
+                "chart_like",
+                start + 1,
+                heading_context(lines, start),
+                lines[start..index].join("\n"),
+                "detected from bar/chart glyph density with numeric labels",
+            ));
+            continue;
+        }
+
+        if looks_diagram_like(line) {
+            let start = index;
+            index += 1;
+            while index < lines.len() && looks_diagram_like(lines[index]) {
+                index += 1;
+            }
+            blocks.push(make_structured_block(
+                blocks.len() + 1,
+                "diagram_like",
+                start + 1,
+                heading_context(lines, start),
+                lines[start..index].join("\n"),
+                "detected from arrows or box-drawing glyphs",
+            ));
+            continue;
+        }
+
+        index += 1;
+    }
+
+    blocks
+}
+
+fn make_structured_block(
+    ordinal: usize,
+    kind: &str,
+    line: usize,
+    heading_context: Option<String>,
+    text: String,
+    note: &str,
+) -> BackfillStructuredBlock {
+    BackfillStructuredBlock {
+        id: format!("block-{}", ordinal),
+        kind: kind.to_string(),
+        line,
+        heading_context,
+        confidence: "candidate".to_string(),
+        text,
+        notes: vec![note.to_string()],
+    }
+}
+
+fn structured_block_kind(body: &[&str]) -> Option<&'static str> {
+    if body.iter().any(|line| looks_like_ascii_table_line(line)) {
+        Some("ascii_table_candidate")
+    } else if body.iter().any(|line| looks_chart_like(line)) {
+        Some("chart_like")
+    } else if body.iter().any(|line| looks_diagram_like(line)) {
+        Some("diagram_like")
+    } else {
+        None
+    }
+}
+
+fn heading_context(lines: &[&str], before_index: usize) -> Option<String> {
+    lines[..before_index.min(lines.len())]
+        .iter()
+        .rev()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                Some(trimmed.to_string())
+            } else {
+                None
+            }
+        })
 }
 
 fn code_block_mask(lines: &[&str]) -> Vec<bool> {
@@ -486,28 +717,29 @@ fn looks_chart_like(line: &str) -> bool {
 
 fn looks_diagram_like(line: &str) -> bool {
     let trimmed = line.trim();
-    trimmed.contains("->")
-        || trimmed.contains("-->")
-        || trimmed.contains("=>")
-        || trimmed.chars().any(|c| {
-            matches!(
-                c,
-                '│' | '─'
-                    | '┌'
-                    | '┐'
-                    | '└'
-                    | '┘'
-                    | '├'
-                    | '┤'
-                    | '┬'
-                    | '┴'
-                    | '┼'
-                    | '▶'
-                    | '◀'
-                    | '→'
-                    | '←'
-            )
-        })
+    !trimmed.starts_with('#')
+        && (trimmed.contains("->")
+            || trimmed.contains("-->")
+            || trimmed.contains("=>")
+            || trimmed.chars().any(|c| {
+                matches!(
+                    c,
+                    '│' | '─'
+                        | '┌'
+                        | '┐'
+                        | '└'
+                        | '┘'
+                        | '├'
+                        | '┤'
+                        | '┬'
+                        | '┴'
+                        | '┼'
+                        | '▶'
+                        | '◀'
+                        | '→'
+                        | '←'
+                )
+            }))
 }
 
 fn literal_source(original_path: &Path, original: &str) -> String {
