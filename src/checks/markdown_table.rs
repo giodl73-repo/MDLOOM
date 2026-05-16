@@ -15,8 +15,6 @@
 use crate::checks::Check;
 use crate::config::{MarkdownTableConfig, TableSchema};
 use crate::diagnostic::Diagnostic;
-#[cfg(test)]
-use std::collections::HashMap;
 use std::path::Path;
 
 pub struct MarkdownTableCheck {

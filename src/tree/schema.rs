@@ -1135,11 +1135,6 @@ mod tests {
         let table = "| package | depends_on | version |\n|---------|------------|--------|\n| app | lib | |\n| lib | core | 1.0 |\n| tool | core | |\n| core | — | 2.0 |";
         let result = generate_dependency(table, "table", &mut FieldMap::default(), 4).unwrap();
         assert!(result.contains("core"));
-        // core appears as both a dep of lib and tool — second should be deduped
-        let deduped_count = result.matches("deduped").count();
-        // core is the root, so it appears once. lib and tool both depend on it
-        // but core is the root so all dependencies flow from it
-        assert!(deduped_count >= 0); // dedup only applies for repeated subtrees
     }
 
     const DECISION_TABLE: &str = "| Node | Condition | Yes | No |\n\

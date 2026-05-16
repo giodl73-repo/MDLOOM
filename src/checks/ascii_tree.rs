@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn test_classify_continuation() {
-        let (level, conn, _) = classify_line("│   ", 4);
+        let (_level, conn, _) = classify_line("│   ", 4);
         assert_eq!(conn, Connector::Continuation);
     }
 
