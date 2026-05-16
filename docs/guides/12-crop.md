@@ -39,6 +39,13 @@ anchors:
 proof crop status --root docs/guides --strict --output docs/STATUS.md
 ```
 
+Use repeatable `--strict-on` selectors when a gate should start with a narrower
+policy while still using CROP's strict status semantics:
+
+```text
+proof crop status --root docs/guides --strict --strict-on broken-links --output docs/STATUS.md
+```
+
 You can pass the same generic filters CROP exposes:
 
 ```text

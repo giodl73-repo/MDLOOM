@@ -1788,6 +1788,10 @@ fn binary_crop_status_delegates_to_crop_status() {
         .arg("--output")
         .arg(&output_path)
         .arg("--strict")
+        .arg("--strict-on")
+        .arg("broken-links")
+        .arg("--strict-on")
+        .arg("duplicate-anchors")
         .arg("--title")
         .arg("PROOF Guides")
         .arg("--extension")
@@ -1818,6 +1822,12 @@ fn binary_crop_status_delegates_to_crop_status() {
         args
     );
     assert!(args.contains("--strict"), "got: {}", args);
+    assert!(args.contains("--strict-on broken-links"), "got: {}", args);
+    assert!(
+        args.contains("--strict-on duplicate-anchors"),
+        "got: {}",
+        args
+    );
     assert!(args.contains("--title"), "got: {}", args);
     assert!(args.contains("PROOF Guides"), "got: {}", args);
     assert!(args.contains("--extension md"), "got: {}", args);

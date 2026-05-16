@@ -70,6 +70,9 @@ struct StatusArgs {
     /// Relay CROP strict mode: render first, then fail on corpus issues
     #[arg(long)]
     strict: bool,
+    /// Limit --strict to selected issue classes: broken-links, orphan-pages, duplicate-anchors
+    #[arg(long = "strict-on")]
+    strict_on: Vec<String>,
     /// Optional Markdown output path. Defaults to CROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
@@ -322,6 +325,10 @@ fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
     }
     if args.strict {
         crop_args.push("--strict".to_string());
+    }
+    for strict_on in args.strict_on {
+        crop_args.push("--strict-on".to_string());
+        crop_args.push(strict_on);
     }
     if let Some(output) = args.output {
         crop_args.push("--output".to_string());
@@ -843,6 +850,7 @@ mod tests {
             extensions: vec!["md".to_string()],
             exclude_dirs: vec!["target".to_string()],
             strict: true,
+            strict_on: vec!["broken-links".to_string(), "duplicate-anchors".to_string()],
             output: Some(PathBuf::from("STATUS.md")),
         })
         .unwrap();
@@ -860,6 +868,10 @@ mod tests {
                 "--exclude-dir",
                 "target",
                 "--strict",
+                "--strict-on",
+                "broken-links",
+                "--strict-on",
+                "duplicate-anchors",
                 "--output",
                 "STATUS.md"
             ]
@@ -875,6 +887,7 @@ mod tests {
             extensions: vec![],
             exclude_dirs: vec![],
             strict: false,
+            strict_on: vec![],
             output: None,
         })
         .unwrap_err();
