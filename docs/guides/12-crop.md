@@ -67,7 +67,9 @@ mode or `--view` for named-view mode; PROOF rejects combining both so a local
 status directory is not silently ignored.
 
 `proof crop status` also honors PROOF's global `-o/--output` and `-f/--format`
-when command-local `--output` or `--format` values are not supplied.
+when command-local `--output` or `--format` values are not supplied. Command-local
+`--format` values follow CROP's contract exactly: use `markdown` or `json`;
+`--format text` is rejected instead of being treated as an alias.
 
 You can pass the same generic filters CROP exposes:
 

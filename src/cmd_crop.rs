@@ -82,7 +82,7 @@ struct StatusArgs {
     #[arg(long = "strict-on")]
     strict_on: Vec<String>,
     /// Output format: markdown or json
-    #[arg(long)]
+    #[arg(long, value_parser = ["markdown", "json"])]
     format: Option<String>,
     /// Optional output path. Defaults to CROP stdout
     #[arg(long)]
@@ -1371,11 +1371,7 @@ mod tests {
     }
 
     #[test]
-    fn status_normalizes_global_text_default_to_markdown() {
-        let mut format = Some("text".to_string());
-        normalize_global_text_format(&mut format, &globals("text"));
-        apply_global_report_format(&mut format, &globals("text"));
-
+    fn status_rejects_explicit_text_report_format() {
         let args = build_status_args(StatusArgs {
             root: Some(PathBuf::from("docs")),
             view: None,
@@ -1384,15 +1380,12 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
-            format,
+            format: Some("text".to_string()),
             output: None,
         })
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(
-            args,
-            vec!["status", "--root", "docs", "--format", "markdown"]
-        );
+        assert!(args.to_string().contains("json or markdown"));
     }
 
     #[test]
