@@ -140,6 +140,12 @@ line numbers, resolved Markdown text, source path, and resolved dependency refs.
 CROP can support the same schema for corpus slices, so a CROP view pack and a
 PROOF compiled source can exchange small, provenance-bearing context chunks.
 
+Planned publish backends include JSON report bundles, static sites, PDF, DOCX,
+and native PPTX decks. See
+[`docs/specs/publish-backends.md`](docs/specs/publish-backends.md) for target
+contracts and sequencing. PPTX is planned as editable native PowerPoint slides
+with real bullets/notes, not screenshots or HTML embedded in slides.
+
 `.source.md` files may start with source-only frontmatter for corpus tagging.
 The block is stripped from normal compiled output and surfaced by status/stats:
 

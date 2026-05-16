@@ -844,9 +844,10 @@ COMPILE OPTIONS
   and CROP can share provenance-bearing context packs. `--watch` currently
   supports only `--target md`.
 
-  Planned publish targets include PPTX and richer site/PDF backends after the
-  artifact manifest records source inputs, compile target, output path, and
-  stale status.
+  Planned publish targets include JSON report bundles, static sites, PDF, DOCX,
+  and PPTX. PPTX must be a native editable Office Open XML deck with real slide
+  text, bullets, and notes rather than screenshots or HTML embedded in slides.
+  LaTeX is deferred until after these publish backends.
 
   Non-watch compile runs write `.proof/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each

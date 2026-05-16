@@ -113,6 +113,7 @@ close notes, and the artifacts that changed the system.
 | 2026-05-15 | Tag-Driven Operations | Let source frontmatter tags filter check, compile, and stats without changing inclusive defaults. | done |
 | 2026-05-15 | Fix Pipeline Consistency | Make `proof fix` honor global config during verification and write a structured application log. | done |
 | 2026-05-15 | Directive Parser Boundary | Extract proof directive kind classification, fence/header parsing, directive collection, typed directive ownership, directive payload parsing, prose directive renderers, shared source resolution, chart data helpers, inline tree helpers, and TOC generation from the compile facade. | done |
+| 2026-05-16 | Publish Backends | Plan JSON report bundle, static site, PDF, DOCX, and native PPTX publish targets while deferring LaTeX. | active |
 
 ## Operating Model
 
