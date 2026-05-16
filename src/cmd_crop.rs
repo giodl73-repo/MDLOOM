@@ -68,7 +68,7 @@ struct StatusArgs {
     /// Status page title
     #[arg(long)]
     title: Option<String>,
-    /// Restrict scanned files to one or more extensions, e.g. -e md
+    /// Restrict scanned files to one or more extensions, e.g. --extension md
     #[arg(long = "extension")]
     extensions: Vec<String>,
     /// Exclude directories by basename while scanning docs
