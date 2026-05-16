@@ -532,8 +532,19 @@ fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions
     }
 }
 
+fn reject_global_output_for_output_dir(command: &str, globals: &GlobalOptions) -> Result<()> {
+    if globals.output().is_some() {
+        bail!(
+            "proof crop {} writes multiple artifacts; use --output-dir instead of global -o/--output",
+            command
+        );
+    }
+    Ok(())
+}
+
 fn run_prepare(crop_bin: PathBuf, args: PrepareArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_json_artifact_global_format("prepare", globals)?;
+    reject_global_output_for_output_dir("prepare", globals)?;
     let command_args = build_prepare_args(args)?;
     for crop_args in command_args {
         run_crop(crop_bin.clone(), crop_args)?;
@@ -1044,6 +1055,7 @@ fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<
 
 fn run_sync(crop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_json_artifact_global_format("sync", globals)?;
+    reject_global_output_for_output_dir("sync", globals)?;
     let command_args = build_sync_args(args)?;
     for crop_args in command_args {
         run_crop(crop_bin.clone(), crop_args)?;
@@ -1481,6 +1493,23 @@ mod tests {
         let err = reject_non_json_artifact_global_format("view", &globals("markdown")).unwrap_err();
 
         assert!(err.to_string().contains("writes JSON artifacts"));
+    }
+
+    #[test]
+    fn output_dir_commands_reject_global_output() {
+        let err = reject_global_output_for_output_dir(
+            "sync",
+            &GlobalOptions::new(
+                None,
+                "text".to_string(),
+                false,
+                false,
+                Some(PathBuf::from("SIDE_INFO.json")),
+            ),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("--output-dir"));
     }
 
     #[test]

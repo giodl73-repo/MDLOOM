@@ -206,7 +206,9 @@ proof crop sync --view .crop/views/ready-guides.json
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
 `prepare` and `sync` produce JSON artifacts, so non-JSON global formats such as
-`-f markdown` are rejected.
+`-f markdown` are rejected. Because they write a set of side-info files, global
+`-o/--output` is rejected; use `--output-dir` to choose the destination
+directory.
 Use `proof crop prepare` when you want the repeatable docs preflight: it first
 strictly inspects `.crop/views` and the exact `--view` recipe, then runs the
 same side-info sync.

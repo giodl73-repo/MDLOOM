@@ -2849,6 +2849,35 @@ fn binary_crop_sync_generates_all_side_info_reports() {
 }
 
 #[test]
+fn binary_crop_sync_rejects_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(dir.path().join("side-info.json"))
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("sync")
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .expect("failed to run proof crop sync");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--output-dir"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
     let bin = debug_bin();
     if !bin.exists() {
@@ -2918,6 +2947,37 @@ fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
             args
         );
     }
+}
+
+#[test]
+fn binary_crop_prepare_rejects_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join("proof-guides.json");
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(dir.path().join("side-info.json"))
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("prepare")
+        .arg("--view")
+        .arg(&view_file)
+        .output()
+        .expect("failed to run proof crop prepare");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--output-dir"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
 }
 
 #[test]
