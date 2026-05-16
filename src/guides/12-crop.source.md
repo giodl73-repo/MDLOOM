@@ -132,6 +132,8 @@ backlink snippet directly from the synced side-info:
 ```text
 proof crop backlink-list --target README.md
 proof crop backlink-list --target README.md --format table --output BACKLINKS.md
+proof crop heading-list --source README.md
+proof crop heading-list --source README.md --format table --output OUTLINE.md
 ```
 
 ---

@@ -36,6 +36,8 @@ enum CropCommand {
     Frontmatter(SideInfoArgs),
     /// Generate heading inventory side-info
     Headings(SideInfoArgs),
+    /// Render headings for one source from CROP heading side-info
+    HeadingList(HeadingListArgs),
     /// Report PROOF generated artifact manifest health through CROP
     Artifacts(ArtifactsArgs),
     /// Generate side-info JSON files under .proof\side-info for PROOF compiler use
@@ -153,6 +155,22 @@ struct BacklinkListArgs {
 }
 
 #[derive(clap::Args)]
+struct HeadingListArgs {
+    /// Source/page to render headings for
+    #[arg(long)]
+    source: String,
+    /// CROP headings JSON report to consume
+    #[arg(long = "side-info", default_value = ".proof\\side-info\\headings.json")]
+    side_info: PathBuf,
+    /// Render format: list, table, or count
+    #[arg(long, default_value = "list")]
+    format: String,
+    /// Optional output path. Defaults to stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct ArtifactsArgs {
     /// PROOF repository root. CROP reads .proof\artifacts.json under this root
     #[arg(long)]
@@ -200,6 +218,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         CropCommand::Headings(side_info) => {
             run_side_info(args.crop_bin, "headings", side_info, globals)
         }
+        CropCommand::HeadingList(heading_list) => run_heading_list(heading_list),
         CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
         CropCommand::Sync(sync) => run_sync(args.crop_bin, sync),
     }
@@ -512,7 +531,16 @@ fn run_side_info(
 
 fn run_backlink_list(args: BacklinkListArgs) -> Result<()> {
     let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
-    if let Some(output) = args.output {
+    write_snippet(rendered, args.output)
+}
+
+fn run_heading_list(args: HeadingListArgs) -> Result<()> {
+    let rendered = crop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
+    write_snippet(rendered, args.output)
+}
+
+fn write_snippet(rendered: String, output: Option<PathBuf>) -> Result<()> {
+    if let Some(output) = output {
         if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating {}", parent.display()))?;

@@ -2021,6 +2021,48 @@ fn binary_crop_backlink_list_renders_target_snippet() {
 }
 
 #[test]
+fn binary_crop_heading_list_renders_source_snippet() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("headings.json");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "headings": [
+    { "source": "README.md", "level": 1, "text": "Overview", "md_uri": "md://README.md#overview" },
+    { "source": "README.md", "level": 2, "text": "Install", "md_uri": "md://README.md#install" },
+    { "source": "docs/guide.md", "level": 1, "text": "Guide", "md_uri": "md://docs/guide.md#guide" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("heading-list")
+        .arg("--source")
+        .arg("md://README.md#overview")
+        .arg("--side-info")
+        .arg(&side_info)
+        .output()
+        .expect("failed to run proof crop heading-list");
+
+    assert!(
+        output.status.success(),
+        "proof crop heading-list failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("- [Overview](md://README.md#overview)"));
+    assert!(stdout.contains("  - [Install](md://README.md#install)"));
+    assert!(!stdout.contains("Guide"));
+}
+
+#[test]
 fn binary_crop_artifacts_delegates_to_crop_artifacts() {
     let bin = debug_bin();
     if !bin.exists() {
