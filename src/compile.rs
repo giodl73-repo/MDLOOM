@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::compile_crop::{self, SideInfoKind};
 use crate::compile_directive;
+use crate::compile_math;
 use crate::compile_symbol;
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
@@ -1477,10 +1478,9 @@ pub fn compile_file(
                 no_chrome,
                 ..
             } => {
-                let (math_lines, math_diags) =
-                    crate::math::render_display_math(expr, *width, *align);
+                let rendered = compile_math::render_math_compiled(expr, *width, *align, *no_chrome);
                 resolved_count += 1;
-                for d in &math_diags {
+                for d in &rendered.diagnostics {
                     violations.push(CompileViolation {
                         code: d.code,
                         severity: ViolationSeverity::Warning,
@@ -1491,15 +1491,7 @@ pub fn compile_file(
                         source_line: line_start + 1 + source_line_offset,
                     });
                 }
-                let rendered = math_lines.join("\n");
-                if *no_chrome {
-                    format!("```\n{}\n```", rendered)
-                } else {
-                    format!(
-                        "<!-- proof:compiled from=\"proof:math\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-                        rendered
-                    )
-                }
+                rendered.block
             }
 
             Directive::Toc {
@@ -4103,9 +4095,9 @@ fn render_one_directive_no_chrome(
         Directive::Math {
             expr, width, align, ..
         } => {
-            let (math_lines, math_diags) = crate::math::render_display_math(expr, *width, *align);
+            let rendered = compile_math::render_math_inline(expr, *width, *align);
             *resolved_count += 1;
-            for d in &math_diags {
+            for d in &rendered.diagnostics {
                 violations.push(CompileViolation {
                     code: d.code,
                     severity: ViolationSeverity::Warning,
@@ -4116,7 +4108,7 @@ fn render_one_directive_no_chrome(
                     source_line: abs_line + 1,
                 });
             }
-            math_lines.join("\n")
+            rendered.block
         }
         // Layout, Table, Region, Toc, Xref, Blockquote not supported inline within a region.
         // (They produce wrapper chrome / external content unsuited to canvas paste.)
