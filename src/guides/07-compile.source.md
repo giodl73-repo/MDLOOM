@@ -49,6 +49,9 @@ proof compile src/guides/math.source.md --target html -o docs/guides/math.html
 # Compile one source file into a compact AI/context transfer artifact
 proof compile src/guides/math.source.md --target pebble -o context/math.pebble.json
 
+# Compile one source file into a machine-readable report bundle
+proof compile src/guides/math.source.md --target json-report -o reports/math.proof-report.json
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -71,6 +74,13 @@ and section chunks with stable IDs, heading paths, line numbers, and resolved
 Markdown text. The schema is intentionally CROP-friendly: CROP can emit the same
 shape for view packs or corpus slices, while PROOF emits it for compiled source
 documents.
+
+`--target json-report` writes `proof.publish.json_report.v1`: a stable
+machine-readable compile bundle for CI, agents, and integrations. It includes
+artifact summary, resolved Markdown, section summaries, source metadata,
+dependency refs, diagnostics, and compile counts. It is intentionally more
+verbose than Pebble and is not a replacement for Pebble's compact retrieval
+format.
 
 ---
 

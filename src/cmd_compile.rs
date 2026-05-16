@@ -54,6 +54,7 @@ enum CompileTarget {
     Md,
     Html,
     Pebble,
+    JsonReport,
 }
 
 impl CompileTarget {
@@ -62,6 +63,7 @@ impl CompileTarget {
             CompileTarget::Md => "md",
             CompileTarget::Html => "html",
             CompileTarget::Pebble => "pebble",
+            CompileTarget::JsonReport => "json-report",
         }
     }
 }
@@ -442,6 +444,9 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
         CompileTarget::Pebble => {
             output.set_extension("pebble.json");
         }
+        CompileTarget::JsonReport => {
+            output.set_extension("proof-report.json");
+        }
     }
     Some(output)
 }
@@ -457,6 +462,9 @@ fn compile_target_file(
         CompileTarget::Md => compile_file(source_path, output_path, root, config),
         CompileTarget::Html => compile_html_file(source_path, output_path, root, config),
         CompileTarget::Pebble => compile_pebble_file(source_path, output_path, root, config),
+        CompileTarget::JsonReport => {
+            compile_json_report_file(source_path, output_path, root, config)
+        }
     }
 }
 
@@ -532,6 +540,70 @@ fn compile_pebble_file(
     if result.written {
         let tmp = output_path.with_extension("proof_tmp");
         std::fs::write(&tmp, pebble)?;
+        std::fs::rename(&tmp, output_path)?;
+    }
+    result.output_path = output_path.to_path_buf();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    Ok(result)
+}
+
+fn compile_json_report_file(
+    source_path: &Path,
+    output_path: &Path,
+    root: &Path,
+    config: &proof_lib::GlintConfig,
+) -> Result<proof_lib::compile::CompileResult> {
+    let temp_dir = unique_temp_dir()?;
+    let markdown_path = temp_dir.join("compiled.md");
+    let mut result = compile_file(source_path, &markdown_path, root, config)?;
+    if result
+        .violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error)
+    {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        result.output_path = output_path.to_path_buf();
+        return Ok(result);
+    }
+
+    let markdown = std::fs::read_to_string(&markdown_path)?;
+    let title = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("proof document");
+    let frontmatter = proof_lib::frontmatter::read(source_path)?.unwrap_or_default();
+    let diagnostics = result
+        .violations
+        .iter()
+        .map(|violation| proof_lib::publish::JsonReportDiagnostic {
+            code: violation.code.to_string(),
+            severity: match violation.severity {
+                ViolationSeverity::Error => "error",
+                ViolationSeverity::Warning => "warning",
+            }
+            .to_string(),
+            line: violation.source_line,
+            message: violation.message.clone(),
+        })
+        .collect::<Vec<_>>();
+    let report = proof_lib::publish::markdown_to_json_report_bundle(
+        &markdown,
+        title,
+        source_path,
+        output_path,
+        &result.resolved_files,
+        frontmatter,
+        proof_lib::publish::JsonReportCompile {
+            directives_resolved: result.directives_resolved,
+            diagnostics_count: diagnostics.len(),
+            diagnostics,
+        },
+    );
+    let current = std::fs::read_to_string(output_path).unwrap_or_default();
+    result.written = current != report;
+    if result.written {
+        let tmp = output_path.with_extension("proof_tmp");
+        std::fs::write(&tmp, report)?;
         std::fs::rename(&tmp, output_path)?;
     }
     result.output_path = output_path.to_path_buf();

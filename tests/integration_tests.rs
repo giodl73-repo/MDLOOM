@@ -1965,6 +1965,70 @@ fn binary_compile_target_pebble_writes_ai_context_pack() {
 }
 
 #[test]
+fn binary_compile_target_json_report_writes_bundle() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("guide.source.md");
+    let output_path = dir.path().join("guide.proof-report.json");
+    std::fs::write(
+        &source,
+        "---\ntags: [publish]\ncontent_tags: [guide]\n---\n# Guide\n\nIntro text.\n\n## Steps\n\n- one\n- two\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("json-report")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+    assert_eq!(report["schema"], "proof.publish.json_report.v1");
+    assert_eq!(report["kind"], "compile_report");
+    assert_eq!(
+        report["source_path"].as_str().unwrap(),
+        source.to_string_lossy()
+    );
+    assert_eq!(report["title"], "Guide");
+    assert_eq!(report["artifact"]["target"], "json-report");
+    assert_eq!(
+        report["artifact"]["output_path"].as_str().unwrap(),
+        output_path.to_string_lossy()
+    );
+    assert_eq!(report["frontmatter"]["tags"][0], "publish");
+    assert_eq!(report["frontmatter"]["content"][0], "guide");
+    assert_eq!(report["document"]["section_count"], 2);
+    assert_eq!(report["document"]["sections"][1]["path"][1], "Steps");
+    assert!(report["document"]["markdown"]
+        .as_str()
+        .unwrap()
+        .contains("Intro text."));
+    assert_eq!(report["compile"]["diagnostics_count"], 0);
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"][0]["target"], "json-report");
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

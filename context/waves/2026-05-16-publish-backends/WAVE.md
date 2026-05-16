@@ -30,13 +30,14 @@ ranking, or LaTeX in this wave.
 - Existing publish helpers in `src/publish.rs`.
 - Existing slide source concepts for future PPTX grounding.
 - `docs/specs/publish-backends.md`.
+- `.roles/office.md` for native DOCX/PPTX package review.
 
 ## Pulse status
 
 | Pulse | Title | Status | Outcome |
 |------:|-------|--------|---------|
 | 01 | Backend spec and sequence | done | Captured supported targets, planned target contracts, invariants, and pulse sequence. |
-| 02 | JSON report bundle | todo | Add a machine-readable compile/report target for CI and agents. |
+| 02 | JSON report bundle | done | Added `proof.publish.json_report.v1` as a machine-readable compile/report target for CI and agents. |
 | 03 | Static site backend | todo | Add multi-page HTML site generation with navigation and a site manifest. |
 | 04 | PDF backend | todo | Render existing HTML publish output to PDF with manifest integration. |
 | 05 | DOCX backend | todo | Emit editable Word-processing documents from resolved Markdown. |

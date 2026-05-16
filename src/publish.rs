@@ -1,6 +1,9 @@
 use pebble::PebbleDocument;
 use pulldown_cmark::{html, Event, Options, Parser};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
+
+use crate::frontmatter::SourceFrontmatter;
 
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
     let title = pebble::document_title(markdown, title);
@@ -46,6 +49,93 @@ pub fn markdown_to_pebble_document(
         .expect("serializing Pebble document cannot fail")
 }
 
+pub fn markdown_to_json_report_bundle(
+    markdown: &str,
+    fallback_title: &str,
+    source_path: &Path,
+    output_path: &Path,
+    resolved_files: &[PathBuf],
+    frontmatter: SourceFrontmatter,
+    compile: JsonReportCompile,
+) -> String {
+    let title = pebble::document_title(markdown, fallback_title);
+    let sections = json_report_sections(markdown);
+    let report = JsonReportBundle {
+        schema: "proof.publish.json_report.v1".to_string(),
+        kind: "compile_report".to_string(),
+        source_path: path_string(source_path),
+        title,
+        format: "markdown".to_string(),
+        artifact: JsonReportArtifact {
+            target: "json-report".to_string(),
+            output_path: path_string(output_path),
+        },
+        frontmatter,
+        refs: resolved_files
+            .iter()
+            .map(|path| path_string(path))
+            .collect(),
+        document: JsonReportDocument {
+            markdown: markdown.to_string(),
+            section_count: sections.len(),
+            sections,
+        },
+        compile,
+    };
+    serde_json::to_string_pretty(&report).expect("serializing JSON report cannot fail")
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportBundle {
+    pub schema: String,
+    pub kind: String,
+    pub source_path: String,
+    pub title: String,
+    pub format: String,
+    pub artifact: JsonReportArtifact,
+    pub frontmatter: SourceFrontmatter,
+    pub refs: Vec<String>,
+    pub document: JsonReportDocument,
+    pub compile: JsonReportCompile,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportArtifact {
+    pub target: String,
+    pub output_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportDocument {
+    pub markdown: String,
+    pub section_count: usize,
+    pub sections: Vec<JsonReportSection>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportSection {
+    pub id: String,
+    pub level: usize,
+    pub title: String,
+    pub path: Vec<String>,
+    pub line_start: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportCompile {
+    pub directives_resolved: usize,
+    pub diagnostics_count: usize,
+    pub diagnostics: Vec<JsonReportDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonReportDiagnostic {
+    pub code: String,
+    pub severity: String,
+    pub line: usize,
+    pub message: String,
+}
+
 fn markdown_to_html_fragment(markdown: &str) -> String {
     let parser = Parser::new_ext(markdown, markdown_options()).map(|event| match event {
         Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),
@@ -67,6 +157,64 @@ fn markdown_options() -> Options {
 
 fn path_string(path: &Path) -> String {
     path.display().to_string()
+}
+
+fn json_report_sections(markdown: &str) -> Vec<JsonReportSection> {
+    let mut sections = Vec::new();
+    let mut heading_path: Vec<String> = Vec::new();
+
+    for (index, line) in markdown.lines().enumerate() {
+        let Some((level, title)) = markdown_heading(line) else {
+            continue;
+        };
+        heading_path.truncate(level.saturating_sub(1));
+        heading_path.push(title.to_string());
+        sections.push(JsonReportSection {
+            id: slugify(title),
+            level,
+            title: title.to_string(),
+            path: heading_path.clone(),
+            line_start: index + 1,
+        });
+    }
+
+    sections
+}
+
+fn markdown_heading(line: &str) -> Option<(usize, &str)> {
+    let trimmed = line.trim_start();
+    let hashes = trimmed.chars().take_while(|c| *c == '#').count();
+    if !(1..=6).contains(&hashes) {
+        return None;
+    }
+    let rest = trimmed.get(hashes..)?;
+    if !rest.starts_with(' ') {
+        return None;
+    }
+    let title = rest.trim();
+    (!title.is_empty()).then_some((hashes, title))
+}
+
+fn slugify(title: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = false;
+    for c in title.chars().flat_map(char::to_lowercase) {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+            last_dash = false;
+        } else if !last_dash && !slug.is_empty() {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    if slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        "section".to_string()
+    } else {
+        slug
+    }
 }
 
 fn escape_html(text: &str) -> String {
@@ -147,5 +295,37 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("status: ready"));
+    }
+
+    #[test]
+    fn json_report_backend_serializes_compile_bundle() {
+        let report = markdown_to_json_report_bundle(
+            "# Guide\n\nIntro.\n\n## Steps\n\n- one\n",
+            "fallback",
+            Path::new("guide.source.md"),
+            Path::new("guide.proof-report.json"),
+            &[PathBuf::from("figures\\flow.md")],
+            SourceFrontmatter {
+                tags: vec!["publish".to_string()],
+                ops: Vec::new(),
+                content: vec!["guide".to_string()],
+            },
+            JsonReportCompile {
+                directives_resolved: 2,
+                diagnostics_count: 0,
+                diagnostics: Vec::new(),
+            },
+        );
+        let json: serde_json::Value = serde_json::from_str(&report).unwrap();
+
+        assert_eq!(json["schema"], "proof.publish.json_report.v1");
+        assert_eq!(json["kind"], "compile_report");
+        assert_eq!(json["title"], "Guide");
+        assert_eq!(json["artifact"]["target"], "json-report");
+        assert_eq!(json["frontmatter"]["tags"][0], "publish");
+        assert_eq!(json["document"]["section_count"], 2);
+        assert_eq!(json["document"]["sections"][1]["path"][1], "Steps");
+        assert_eq!(json["compile"]["directives_resolved"], 2);
+        assert_eq!(json["refs"].as_array().unwrap().len(), 1);
     }
 }

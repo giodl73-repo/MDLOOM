@@ -4,7 +4,7 @@ pulse: 06
 date: 2026-05-16
 status: todo
 depends_on: ["publish-backends/pulse-05"]
-governing_roles: ["COMPOSE", "STAGE", "SCHEMA", "BENCH"]
+governing_roles: ["COMPOSE", "STAGE", "SCHEMA", "OFFICE", "BENCH"]
 ---
 
 # Pulse 06: PPTX backend
@@ -53,6 +53,7 @@ guessing decks from arbitrary prose or rasterizing slide content.
 - [ ] Emit speaker notes parts when source notes are available.
 - [ ] Add OOXML package tests that inspect slide XML, notes XML, relationships,
       and `[Content_Types].xml`.
+- [ ] Add OFFICE review evidence for native package validity and editability.
 - [ ] Add STAGE-oriented fixture coverage for bullet density and title/body
       hierarchy.
 - [ ] Preserve diagnostics and manifest behavior.

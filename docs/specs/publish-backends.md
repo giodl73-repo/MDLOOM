@@ -12,16 +12,16 @@ semantics.
 | `md` | supported | Canonical terminal-first compiled document. | Resolves directives and writes Markdown. |
 | `html` | supported | Standalone human-readable web document. | Resolves through Markdown, escapes raw HTML, emits common Markdown blocks with a small stylesheet. |
 | `pebble` | supported | Agent/retrieval context transfer. | Emits `pebble.v1` JSON with source path, title, refs, stable section IDs, heading paths, line numbers, and resolved Markdown text. |
+| `json-report` | supported | Machine-readable compile/report bundle. | Emits `proof.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
 
-`html` and `pebble` are fully supported within those scopes. They are not claims
-of full site generation, PDF layout fidelity, office-document styling, or slide
-deck generation.
+`html`, `pebble`, and `json-report` are fully supported within those scopes.
+They are not claims of full site generation, PDF layout fidelity,
+office-document styling, or slide deck generation.
 
 ## Planned targets
 
 | Target | Primary user | Backend role | First useful claim |
 |---|---|---|---|
-| `json-report` | CI, agents, integrations | Machine-readable compile/report bundle. | Emit resolved document metadata, sections, diagnostics, artifacts, dependencies, and manifest summary as stable JSON. |
 | `site` | Docs publishers | Multi-page static documentation site. | Compile a source tree to HTML pages, index/navigation, assets, and a site manifest. |
 | `pdf` | Report readers | Portable human-readable artifact. | Render the HTML publish output to PDF with deterministic metadata and manifest entries. |
 | `docx` | Business/document workflows | Editable Word-processing document. | Convert resolved Markdown into headings, paragraphs, lists, tables, code blocks, and document metadata. |
@@ -50,10 +50,10 @@ publish backends above.
 
 ### JSON report bundle
 
-The JSON bundle is the lowest-risk next target because it serializes information
-PROOF already owns: resolved Markdown text, sections, dependencies, diagnostics,
-manifest entries, source metadata, and compile stats. It should be stable enough
-for CI and agents, but not a replacement for Pebble's compact retrieval schema.
+The JSON bundle serializes information PROOF already owns: resolved Markdown
+text, sections, dependencies, diagnostics, source metadata, and compile stats. It
+is stable enough for CI and agents, but not a replacement for Pebble's compact
+retrieval schema.
 
 ### Static site
 

@@ -121,6 +121,7 @@ proof compile --progress           # show per-file progress at corpus scale
 proof compile file.source.md -o out.md   # single file, explicit output
 proof compile file.source.md --target html -o out.html
 proof compile file.source.md --target pebble -o out.pebble.json
+proof compile file.source.md --target json-report -o out.proof-report.json
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
@@ -140,8 +141,14 @@ line numbers, resolved Markdown text, source path, and resolved dependency refs.
 CROP can support the same schema for corpus slices, so a CROP view pack and a
 PROOF compiled source can exchange small, provenance-bearing context chunks.
 
-Planned publish backends include JSON report bundles, static sites, PDF, DOCX,
-and native PPTX decks. See
+`--target json-report` writes `proof.publish.json_report.v1`: a stable
+machine-readable compile bundle for CI, agents, and integrations. It includes
+artifact summary, resolved Markdown, section summaries, source metadata,
+dependency refs, diagnostics, and compile counts without replacing Pebble's
+compact retrieval schema.
+
+Planned publish backends include static sites, PDF, DOCX, and native PPTX decks.
+See
 [`docs/specs/publish-backends.md`](docs/specs/publish-backends.md) for target
 contracts and sequencing. PPTX is planned as editable native PowerPoint slides
 with real bullets/notes, not screenshots or HTML embedded in slides.

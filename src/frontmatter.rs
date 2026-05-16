@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SourceFrontmatter {
     pub tags: Vec<String>,
     pub ops: Vec<String>,

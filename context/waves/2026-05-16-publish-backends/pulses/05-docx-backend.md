@@ -4,7 +4,7 @@ pulse: 05
 date: 2026-05-16
 status: todo
 depends_on: ["publish-backends/pulse-04"]
-governing_roles: ["COMPOSE", "BOOK", "SCHEMA", "BENCH"]
+governing_roles: ["COMPOSE", "BOOK", "SCHEMA", "OFFICE", "BENCH"]
 ---
 
 # Pulse 05: DOCX backend
@@ -34,6 +34,8 @@ document with stable basic structure.
   enough for tests.
 - Define the first supported Markdown block set.
 - Decide how to inspect DOCX output in tests without Microsoft Word.
+- Use OFFICE to review package parts, content types, relationships, numbering,
+  and editable document XML before calling DOCX supported.
 
 ## Deliverables checklist
 
@@ -41,6 +43,7 @@ document with stable basic structure.
 - [ ] Support title, headings, paragraphs, lists, tables, fenced code, links, and
       metadata.
 - [ ] Add archive/content tests that inspect document XML for expected structure.
+- [ ] Add OFFICE review evidence for OOXML package validity and editability.
 - [ ] Preserve diagnostics and manifest behavior.
 - [ ] Update README/SPEC/spec docs.
 
