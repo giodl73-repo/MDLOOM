@@ -53,6 +53,7 @@ pub(crate) struct Args {
 enum CompileTarget {
     Md,
     Html,
+    Pebble,
 }
 
 impl CompileTarget {
@@ -60,6 +61,7 @@ impl CompileTarget {
         match self {
             CompileTarget::Md => "md",
             CompileTarget::Html => "html",
+            CompileTarget::Pebble => "pebble",
         }
     }
 }
@@ -432,8 +434,14 @@ fn run_once(
 
 fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<PathBuf> {
     let mut output = derive_output_path(source)?;
-    if target == CompileTarget::Html {
-        output.set_extension("html");
+    match target {
+        CompileTarget::Md => {}
+        CompileTarget::Html => {
+            output.set_extension("html");
+        }
+        CompileTarget::Pebble => {
+            output.set_extension("pebble.json");
+        }
     }
     Some(output)
 }
@@ -448,6 +456,7 @@ fn compile_target_file(
     match target {
         CompileTarget::Md => compile_file(source_path, output_path, root, config),
         CompileTarget::Html => compile_html_file(source_path, output_path, root, config),
+        CompileTarget::Pebble => compile_pebble_file(source_path, output_path, root, config),
     }
 }
 
@@ -481,6 +490,48 @@ fn compile_html_file(
     if result.written {
         let tmp = output_path.with_extension("proof_tmp");
         std::fs::write(&tmp, html)?;
+        std::fs::rename(&tmp, output_path)?;
+    }
+    result.output_path = output_path.to_path_buf();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    Ok(result)
+}
+
+fn compile_pebble_file(
+    source_path: &Path,
+    output_path: &Path,
+    root: &Path,
+    config: &proof_lib::GlintConfig,
+) -> Result<proof_lib::compile::CompileResult> {
+    let temp_dir = unique_temp_dir()?;
+    let markdown_path = temp_dir.join("compiled.md");
+    let mut result = compile_file(source_path, &markdown_path, root, config)?;
+    if result
+        .violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error)
+    {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        result.output_path = output_path.to_path_buf();
+        return Ok(result);
+    }
+
+    let markdown = std::fs::read_to_string(&markdown_path)?;
+    let title = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("proof document");
+    let pebble = proof_lib::publish::markdown_to_pebble_document(
+        &markdown,
+        title,
+        source_path,
+        &result.resolved_files,
+    );
+    let current = std::fs::read_to_string(output_path).unwrap_or_default();
+    result.written = current != pebble;
+    if result.written {
+        let tmp = output_path.with_extension("proof_tmp");
+        std::fs::write(&tmp, pebble)?;
         std::fs::rename(&tmp, output_path)?;
     }
     result.output_path = output_path.to_path_buf();

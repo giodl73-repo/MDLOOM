@@ -1809,6 +1809,59 @@ fn binary_compile_target_html_writes_html_document() {
 }
 
 #[test]
+fn binary_compile_target_pebble_writes_ai_context_pack() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("guide.source.md");
+    let output_path = dir.path().join("guide.pebble.json");
+    std::fs::write(
+        &source,
+        "# Guide\n\nIntro text.\n\n## Steps\n\n- one\n- two\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("pebble")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let pebble: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+    assert_eq!(pebble["schema"], "proof.pebble.v1");
+    assert_eq!(pebble["kind"], "document");
+    assert_eq!(pebble["title"], "Guide");
+    assert_eq!(pebble["format"], "markdown");
+    assert_eq!(pebble["sections"][0]["id"], "guide");
+    assert_eq!(pebble["sections"][1]["path"][1], "Steps");
+    assert!(pebble["sections"][1]["text"]
+        .as_str()
+        .unwrap()
+        .contains("- one"));
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"][0]["target"], "pebble");
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

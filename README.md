@@ -22,8 +22,10 @@ every chart, every diagram: authored in `.source.md`, compiled to `.md` by proof
 ```
 
 Think of it as a static site generator for terminal-first content: markdown is
-the primary artifact, HTML is the first publish target, and richer targets such
-as PPTX belong behind the same compile graph rather than a separate workflow.
+the primary artifact, HTML is the first human publish target, and **Proof
+Pebbles** (`proof.pebble.v1`) are compact AI/context transfer artifacts. Richer
+targets such as PPTX belong behind the same compile graph rather than a separate
+workflow.
 
 **What proof can render from a single `.source.md` file:**
 
@@ -118,6 +120,7 @@ proof compile --watch              # watch all [[compile]] targets for changes
 proof compile --progress           # show per-file progress at corpus scale
 proof compile file.source.md -o out.md   # single file, explicit output
 proof compile file.source.md --target html -o out.html
+proof compile file.source.md --target pebble -o out.pebble.json
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
@@ -126,6 +129,12 @@ with common Markdown support for lists, tables, links, task lists, strikethrough
 and fenced code. Raw HTML is escaped by default. Successful compile runs also
 write `.proof/artifacts.json`, a target-aware manifest of source files, output
 paths, diagnostics, cache status, and resolved directive counts.
+
+`--target pebble` writes a compact `proof.pebble.v1` JSON document for agents,
+retrieval, and transfer. Pebbles preserve stable section IDs, heading paths,
+line numbers, resolved Markdown text, source path, and resolved dependency refs.
+CROP can support the same schema for corpus slices, so a CROP view pack and a
+PROOF compiled source can exchange small, provenance-bearing context chunks.
 
 `.source.md` files may start with source-only frontmatter for corpus tagging.
 The block is stripped from normal compiled output and surfaced by status/stats:

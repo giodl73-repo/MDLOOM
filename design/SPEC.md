@@ -823,19 +823,26 @@ COMPILE OPTIONS
         --progress                Show a running compiled/total count
         --output-dir <DIR>        Write compiled files under DIR
         --root <DIR>              Root directory for md:// URI resolution
-        --target <TARGET>         md (default) | html
+        --target <TARGET>         md (default) | html | pebble
         --tag <TAG>               Only compile source files with this tag
         --op <OP>                 Only compile source files with this operation tag
         --content-tag <TAG>       Only compile source files with this content tag
     -o, --output <FILE>           Explicit output path for one source file
 
   `md` is the canonical compile target and preserves proof's terminal-first
-  renderer contract. `html` is the first publish target: proof resolves source
-  directives to markdown, strips source frontmatter, then emits a standalone HTML
-  document. The HTML backend supports common Markdown blocks including headings,
-  lists, tables, links, task lists, strikethrough, and fenced code; raw HTML is
-  escaped rather than passed through. `--watch` currently supports only
-  `--target md`.
+  renderer contract. `html` is the first human publish target: proof resolves
+  source directives to markdown, strips source frontmatter, then emits a
+  standalone HTML document. The HTML backend supports common Markdown blocks
+  including headings, lists, tables, links, task lists, strikethrough, and fenced
+  code; raw HTML is escaped rather than passed through.
+
+  `pebble` writes Proof Pebbles (`proof.pebble.v1`): compact JSON context
+  transfer artifacts optimized for agents rather than human presentation. A
+  pebble records source path, title, format, resolved dependency refs, and
+  section chunks with stable IDs, heading paths, source line numbers, and resolved
+  Markdown text. CROP may emit the same schema for view/corpus slices so PROOF
+  and CROP can share provenance-bearing context packs. `--watch` currently
+  supports only `--target md`.
 
   Planned publish targets include PPTX and richer site/PDF backends after the
   artifact manifest records source inputs, compile target, output path, and
@@ -843,8 +850,8 @@ COMPILE OPTIONS
 
   Non-watch compile runs write `.proof/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each
-  entry records source path, output path, target (`md`, `html`, future publish
-  backends), status (`written`, `cached`, `up_to_date`, `error`), resolved
+  entry records source path, output path, target (`md`, `html`, `pebble`, future
+  publish backends), status (`written`, `cached`, `up_to_date`, `error`), resolved
   directive count, cache usage, and diagnostics. The manifest is provenance for
   status, stale-output checks, cutover planning, and future PPTX/site/PDF
   backends; it is not a replacement for the content cache.

@@ -46,6 +46,9 @@ proof compile src/guides/ --output-dir docs/guides/
 # Publish one source file as standalone HTML
 proof compile src/guides/math.source.md --target html -o docs/guides/math.html
 
+# Compile one source file into a compact AI/context transfer artifact
+proof compile src/guides/math.source.md --target pebble -o context/math.pebble.json
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -60,6 +63,14 @@ including headings, lists, tables, links, task lists, strikethrough, and fenced
 code. Raw HTML in source Markdown is escaped rather than passed through, so the
 publish backend stays safe by default. Watch mode remains Markdown-only until
 target-aware watch manifests are modeled.
+
+`--target pebble` writes **Proof Pebbles**: compact `proof.pebble.v1` JSON
+documents optimized for agents, retrieval, and transfer rather than visual
+presentation. A pebble contains the source path, title, resolved dependency refs,
+and section chunks with stable IDs, heading paths, line numbers, and resolved
+Markdown text. The schema is intentionally CROP-friendly: CROP can emit the same
+shape for view packs or corpus slices, while PROOF emits it for compiled source
+documents.
 
 ---
 
