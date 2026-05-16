@@ -10,7 +10,6 @@ use crate::compile_format;
 use crate::compile_math;
 use crate::compile_output;
 use crate::compile_prose;
-use crate::compile_source;
 use crate::compile_symbol;
 use crate::compile_toc;
 use crate::compile_tree;
@@ -370,82 +369,46 @@ pub fn compile_file(
                 style,
                 section,
                 ..
-            } => {
-                let content_opt: Option<String> = if let Some(uri) = source {
-                    match compile_source::resolve_source_for_compile(uri, root) {
-                        Ok(c) => Some(c),
-                        Err(e) => {
-                            violations.push(CompileViolation {
-                                code: "COMPILE-002",
-                                severity: ViolationSeverity::Error,
-                                uri: uri.clone(),
-                                figure_id: None,
-                                invariant: String::new(),
-                                message: format!("toc source error: {}", e),
-                                source_line: line_start + 1 + source_line_offset,
-                            });
-                            None
-                        }
-                    }
-                } else {
-                    Some(source_lines.join("\n"))
-                };
-                match content_opt {
-                    Some(content) => {
-                        resolved_count += 1;
-                        let toc = compile_toc::generate_toc(
-                            &content,
-                            *max_depth,
-                            style,
-                            section.as_deref(),
-                        );
-                        format!(
-                            "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
-                            toc
-                        )
-                    }
-                    None => compile_output::source_fallback(&source_lines, line_start, line_end),
-                }
-            }
+            } => compile_toc::compile_toc(
+                source.as_ref(),
+                *max_depth,
+                style,
+                section.as_ref(),
+                root,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Xref {
                 uri, label, format, ..
-            } => match compile_prose::render_xref(uri, label.as_deref(), format, root) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    format!(
-                        "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
-                        rendered
-                    )
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: uri.clone(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("xref error: {}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    compile_output::source_fallback(&source_lines, line_start, line_end)
-                }
-            },
+            } => compile_prose::compile_xref(
+                uri,
+                label.as_ref(),
+                format,
+                root,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Blockquote {
                 text,
                 attribution,
                 style,
                 ..
-            } => {
-                resolved_count += 1;
-                let rendered =
-                    compile_prose::render_blockquote(text, attribution.as_deref(), style);
-                format!(
-                    "<!-- proof:compiled from=\"proof:blockquote\" -->\n{}\n<!-- /proof:compiled -->",
-                    rendered
-                )
-            }
+            } => compile_prose::compile_blockquote(
+                text,
+                attribution.as_ref(),
+                style,
+                &mut resolved_count,
+            ),
 
             Directive::Backlinks {
                 target,

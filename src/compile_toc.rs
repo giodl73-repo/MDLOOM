@@ -1,3 +1,9 @@
+use std::path::Path;
+
+use crate::compile::{CompileViolation, ViolationSeverity};
+use crate::compile_output;
+use crate::compile_source;
+
 fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
     let (target_level, _) = headings.last().unwrap();
     let target_depth = target_level - min_level;
@@ -93,4 +99,51 @@ pub(crate) fn generate_toc(
         }
     }
     out.trim_end().to_string()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_toc(
+    source: Option<&String>,
+    max_depth: usize,
+    style: &str,
+    section: Option<&String>,
+    root: &Path,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    let content_opt: Option<String> = if let Some(uri) = source {
+        match compile_source::resolve_source_for_compile(uri, root) {
+            Ok(content) => Some(content),
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: "COMPILE-002",
+                    severity: ViolationSeverity::Error,
+                    uri: uri.clone(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: format!("toc source error: {}", e),
+                    source_line: line_start + 1 + source_line_offset,
+                });
+                None
+            }
+        }
+    } else {
+        Some(source_lines.join("\n"))
+    };
+
+    match content_opt {
+        Some(content) => {
+            *resolved_count += 1;
+            let toc = generate_toc(&content, max_depth, style, section.map(|s| s.as_str()));
+            format!(
+                "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
+                toc
+            )
+        }
+        None => compile_output::source_fallback(source_lines, line_start, line_end),
+    }
 }

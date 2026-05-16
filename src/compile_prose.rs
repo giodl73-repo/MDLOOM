@@ -1,6 +1,9 @@
 use anyhow::Result;
 use std::path::Path;
 
+use crate::compile::{CompileViolation, ViolationSeverity};
+use crate::compile_output;
+
 /// Render a `proof:xref` directive as a formatted cross-reference.
 ///
 /// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
@@ -97,6 +100,56 @@ pub(crate) fn render_blockquote(text: &str, attribution: Option<&str>, style: &s
         "boxed" => render_blockquote_boxed(&trimmed_body, attribution),
         _ => render_blockquote_indent(&trimmed_body, attribution),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_xref(
+    uri: &str,
+    label: Option<&String>,
+    format: &str,
+    root: &Path,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    match render_xref(uri, label.map(|s| s.as_str()), format, root) {
+        Ok(rendered) => {
+            *resolved_count += 1;
+            format!(
+                "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
+                rendered
+            )
+        }
+        Err(e) => {
+            violations.push(CompileViolation {
+                code: "COMPILE-002",
+                severity: ViolationSeverity::Error,
+                uri: uri.to_string(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!("xref error: {}", e),
+                source_line: line_start + 1 + source_line_offset,
+            });
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
+}
+
+pub(crate) fn compile_blockquote(
+    text: &str,
+    attribution: Option<&String>,
+    style: &str,
+    resolved_count: &mut usize,
+) -> String {
+    *resolved_count += 1;
+    let rendered = render_blockquote(text, attribution.map(|s| s.as_str()), style);
+    format!(
+        "<!-- proof:compiled from=\"proof:blockquote\" -->\n{}\n<!-- /proof:compiled -->",
+        rendered
+    )
 }
 
 fn trim_blank_edges<'a>(lines: &[&'a str]) -> Vec<&'a str> {
