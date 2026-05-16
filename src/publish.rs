@@ -933,4 +933,89 @@ mod tests {
         assert!(text.contains("(Guide) Tj"), "got:\n{}", text);
         assert!(text.contains("Body with <angle> text"), "got:\n{}", text);
     }
+
+    #[test]
+    fn docx_backend_writes_native_ooxml_package_parts() {
+        let docx = markdown_to_docx_document(
+            "# Guide\n\nBody with [home](README.md).\n\n- one\n\n1. first\n\n| A | B |\n|---|---|\n| x | y |\n\n```text\nlet x = 1;\n```\n",
+            "fallback",
+        );
+        let mut archive = zip::ZipArchive::new(Cursor::new(docx)).expect("valid DOCX ZIP archive");
+
+        for part in [
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "docProps/core.xml",
+            "docProps/app.xml",
+            "word/_rels/document.xml.rels",
+            "word/document.xml",
+            "word/styles.xml",
+            "word/numbering.xml",
+        ] {
+            assert!(archive.by_name(part).is_ok(), "missing DOCX part {part}");
+        }
+
+        let mut document = String::new();
+        std::io::Read::read_to_string(
+            &mut archive.by_name("word/document.xml").unwrap(),
+            &mut document,
+        )
+        .unwrap();
+        assert!(document.contains(r#"<w:pStyle w:val="Heading1"/>"#));
+        assert!(document.contains(">Guide<"));
+        assert!(document.contains("home (README.md)"));
+        assert!(document.contains(r#"<w:numId w:val="1"/>"#));
+        assert!(document.contains(r#"<w:numId w:val="2"/>"#));
+        assert!(document.contains("<w:tbl>"));
+        assert!(document.contains("let x = 1;"));
+
+        let mut numbering = String::new();
+        std::io::Read::read_to_string(
+            &mut archive.by_name("word/numbering.xml").unwrap(),
+            &mut numbering,
+        )
+        .unwrap();
+        assert!(numbering.contains(r#"<w:numFmt w:val="bullet"/>"#));
+        assert!(numbering.contains(r#"<w:numFmt w:val="decimal"/>"#));
+    }
+
+    #[test]
+    fn static_site_helper_sorts_pages_and_writes_index_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        write_static_site(
+            dir.path(),
+            vec![
+                SitePage {
+                    title: "Beta & Co".to_string(),
+                    source_path: "src\\beta.source.md".to_string(),
+                    output_path: "site\\beta.html".to_string(),
+                    href: "beta.html".to_string(),
+                    status: "written".to_string(),
+                    diagnostics_count: 0,
+                },
+                SitePage {
+                    title: "Alpha <One>".to_string(),
+                    source_path: "src\\alpha.source.md".to_string(),
+                    output_path: "site\\alpha.html".to_string(),
+                    href: "alpha.html".to_string(),
+                    status: "cached".to_string(),
+                    diagnostics_count: 1,
+                },
+            ],
+        )
+        .unwrap();
+
+        let manifest: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("proof-site.json")).unwrap(),
+        )
+        .unwrap();
+        let index = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
+
+        assert_eq!(manifest["schema"], "proof.publish.site.v1");
+        assert_eq!(manifest["page_count"], 2);
+        assert_eq!(manifest["pages"][0]["href"], "alpha.html");
+        assert_eq!(manifest["pages"][1]["href"], "beta.html");
+        assert!(index.contains("<a href=\"alpha.html\">Alpha &lt;One&gt;</a>"));
+        assert!(index.contains("<a href=\"beta.html\">Beta &amp; Co</a>"));
+    }
 }

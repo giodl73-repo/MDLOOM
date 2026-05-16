@@ -2227,6 +2227,80 @@ fn binary_compile_target_docx_writes_docx() {
 }
 
 #[test]
+fn publish_backends_consume_resolved_compile_output() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::frontmatter::SourceFrontmatter;
+    use proof_lib::publish::{
+        html_to_pdf_document, markdown_to_docx_document, markdown_to_html_document,
+        markdown_to_json_report_bundle, JsonReportCompile,
+    };
+    use proof_lib::GlintConfig;
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("doc.source.md");
+    let output_path = dir.path().join("doc.md");
+    std::fs::write(
+        &source,
+        "# Source\n\n```proof:toc max-depth=2 style=list\n```\n\n## Install\n## Usage\n",
+    )
+    .unwrap();
+
+    let cfg = GlintConfig::default();
+    let result = compile_file(&source, &output_path, dir.path(), &cfg).unwrap();
+    let violations = result
+        .violations
+        .iter()
+        .map(|violation| format!("{}: {}", violation.code, violation.message))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        result.violations.is_empty(),
+        "compile violations:\n{}",
+        violations
+    );
+
+    let markdown = std::fs::read_to_string(&output_path).unwrap();
+    assert!(markdown.contains("Install"), "got:\n{}", markdown);
+    assert!(!markdown.contains("```proof:toc"), "got:\n{}", markdown);
+
+    let html = markdown_to_html_document(&markdown, "fallback");
+    assert!(html.contains("<h1>Source</h1>"), "got:\n{}", html);
+    assert!(html.contains("Install"), "got:\n{}", html);
+
+    let report = markdown_to_json_report_bundle(
+        &markdown,
+        "fallback",
+        &source,
+        dir.path().join("doc.proof-report.json").as_path(),
+        &result.resolved_files,
+        SourceFrontmatter::default(),
+        JsonReportCompile {
+            directives_resolved: result.directives_resolved,
+            diagnostics_count: 0,
+            diagnostics: Vec::new(),
+        },
+    );
+    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+    assert!(report["document"]["markdown"]
+        .as_str()
+        .unwrap()
+        .contains("Install"));
+
+    let pdf = String::from_utf8_lossy(&html_to_pdf_document(&html, "fallback")).to_string();
+    assert!(pdf.contains("Install"), "got:\n{}", pdf);
+
+    let docx = markdown_to_docx_document(&markdown, "fallback");
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(docx)).unwrap();
+    let mut document = String::new();
+    std::io::Read::read_to_string(
+        &mut archive.by_name("word/document.xml").unwrap(),
+        &mut document,
+    )
+    .unwrap();
+    assert!(document.contains("Install"), "got:\n{}", document);
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {
