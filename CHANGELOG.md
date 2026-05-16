@@ -25,6 +25,40 @@ v0.1  │ check · ASCII box / flow / tree · markdown rules              │
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Publish backend family for `proof compile`.** Added scoped targets for
+  `json-report`, `site`, `pdf`, `docx`, and `pptx` while preserving `md`, `html`,
+  and `pebble` as baseline outputs.
+- **`--target json-report`** writes `proof.publish.json_report.v1` bundles with
+  artifact summary, resolved Markdown, section metadata, source frontmatter,
+  dependency refs, diagnostics, and compile counts.
+- **`--target site`** compiles source trees into local static HTML pages with
+  navigation `index.html`, `proof-site.json`, and `.proof/artifacts.json`
+  provenance.
+- **`--target pdf`** emits deterministic dependency-free PDF artifacts from the
+  resolved HTML publish output.
+- **`--target docx`** emits native editable Word-processing OOXML packages with
+  headings, paragraphs, native bullets/numbering, tables, code text, links, and
+  document metadata.
+- **`--target pptx`** emits native editable PowerPoint OOXML packages from
+  explicit `.slides.source.md` inputs, with slide text boxes, native
+  bullets/numbering, monospace code text, speaker notes, package relationships,
+  content types, and artifact manifest entries.
+- Added the OFFICE review role for native Office package correctness, plus L0/L1
+  and CLI coverage for package structure, helper behavior, resolved-output
+  contracts, and manifest records.
+
+### Changed
+
+- Publish backend docs now distinguish supported scoped claims from deferred
+  fidelity work such as rich Office templates, browser-equivalent PDF rendering,
+  rich PPTX themes/media/animations, and LaTeX.
+
+---
+
 ## [0.7.1] — 2026-04-30 — *the stress-test release*
 
 A 50-scenario authoring stress test (US-61..110) shook out four real bugs that the v0.7.0 audit and the existing test suite had missed — exactly the value of writing realistic fixtures over narrow unit tests. All four are fixed in this release.

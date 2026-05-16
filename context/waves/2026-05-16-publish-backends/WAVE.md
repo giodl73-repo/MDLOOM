@@ -1,7 +1,7 @@
 ---
 wave: publish-backends
 date_open: 2026-05-16
-status: active
+status: done
 source_request: "Make a spec and plan for PPTX, PDF, DOCX, static site, and JSON report bundle; hold off on LaTeX."
 ---
 
@@ -76,4 +76,8 @@ ranking, or LaTeX in this wave.
 
 ## Closeout/lessons
 
-- Pending.
+- Closed in `CLOSE.md`.
+- PROOF now supports scoped `json-report`, `site`, `pdf`, `docx`, and `pptx`
+  publish targets in addition to `md`, `html`, and `pebble`.
+- LaTeX remains deferred, and richer Office/PDF fidelity work is carried forward
+  explicitly rather than implied by first-scope support.
