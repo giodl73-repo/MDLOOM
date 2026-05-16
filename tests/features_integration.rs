@@ -16,15 +16,20 @@ use std::path::Path;
 // ─────────────────────────────────────────────────────────
 
 fn proof_bin() -> std::path::PathBuf {
-    // Workspace binary (workspace target dir is one level above CARGO_MANIFEST_DIR)
+    if let Some(bin) = option_env!("CARGO_BIN_EXE_proof") {
+        return std::path::PathBuf::from(bin);
+    }
+
+    let exe = if cfg!(windows) { "proof.exe" } else { "proof" };
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let workspace = manifest.parent().unwrap_or(manifest);
-    let bin = workspace.join("target/debug/proof");
+    let bin = manifest.join("target").join("debug").join(exe);
     if bin.exists() {
         return bin;
     }
-    // Fallback: package-local target (pre-workspace builds)
-    manifest.join("target/debug/proof")
+
+    // Fallback for workspace builds when Cargo's binary path env var is absent.
+    let workspace = manifest.parent().unwrap_or(manifest);
+    workspace.join("target").join("debug").join(exe)
 }
 
 fn run_proof(args: &[&str], cwd: &Path) -> (std::process::Output, String, String) {
@@ -1129,7 +1134,7 @@ fn cli_spec_generate_outputs_toml() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("fig.md"),
-        "# Fig\n\nMY FIGURE\n┌────┐\n│ A  │\n└────┘\n",
+        "# Fig\n\nMY FIGURE\n\n```\n┌────┐\n│ A  │\n└────┘\n```\n",
     )
     .unwrap();
 
@@ -1138,7 +1143,7 @@ fn cli_spec_generate_outputs_toml() {
         return;
     }
 
-    let (out, stdout, _) = run_proof(
+    let (out, stdout, stderr) = run_proof(
         &[
             "spec-generate",
             "md://fig.md",
@@ -1147,7 +1152,12 @@ fn cli_spec_generate_outputs_toml() {
         ],
         dir.path(),
     );
-    assert!(out.status.success(), "spec-generate should exit 0");
+    assert!(
+        out.status.success(),
+        "spec-generate should exit 0\nstdout:\n{}\nstderr:\n{}",
+        stdout,
+        stderr
+    );
     assert!(
         stdout.contains("[[davinci]]") || stdout.contains("davinci"),
         "should output davinci TOML, got:\n{}",
