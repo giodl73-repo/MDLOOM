@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use crate::compile_chart;
 use crate::compile_crop;
 use crate::compile_directive;
+use crate::compile_figure;
+#[cfg(test)]
 use crate::compile_format;
 use crate::compile_math;
 use crate::compile_output;
@@ -15,7 +17,6 @@ use crate::compile_tree;
 use crate::config::GlintConfig;
 #[cfg(test)]
 use crate::element::{ElementAlign, ElementKind};
-use crate::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use crate::runner::Runner;
 
 // ─────────────────────────────────────────────────────────
@@ -152,160 +153,49 @@ pub fn compile_file(
         let line_end = directive.line_end();
 
         let replacement = match directive {
-            Directive::Include { uri, pin, .. } => {
-                // If pin=id is declared inline, warn when no matching [[davinci]] entry exists.
-                if let Some(pin_id) = pin {
-                    let has_pin = config.davinci.iter().any(|d| &d.id == pin_id);
-                    if !has_pin {
-                        violations.push(CompileViolation {
-                            code: "COMPILE-007",
-                            severity: ViolationSeverity::Warning,
-                            uri: uri.clone(),
-                            figure_id: Some(pin_id.clone()),
-                            invariant: String::new(),
-                            message: format!(
-                                "Figure '{}' declares pin={:?} but no [[davinci]] entry with that ID exists — run `proof pin {} --id {}`",
-                                uri, pin_id, uri, pin_id
-                            ),
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                    }
-                }
-                match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
-                    Ok((content, fig_file)) => {
-                        crate::compile_validation::lint_figure(
-                            uri,
-                            &content,
-                            &fig_file,
-                            line_start + 1 + source_line_offset,
-                            &runner,
-                            &mut violations,
-                        );
-                        crate::compile_validation::validate_davinci(
-                            uri,
-                            &content,
-                            config,
-                            line_start + source_line_offset,
-                            &mut violations,
-                        );
-                        resolved_count += 1;
-                        compile_format::include_block(uri, &content)
-                    }
-                    Err(e) => {
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity: ViolationSeverity::Error,
-                            uri: uri.clone(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("{}", e),
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
-                }
-            }
+            Directive::Include { uri, pin, .. } => compile_figure::compile_include(
+                uri,
+                pin.as_ref(),
+                root,
+                config,
+                &runner,
+                &mut path_index,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
-            Directive::Layout { uris, attrs, .. } => {
-                let mut figures: Vec<Vec<String>> = Vec::new();
-                let mut any_err = false;
-                for uri in uris {
-                    match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
-                        Ok((content, fig_file)) => {
-                            crate::compile_validation::lint_figure(
-                                uri,
-                                &content,
-                                &fig_file,
-                                line_start + 1 + source_line_offset,
-                                &runner,
-                                &mut violations,
-                            );
-                            crate::compile_validation::validate_davinci(
-                                uri,
-                                &content,
-                                config,
-                                line_start + source_line_offset,
-                                &mut violations,
-                            );
-                            figures.push(extract_content_lines(&content));
-                            resolved_count += 1;
-                        }
-                        Err(e) => {
-                            violations.push(CompileViolation {
-                                code: "COMPILE-002",
-                                severity: ViolationSeverity::Error,
-                                uri: uri.clone(),
-                                figure_id: None,
-                                invariant: String::new(),
-                                message: format!("{}", e),
-                                source_line: line_start + 1 + source_line_offset,
-                            });
-                            any_err = true;
-                        }
-                    }
-                }
+            Directive::Layout { uris, attrs, .. } => compile_figure::compile_layout(
+                uris,
+                attrs,
+                root,
+                config,
+                &runner,
+                &mut path_index,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
-                if any_err || figures.is_empty() {
-                    source_lines[line_start..=line_end].join("\n")
-                } else {
-                    // Convert attrs directly to LayoutConfig — no re-serialization to avoid
-                    // label corruption (labels with spaces would be split by the string parser)
-                    let layout_config = LayoutConfig {
-                        gap: attrs.gap,
-                        align: Align::parse(&attrs.align).unwrap_or(Align::Top),
-                        labels: attrs.labels.clone(),
-                        cols: attrs.cols,
-                        width: attrs.width,
-                        direction: Direction::parse(&attrs.direction)
-                            .unwrap_or(Direction::Horizontal),
-                        border: attrs.border,
-                    };
-
-                    let composed = layout::layout(figures, &layout_config);
-                    // Strip outer ``` wrapper — compile embeds content inline
-                    let inner = composed
-                        .strip_prefix("```\n")
-                        .and_then(|s| s.strip_suffix("\n```"))
-                        .unwrap_or(&composed);
-                    compile_format::layout_block(uris, inner)
-                }
-            }
-
-            Directive::Table { uri, .. } => {
-                match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
-                    Ok((content, fig_file)) => {
-                        crate::compile_validation::lint_figure(
-                            uri,
-                            &content,
-                            &fig_file,
-                            line_start + 1 + source_line_offset,
-                            &runner,
-                            &mut violations,
-                        );
-                        crate::compile_validation::validate_davinci(
-                            uri,
-                            &content,
-                            config,
-                            line_start + source_line_offset,
-                            &mut violations,
-                        );
-                        resolved_count += 1;
-                        compile_format::include_block(uri, &content)
-                    }
-                    Err(e) => {
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity: ViolationSeverity::Error,
-                            uri: uri.clone(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("{}", e),
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
-                }
-            }
+            Directive::Table { uri, .. } => compile_figure::compile_table(
+                uri,
+                root,
+                config,
+                &runner,
+                &mut path_index,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Tree {
                 kind,

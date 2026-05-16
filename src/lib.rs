@@ -12,6 +12,7 @@ pub(crate) mod compile_dashboard;
 #[allow(dead_code)]
 pub mod compile_directive;
 pub(crate) mod compile_element;
+pub(crate) mod compile_figure;
 pub(crate) mod compile_format;
 pub(crate) mod compile_math;
 pub(crate) mod compile_output;
