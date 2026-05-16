@@ -120,11 +120,14 @@ When PROOF source files need corpus side-info during compilation, sync all JSON
 reports into the compiler's default side-info store:
 
 ```text
+proof crop prepare --view .crop/views/ready-guides.json
 proof crop sync --view .crop/views/ready-guides.json
 ```
 
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
+Use `proof crop prepare` when you want the repeatable docs preflight: it first
+strictly inspects `.crop/views`, then runs the same side-info sync.
 When a source uses `proof:backlinks`, `proof compile` records the backlinks JSON
 as a resolved input in `.proof/artifacts.json` and includes it in the compile
 cache key, so rerun `proof crop sync` before compiling when the corpus graph has
@@ -145,7 +148,7 @@ PROOF dogfoods this workflow with `.crop/views/proof-guides.json`, a
 
 ```text
 proof crop view --root src/guides --output .crop/views/proof-guides.json --name proof-guides --extension md
-proof crop sync --view .crop/views/proof-guides.json
+proof crop prepare --view .crop/views/proof-guides.json
 proof crop backlink-list --target 12-crop.source.md --format table
 proof crop heading-list --source 12-crop.source.md --format count
 proof compile src/guides/12-crop.source.md --output docs/guides/12-crop.md

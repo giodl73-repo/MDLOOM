@@ -24,6 +24,8 @@ enum CropCommand {
     Status(StatusArgs),
     /// Validate CROP view recipes in a view store
     InspectViews(InspectViewsArgs),
+    /// Inspect CROP views and sync compiler side-info in one preflight step
+    Prepare(PrepareArgs),
     /// Write a crop.view.v1 recipe from PROOF root/config/tag settings
     View(ViewArgs),
     /// Generate local link side-info
@@ -77,6 +79,19 @@ struct InspectViewsArgs {
     /// Exit non-zero when any view recipe fails inspection
     #[arg(long)]
     strict: bool,
+}
+
+#[derive(clap::Args)]
+struct PrepareArgs {
+    /// View store directory to inspect before syncing side-info
+    #[arg(long = "dir", default_value = ".crop\\views")]
+    dir: PathBuf,
+    /// crop.view.v1 recipe to sync into .proof\side-info
+    #[arg(long, default_value = ".crop\\views\\proof-guides.json")]
+    view: PathBuf,
+    /// Directory where links/backlinks/frontmatter/headings JSON files are written
+    #[arg(long, default_value = ".proof\\side-info")]
+    output_dir: PathBuf,
 }
 
 #[derive(clap::Args)]
@@ -206,6 +221,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
     match args.command {
         CropCommand::Status(status) => run_status(args.crop_bin, status),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect),
+        CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare),
         CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
         CropCommand::Backlinks(side_info) => {
@@ -281,6 +297,29 @@ fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
     }
 
     crop_args
+}
+
+fn run_prepare(crop_bin: PathBuf, args: PrepareArgs) -> Result<()> {
+    let command_args = build_prepare_args(args)?;
+    for crop_args in command_args {
+        run_crop(crop_bin.clone(), crop_args)?;
+    }
+    Ok(())
+}
+
+fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
+    let mut commands = vec![build_inspect_views_args(InspectViewsArgs {
+        dir: args.dir,
+        strict: true,
+    })];
+    commands.extend(build_sync_args(SyncArgs {
+        root: None,
+        view: Some(args.view),
+        output_dir: args.output_dir,
+        extensions: Vec::new(),
+        exclude_dirs: Vec::new(),
+    })?);
+    Ok(commands)
 }
 
 fn run_view(args: ViewArgs, globals: &GlobalOptions) -> Result<()> {
@@ -768,6 +807,35 @@ mod tests {
             args,
             vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
         );
+    }
+
+    #[test]
+    fn prepare_args_inspect_views_then_sync_side_info() {
+        let dir = tempfile::tempdir().unwrap();
+        let output_dir = dir.path().join("side-info");
+        let args = build_prepare_args(PrepareArgs {
+            dir: PathBuf::from(".crop\\views"),
+            view: PathBuf::from(".crop\\views\\proof-guides.json"),
+            output_dir: output_dir.clone(),
+        })
+        .unwrap();
+
+        assert_eq!(args.len(), 5);
+        assert_eq!(
+            args[0],
+            vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
+        );
+        assert_eq!(args[1][0], "links");
+        assert_eq!(args[2][0], "backlinks");
+        assert_eq!(args[3][0], "frontmatter");
+        assert_eq!(args[4][0], "headings");
+        for crop_args in &args[1..] {
+            assert!(crop_args.contains(&"--view".to_string()));
+            assert!(crop_args.contains(&".crop\\views\\proof-guides.json".to_string()));
+            assert!(crop_args.contains(&"--format".to_string()));
+            assert!(crop_args.contains(&"json".to_string()));
+        }
+        assert!(args[2].contains(&output_dir.join("backlinks.json").display().to_string()));
     }
 
     #[test]

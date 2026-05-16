@@ -2036,6 +2036,71 @@ fn binary_crop_sync_generates_all_side_info_reports() {
 }
 
 #[test]
+fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_dir = dir.path().join(".crop").join("views");
+    let view_file = view_dir.join("proof-guides.json");
+    let output_dir = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&view_dir).unwrap();
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("prepare")
+        .arg("--dir")
+        .arg(&view_dir)
+        .arg("--view")
+        .arg(&view_file)
+        .arg("--output-dir")
+        .arg(&output_dir)
+        .output()
+        .expect("failed to run proof crop prepare");
+
+    assert!(
+        output.status.success(),
+        "proof crop prepare failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let lines: Vec<_> = args.lines().collect();
+    assert_eq!(lines.len(), 5, "got: {}", args);
+    assert!(lines[0].contains("view --inspect"), "got: {}", args);
+    assert!(lines[0].contains("--strict"), "got: {}", args);
+    for (line, command) in lines[1..]
+        .iter()
+        .zip(["links", "backlinks", "frontmatter", "headings"])
+    {
+        assert!(line.starts_with(command), "got: {}", args);
+        assert!(line.contains("--format json"), "got: {}", args);
+        assert!(
+            line.contains(&view_file.display().to_string()),
+            "got: {}",
+            args
+        );
+        assert!(
+            line.contains(
+                &output_dir
+                    .join(format!("{}.json", command))
+                    .display()
+                    .to_string()
+            ),
+            "got: {}",
+            args
+        );
+    }
+}
+
+#[test]
 fn binary_crop_backlink_list_renders_target_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
