@@ -16,3 +16,17 @@ pub(crate) fn layout_block(uris: &[String], composed_inner: &str) -> String {
         uris_str, composed_inner
     )
 }
+
+pub(crate) fn element_block(uri: &str, rendered: &str) -> String {
+    format!(
+        "<!-- proof:compiled from=\"proof:element\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        uri, rendered
+    )
+}
+
+pub(crate) fn row_block(uri: &str, rendered: &str) -> String {
+    format!(
+        "<!-- proof:compiled from=\"proof:row\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        uri, rendered
+    )
+}

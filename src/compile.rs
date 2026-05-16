@@ -692,30 +692,16 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         .trim()
                         .to_string();
 
-                    // Parse foreach=VAR in URI
-                    let (var_name, source_uri) = parse_foreach(&info_after);
-                    let separator = extract_attr_value(&info_after, "separator")
-                        .unwrap_or_else(|| " ".to_string());
-                    let declared_width =
-                        extract_attr_value(&info_after, "width").and_then(|v| v.parse().ok());
-                    let no_chrome = info_after
-                        .split_whitespace()
-                        .any(|t| t == "no-chrome" || t == "no-chrome=true" || t == "no-chrome=1");
+                    let row = compile_directive::parse_row_directive(&info_after, &body);
 
-                    // Body lines: each "proof:element ..." line becomes a RowElement
-                    let elements: Vec<RowElement> = body
-                        .iter()
-                        .filter_map(|l| parse_row_element_line(l.trim()))
-                        .collect();
-
-                    if !source_uri.is_empty() {
+                    if !row.source_uri.is_empty() {
                         directives.push(Directive::Row {
-                            source_uri,
-                            var_name,
-                            separator,
-                            declared_width,
-                            elements,
-                            no_chrome,
+                            source_uri: row.source_uri,
+                            var_name: row.var_name,
+                            separator: row.separator,
+                            declared_width: row.declared_width,
+                            elements: row.elements,
+                            no_chrome: row.no_chrome,
                             line_start,
                             line_end,
                         });
@@ -2259,7 +2245,7 @@ fn compile_element(
             if attrs.no_chrome {
                 rendered
             } else {
-                format_element_block(uri_str, &rendered)
+                compile_format::element_block(uri_str, &rendered)
             }
         }
         Err(ElementError::WidthExceeded { actual, budget }) => {
@@ -2290,74 +2276,6 @@ fn compile_element(
             source_fallback(source_lines, source_line, line_end)
         }
     }
-}
-
-fn format_element_block(uri: &str, rendered: &str) -> String {
-    format!(
-        "<!-- proof:compiled from=\"proof:element\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-        uri, rendered
-    )
-}
-
-fn format_row_block(uri: &str, rendered: &str) -> String {
-    format!(
-        "<!-- proof:compiled from=\"proof:row\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-        uri, rendered
-    )
-}
-
-// ─────────────────────────────────────────────────────────
-// proof:row foreach parsing helpers
-// ─────────────────────────────────────────────────────────
-
-/// Parse `foreach=VAR in URI` from the info string after `proof:row`.
-/// Returns (var_name, source_uri). Both empty strings on parse failure.
-fn parse_foreach(info: &str) -> (String, String) {
-    // Supports two forms:
-    //   source=md://file.md foreach=row    (attr style — source= anywhere)
-    //   foreach=row in md://file.md        (positional style — md:// after foreach=)
-    let mut var_name = String::new();
-    let mut source_uri = String::new();
-
-    // Check source= attr first
-    if let Some(s) = extract_attr_value(info, "source") {
-        if s.starts_with("md://") || s.contains('/') {
-            source_uri = s;
-        }
-    }
-
-    for tok in info.split_whitespace() {
-        if tok.starts_with("foreach=") {
-            var_name = tok["foreach=".len()..].to_string();
-        } else if tok.starts_with("md://") && source_uri.is_empty() {
-            source_uri = tok.to_string();
-        }
-    }
-    (var_name, source_uri)
-}
-
-/// Parse a body line of the form `proof:element kind=X field=Y width=N ...`
-/// into a RowElement. Returns None if the line doesn't start with `proof:element`.
-fn parse_row_element_line(line: &str) -> Option<RowElement> {
-    let rest = line.strip_prefix("proof:element")?.trim();
-    let attrs = ElementAttrs::parse(rest);
-    let kind_str = extract_attr_value(rest, "kind").unwrap_or_else(|| "value".to_string());
-    let kind = ElementKind::parse(&kind_str)?;
-    let field = extract_attr_value(rest, "field").unwrap_or_default();
-    let width = attrs.width.unwrap_or(0);
-    if field.is_empty() || width == 0 {
-        return None;
-    }
-    Some(RowElement {
-        kind,
-        field,
-        width,
-        align: ElementAlign::parse(&attrs.align),
-        format: attrs.format,
-        max: attrs.max,
-        fill_char: attrs.fill,
-        empty_char: attrs.empty,
-    })
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2471,7 +2389,7 @@ fn compile_row(
             if no_chrome {
                 rendered
             } else {
-                format_row_block(source_uri, &rendered)
+                compile_format::row_block(source_uri, &rendered)
             }
         }
         Err(e) => {
@@ -3581,8 +3499,9 @@ mod tests {
 
     #[test]
     fn test_parse_foreach_extracts_var_and_uri() {
-        let (var, uri) =
-            parse_foreach("foreach=player in md://stats.md#edm:table:0 separator=\" \"");
+        let (var, uri) = compile_directive::parse_foreach(
+            "foreach=player in md://stats.md#edm:table:0 separator=\" \"",
+        );
         assert_eq!(var, "player");
         assert_eq!(uri, "md://stats.md#edm:table:0");
     }
@@ -3591,9 +3510,10 @@ mod tests {
 
     #[test]
     fn test_parse_row_element_line_label() {
-        let elem =
-            parse_row_element_line("proof:element kind=label field=name width=12 align=left")
-                .unwrap();
+        let elem = compile_directive::parse_row_element_line(
+            "proof:element kind=label field=name width=12 align=left",
+        )
+        .unwrap();
         assert_eq!(elem.field, "name");
         assert_eq!(elem.width, 12);
         assert!(matches!(elem.kind, ElementKind::Label));
@@ -3601,8 +3521,10 @@ mod tests {
 
     #[test]
     fn test_parse_row_element_line_mini_bar_with_max() {
-        let elem = parse_row_element_line("proof:element kind=mini-bar field=pts width=10 max=200")
-            .unwrap();
+        let elem = compile_directive::parse_row_element_line(
+            "proof:element kind=mini-bar field=pts width=10 max=200",
+        )
+        .unwrap();
         assert_eq!(elem.field, "pts");
         assert_eq!(elem.width, 10);
         assert_eq!(elem.max, Some(200.0));
@@ -3611,8 +3533,8 @@ mod tests {
 
     #[test]
     fn test_parse_row_element_line_non_element_returns_none() {
-        assert!(parse_row_element_line("# Comment").is_none());
-        assert!(parse_row_element_line("md://stats.md").is_none());
+        assert!(compile_directive::parse_row_element_line("# Comment").is_none());
+        assert!(compile_directive::parse_row_element_line("md://stats.md").is_none());
     }
 
     // ── R-1 violation via compile (no I/O — inline table) ─
