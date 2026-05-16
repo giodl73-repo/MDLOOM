@@ -306,51 +306,26 @@ pub fn compile_file(
                 size,
                 align: _,
                 ..
-            } => match compile_symbol::render_symbol_compiled(name, *size) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: e.code,
-                        severity: if e.is_warning {
-                            ViolationSeverity::Warning
-                        } else {
-                            ViolationSeverity::Error
-                        },
-                        uri: String::new(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: e.message,
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    source_lines[line_start..=line_end].join("\n")
-                }
-            },
+            } => compile_symbol::compile_symbol(
+                name,
+                *size,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
-            Directive::Shape { attrs, .. } => match compile_symbol::render_shape_compiled(attrs) {
-                Ok(rendered) => {
-                    resolved_count += 1;
-                    rendered
-                }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: e.code,
-                        severity: if e.is_warning {
-                            ViolationSeverity::Warning
-                        } else {
-                            ViolationSeverity::Error
-                        },
-                        uri: String::new(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: e.message,
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    source_lines[line_start..=line_end].join("\n")
-                }
-            },
+            Directive::Shape { attrs, .. } => compile_symbol::compile_shape(
+                attrs,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Region { name, .. } => {
                 // proof:region is only valid inside a .dashboard.source.md file —
@@ -378,22 +353,16 @@ pub fn compile_file(
                 align,
                 no_chrome,
                 ..
-            } => {
-                let rendered = compile_math::render_math_compiled(expr, *width, *align, *no_chrome);
-                resolved_count += 1;
-                for d in &rendered.diagnostics {
-                    violations.push(CompileViolation {
-                        code: d.code,
-                        severity: ViolationSeverity::Warning,
-                        uri: String::new(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: d.message.clone(),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                }
-                rendered.block
-            }
+            } => compile_math::compile_math(
+                expr,
+                *width,
+                *align,
+                *no_chrome,
+                line_start,
+                source_line_offset,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Toc {
                 source,
