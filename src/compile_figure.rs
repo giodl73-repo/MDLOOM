@@ -218,3 +218,44 @@ fn push_resolve_error(
         source_line: line_start + 1 + source_line_offset,
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn include_pin_missing_in_config_emits_compile_007() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("myfig.md"), "```\ncontent\n```\n").unwrap();
+
+        let cfg = GlintConfig::default();
+        let runner = Runner::new(dir.path(), cfg.clone()).expect("runner");
+        let mut path_index = PathIndex::new();
+        let mut violations = Vec::new();
+        let source_lines = vec!["```proof:include pin=my-pin", "md://myfig.md", "```"];
+        let mut resolved_count = 0usize;
+
+        let rendered = compile_include(
+            "md://myfig.md",
+            Some(&"my-pin".to_string()),
+            dir.path(),
+            &cfg,
+            &runner,
+            &mut path_index,
+            0,
+            2,
+            0,
+            &source_lines,
+            &mut violations,
+            &mut resolved_count,
+        );
+
+        assert!(rendered.contains("content"), "include should resolve");
+        assert_eq!(resolved_count, 1);
+        assert!(
+            violations.iter().any(|v| v.code == "COMPILE-007"),
+            "missing DaVinci pin should emit COMPILE-007, got: {:?}",
+            violations.iter().map(|v| v.code).collect::<Vec<_>>()
+        );
+    }
+}

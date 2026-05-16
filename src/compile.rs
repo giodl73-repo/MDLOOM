@@ -449,37 +449,3 @@ pub fn compile_file(
         written: true,
     })
 }
-
-// ─────────────────────────────────────────────────────────
-// Output formatting with traceability
-// ─────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn include_pin_missing_in_config_emits_compile_007() {
-        let dir = tempfile::tempdir().unwrap();
-        // Write the figure file the source will include
-        std::fs::write(dir.path().join("myfig.md"), "```\ncontent\n```\n").unwrap();
-
-        let src_path = dir.path().join("test.source.md");
-        let out_path = dir.path().join("test.md");
-        let src = "```proof:include pin=my-pin\nmd://myfig.md\n```\n";
-        std::fs::write(&src_path, src).unwrap();
-
-        let cfg = GlintConfig::default(); // no davinci entries
-        let result = compile_file(&src_path, &out_path, dir.path(), &cfg).expect("compile ok");
-
-        assert!(
-            result.violations.iter().any(|v| v.code == "COMPILE-007"),
-            "missing DaVinci pin should emit COMPILE-007, got: {:?}",
-            result.violations.iter().map(|v| v.code).collect::<Vec<_>>()
-        );
-    }
-}
