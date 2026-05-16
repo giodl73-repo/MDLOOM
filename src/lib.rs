@@ -5,6 +5,7 @@ pub mod cache;
 pub mod chart;
 pub mod checks;
 pub mod compile;
+pub(crate) mod compile_cache;
 #[allow(dead_code)]
 pub mod compile_chart;
 pub(crate) mod compile_crop;

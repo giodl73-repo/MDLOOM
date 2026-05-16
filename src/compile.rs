@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+use crate::compile_cache;
 use crate::compile_chart;
 use crate::compile_crop;
 use crate::compile_directive;
@@ -103,38 +104,23 @@ pub fn compile_file(
     let compile_attrs = format!(r#"{{"frontmatter_offset":{}}}"#, source_line_offset);
     let directives = collect_directives(source_body);
 
-    // ── Tier 3 cache check ──────────────────────────────────────────────
-    // Build a minimal directive-attrs JSON for cache keying, then check Tier 3.
-    // On hit: write cached output (skip if identical), return early with from_cache=true.
     let mut path_index = crate::cache::load_path_index(root);
     let resolved_files = compile_crop::side_info_dependencies(&directives, root);
     let dependency_parse_keys =
         compile_crop::dependency_parse_keys(&resolved_files, &mut path_index);
-    {
-        let source_parse_key =
-            crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
-        let cache_key =
-            crate::cache::compile_key(&source_parse_key, &dependency_parse_keys, &compile_attrs);
-        if let Some(entry) = crate::cache::load_compile_cache(root, &cache_key) {
-            let current = std::fs::read_to_string(output_path).unwrap_or_default();
-            let written = current != entry.compiled_text;
-            if written {
-                let tmp = output_path.with_extension("proof_tmp");
-                let _ = std::fs::write(&tmp, &entry.compiled_text);
-                let _ = std::fs::rename(&tmp, output_path);
-            }
-            crate::cache::save_path_index(root, &path_index);
-            return Ok(CompileResult {
-                output_path: output_path.to_path_buf(),
-                directives_resolved: entry.directives_resolved,
-                violations: vec![],
-                from_cache: true,
-                resolved_files,
-                written,
-            });
-        }
+
+    if let Some(result) = compile_cache::restore_compile_cache(
+        root,
+        source_path,
+        output_path,
+        &source_text,
+        &compile_attrs,
+        &resolved_files,
+        &dependency_parse_keys,
+        &mut path_index,
+    )? {
+        return Ok(result);
     }
-    // ────────────────────────────────────────────────────────────────────
 
     let source_lines: Vec<&str> = source_body.lines().collect();
 
@@ -481,39 +467,19 @@ pub fn compile_file(
         output_text.push('\n');
     }
 
-    // Atomic write: temp-then-rename
-    let tmp = output_path.with_extension("proof_tmp");
-    std::fs::write(&tmp, &output_text)
-        .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
-    std::fs::rename(&tmp, output_path)
-        .map_err(|e| anyhow::anyhow!("renaming output {}: {}", output_path.display(), e))?;
-
-    // ── Store to Tier 3 cache ───────────────────────────────────────────
-    {
-        let source_parse_key =
-            crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
-        let cache_key =
-            crate::cache::compile_key(&source_parse_key, &dependency_parse_keys, &compile_attrs);
-        let entry = crate::cache::CompileCacheEntry {
-            compile_key: cache_key,
-            source_path: source_path.to_string_lossy().to_string(),
-            output_path: output_path.to_string_lossy().to_string(),
-            compiled_text: output_text.clone(),
-            resolved_uris: resolved_files
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect(),
-            proof_version: env!("CARGO_PKG_VERSION").to_string(),
-            created_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-            directives_resolved: resolved_count,
-        };
-        crate::cache::save_compile_cache(root, &entry);
-        crate::cache::save_path_index(root, &path_index);
-    }
-    // ────────────────────────────────────────────────────────────────────
+    compile_output::atomic_write(output_path, &output_text)?;
+    compile_cache::store_compile_cache(
+        root,
+        source_path,
+        output_path,
+        &source_text,
+        &output_text,
+        &compile_attrs,
+        &resolved_files,
+        &dependency_parse_keys,
+        resolved_count,
+        &mut path_index,
+    );
 
     Ok(CompileResult {
         output_path: output_path.to_path_buf(),

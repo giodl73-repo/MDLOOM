@@ -1,5 +1,14 @@
 use std::path::{Path, PathBuf};
 
+pub(crate) fn atomic_write(output_path: &Path, text: &str) -> anyhow::Result<()> {
+    let tmp = output_path.with_extension("proof_tmp");
+    std::fs::write(&tmp, text)
+        .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
+    std::fs::rename(&tmp, output_path)
+        .map_err(|e| anyhow::anyhow!("renaming output {}: {}", output_path.display(), e))?;
+    Ok(())
+}
+
 pub(crate) fn apply_replacements(
     source_lines: &[&str],
     replacements: &[(usize, usize, String)],
