@@ -86,7 +86,12 @@ pub fn compile_file(
         .map(|n| n.ends_with(".dashboard.source.md"))
         .unwrap_or(false)
     {
-        return compile_dashboard_file(source_path, output_path, root, config);
+        return crate::compile_dashboard::compile_dashboard_file(
+            source_path,
+            output_path,
+            root,
+            config,
+        );
     }
 
     let source_text = std::fs::read_to_string(source_path)
@@ -956,198 +961,13 @@ pub(crate) fn source_fallback(
 }
 
 // ─────────────────────────────────────────────────────────
-// Dashboard compile pipeline
+// Dashboard compile helpers
 // ─────────────────────────────────────────────────────────
-//
-// .dashboard.source.md files are routed here from compile_file. The pipeline:
-//   1. Read source, split YAML front-matter from body
-//   2. Parse front-matter → DashboardMeta + Vec<RegionGeometry>
-//   3. Validate region geometry (D-2, D-3) → DASHBOARD-001..003
-//   4. For each proof:region directive in body:
-//        - look up declared region by name (else DASHBOARD-004)
-//        - render body lines (literals verbatim; directives via inner compile pass
-//          with no-chrome implied)
-//   5. Hand the (meta, regions, content map) to dashboard::region::compile_dashboard
-//   6. Write the canvas string to the output path
-
-fn compile_dashboard_file(
-    source_path: &Path,
-    output_path: &Path,
-    root: &Path,
-    config: &GlintConfig,
-) -> Result<CompileResult> {
-    use crate::dashboard::region::{
-        compile_dashboard, parse_dashboard_frontmatter, DashboardError, RegionGeometry,
-    };
-
-    let source_text = std::fs::read_to_string(source_path)
-        .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
-
-    let mut violations: Vec<CompileViolation> = Vec::new();
-    let mut resolved_count = 0usize;
-
-    // ── 1. Split YAML front-matter from body ──────────────
-    let (frontmatter, body, body_offset) = split_frontmatter(&source_text);
-
-    // ── 2. Parse front-matter ─────────────────────────────
-    let (meta, regions) = parse_dashboard_frontmatter(&frontmatter);
-
-    // DASHBOARD-006: canvas wider than the standard terminal threshold
-    const CANVAS_WARN_WIDTH: usize = 220;
-    if meta.width > CANVAS_WARN_WIDTH {
-        violations.push(CompileViolation {
-            code: "DASHBOARD-006",
-            severity: ViolationSeverity::Warning,
-            uri: String::new(),
-            figure_id: None,
-            invariant: String::new(),
-            message: format!(
-                "Canvas width {} exceeds terminal threshold {} — reduce or set a --width flag",
-                meta.width, CANVAS_WARN_WIDTH
-            ),
-            source_line: 1,
-        });
-    }
-
-    // ── 3. Collect proof:region directives from the body ──
-    let directives = collect_directives(body);
-
-    // Build runner once for nested figure linting
-    let runner = Runner::new(root, config.clone())?;
-
-    // Build a map of region name → declared geometry for quick lookup
-    let mut region_by_name: std::collections::HashMap<String, &RegionGeometry> =
-        std::collections::HashMap::new();
-    for r in &regions {
-        region_by_name.insert(r.name.clone(), r);
-    }
-
-    // ── 4. Render each proof:region's content ─────────────
-    let mut region_contents: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-
-    for directive in &directives {
-        if let Directive::Region {
-            name,
-            body,
-            line_start,
-            ..
-        } = directive
-        {
-            let abs_line = body_offset + line_start;
-
-            // DASHBOARD-004: region name not declared in front-matter
-            if !region_by_name.contains_key(name) {
-                violations.push(CompileViolation {
-                    code: "DASHBOARD-004",
-                    severity: ViolationSeverity::Error,
-                    uri: String::new(),
-                    figure_id: None,
-                    invariant: String::new(),
-                    message: format!(
-                        "proof:region {:?} has no matching front-matter declaration",
-                        name
-                    ),
-                    source_line: abs_line + 1,
-                });
-                continue;
-            }
-
-            // Render body lines: literals verbatim, directives via inner compile pass
-            let rendered = render_region_body(
-                body,
-                root,
-                config,
-                &runner,
-                abs_line,
-                &mut violations,
-                &mut resolved_count,
-            );
-            region_contents.insert(name.clone(), rendered);
-        }
-    }
-
-    // Stop here on any error before painting the canvas
-    let has_errors = violations
-        .iter()
-        .any(|v| v.severity == ViolationSeverity::Error);
-    if has_errors {
-        return Ok(CompileResult {
-            output_path: output_path.to_path_buf(),
-            directives_resolved: resolved_count,
-            violations,
-            from_cache: false,
-            resolved_files: vec![],
-            written: false,
-        });
-    }
-
-    // ── 5. Composite the canvas ───────────────────────────
-    let (canvas_text, dashboard_errors) = compile_dashboard(&meta, &regions, &region_contents);
-
-    for de in dashboard_errors {
-        let DashboardError { code, message } = de;
-        let severity = match code {
-            // 005 (height overflow) is a warning per spec; 001/002/003/004 are errors
-            "DASHBOARD-005" => ViolationSeverity::Warning,
-            _ => ViolationSeverity::Error,
-        };
-        violations.push(CompileViolation {
-            code,
-            severity,
-            uri: String::new(),
-            figure_id: None,
-            invariant: String::new(),
-            message,
-            source_line: 1,
-        });
-    }
-
-    let has_errors = violations
-        .iter()
-        .any(|v| v.severity == ViolationSeverity::Error);
-    if has_errors {
-        return Ok(CompileResult {
-            output_path: output_path.to_path_buf(),
-            directives_resolved: resolved_count,
-            violations,
-            from_cache: false,
-            resolved_files: vec![],
-            written: false,
-        });
-    }
-
-    // ── 6. Wrap in fence + traceability comment, write atomically ─
-    let title_attr = if meta.title.is_empty() {
-        String::new()
-    } else {
-        format!(" title=\"{}\"", meta.title)
-    };
-    let output_text = format!(
-        "<!-- proof:compiled from=\"proof:dashboard\"{} -->\n```dashboard\n{}```\n<!-- /proof:compiled -->\n",
-        title_attr, canvas_text
-    );
-
-    let tmp = output_path.with_extension("proof_tmp");
-    std::fs::write(&tmp, &output_text)
-        .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
-    std::fs::rename(&tmp, output_path)
-        .map_err(|e| anyhow::anyhow!("renaming output {}: {}", output_path.display(), e))?;
-
-    Ok(CompileResult {
-        output_path: output_path.to_path_buf(),
-        directives_resolved: resolved_count,
-        violations,
-        from_cache: false,
-        resolved_files: vec![],
-        written: true,
-    })
-}
 
 /// Split a `.dashboard.source.md` source into (frontmatter_yaml, body, body_offset_in_lines).
 /// Front-matter is the block between the opening `---` on line 0 and the next `---`.
 /// If no front-matter is present, returns ("", source, 0).
-fn split_frontmatter(source: &str) -> (String, &str, usize) {
+pub(crate) fn split_frontmatter(source: &str) -> (String, &str, usize) {
     let lines: Vec<&str> = source.lines().collect();
     if lines.first().map(|l| l.trim()) != Some("---") {
         return (String::new(), source, 0);
@@ -1173,7 +993,7 @@ fn split_frontmatter(source: &str) -> (String, &str, usize) {
 /// directive lines (proof:element/proof:row/proof:tree/proof:symbol/proof:shape)
 /// dispatched through the same per-directive renderers used by compile_file —
 /// with `no-chrome` implied so the canvas paste sees raw glyphs only.
-fn render_region_body(
+pub(crate) fn render_region_body(
     body: &[String],
     root: &Path,
     config: &GlintConfig,

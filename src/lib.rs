@@ -8,6 +8,7 @@ pub mod compile;
 #[allow(dead_code)]
 pub mod compile_chart;
 pub(crate) mod compile_crop;
+pub(crate) mod compile_dashboard;
 #[allow(dead_code)]
 pub mod compile_directive;
 pub(crate) mod compile_element;
