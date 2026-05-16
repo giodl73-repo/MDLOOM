@@ -1890,6 +1890,45 @@ fn binary_crop_status_delegates_to_crop_status() {
 }
 
 #[test]
+fn binary_crop_status_uses_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let output_path = dir.path().join("GLOBAL_STATUS.md");
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("status")
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .expect("failed to run proof crop status");
+
+    assert!(
+        output.status.success(),
+        "proof crop status failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("--output"), "got: {}", args);
+    assert!(
+        args.contains(&output_path.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
 fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
     let bin = debug_bin();
     if !bin.exists() {
@@ -2344,6 +2383,50 @@ fn binary_crop_link_list_writes_table_output() {
     let rendered = std::fs::read_to_string(&output_path).unwrap();
     assert!(rendered.contains("| Source | Target | Status | Resolved | Error |"));
     assert!(rendered.contains("| `README.md` | `missing.md` | `broken` | `` | missing target |"));
+}
+
+#[test]
+fn binary_crop_link_list_uses_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("links.json");
+    let output_path = dir.path().join("GLOBAL_LINKS.md");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "links": [
+    { "source": "README.md", "target": "missing.md", "status": "broken", "error": "missing target" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("crop")
+        .arg("link-list")
+        .arg("--status")
+        .arg("broken")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--format")
+        .arg("table")
+        .output()
+        .expect("failed to run proof crop link-list");
+
+    assert!(
+        output.status.success(),
+        "proof crop link-list failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = std::fs::read_to_string(&output_path).unwrap();
+    assert!(rendered.contains("| Source | Target | Status | Resolved | Error |"));
+    assert!(output.stdout.is_empty());
 }
 
 #[test]

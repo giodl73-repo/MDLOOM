@@ -60,6 +60,9 @@ For the same CROP-backed health surface from the top-level status command, use
 proof status --crop --view .crop/views/ready-guides.json --crop-format json --strict --strict-on broken-links -o READY_GUIDES.status.json
 ```
 
+`proof crop status` also honors PROOF's global `-o/--output` when command-local
+`--output` is not supplied.
+
 You can pass the same generic filters CROP exposes:
 
 ```text
@@ -147,6 +150,8 @@ proof crop headings --view .crop/views/ready-guides.json --output .proof/side-in
 Each report also accepts `--root`, `--extension`, `--exclude-dir`, `--format
 json`, and `--format markdown`. PROOF relays CROP's exit code so CI can fail on
 CROP-side report errors without PROOF reimplementing those checks.
+The report wrappers and snippet list commands honor global `-o/--output` when
+their command-local `--output` is omitted.
 
 When PROOF source files need corpus side-info during compilation, sync all JSON
 reports into the compiler's default side-info store:

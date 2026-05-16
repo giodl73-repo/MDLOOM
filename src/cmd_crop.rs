@@ -291,30 +291,33 @@ struct SyncArgs {
 
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
-        CropCommand::Status(status) => run_status(args.crop_bin, status),
+        CropCommand::Status(status) => run_status(args.crop_bin, status, globals),
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect),
         CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare),
         CropCommand::View(view) => run_view(view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
-        CropCommand::LinkList(link_list) => run_link_list(link_list),
+        CropCommand::LinkList(link_list) => run_link_list(link_list, globals),
         CropCommand::Backlinks(side_info) => {
             run_side_info(args.crop_bin, "backlinks", side_info, globals)
         }
-        CropCommand::BacklinkList(backlink_list) => run_backlink_list(backlink_list),
+        CropCommand::BacklinkList(backlink_list) => run_backlink_list(backlink_list, globals),
         CropCommand::Frontmatter(side_info) => {
             run_side_info(args.crop_bin, "frontmatter", side_info, globals)
         }
-        CropCommand::FrontmatterList(frontmatter_list) => run_frontmatter_list(frontmatter_list),
+        CropCommand::FrontmatterList(frontmatter_list) => {
+            run_frontmatter_list(frontmatter_list, globals)
+        }
         CropCommand::Headings(side_info) => {
             run_side_info(args.crop_bin, "headings", side_info, globals)
         }
-        CropCommand::HeadingList(heading_list) => run_heading_list(heading_list),
+        CropCommand::HeadingList(heading_list) => run_heading_list(heading_list, globals),
         CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
         CropCommand::Sync(sync) => run_sync(args.crop_bin, sync),
     }
 }
 
-fn run_status(crop_bin: PathBuf, args: StatusArgs) -> Result<()> {
+fn run_status(crop_bin: PathBuf, mut args: StatusArgs, globals: &GlobalOptions) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     run_crop(crop_bin, build_status_args(args)?)
 }
 
@@ -676,12 +679,14 @@ fn run_side_info(
     run_crop(crop_bin, build_side_info_args(command, args, globals)?)
 }
 
-fn run_backlink_list(args: BacklinkListArgs) -> Result<()> {
+fn run_backlink_list(mut args: BacklinkListArgs, globals: &GlobalOptions) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
-fn run_link_list(args: LinkListArgs) -> Result<()> {
+fn run_link_list(mut args: LinkListArgs, globals: &GlobalOptions) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     let status = link_status_filter(&args.status)?;
     let filter = crop_side_info::LinkFilter {
         source: args.source,
@@ -699,12 +704,14 @@ fn link_status_filter(status: &str) -> Result<Option<String>> {
     }
 }
 
-fn run_heading_list(args: HeadingListArgs) -> Result<()> {
+fn run_heading_list(mut args: HeadingListArgs, globals: &GlobalOptions) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     let rendered = crop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
-fn run_frontmatter_list(args: FrontmatterListArgs) -> Result<()> {
+fn run_frontmatter_list(mut args: FrontmatterListArgs, globals: &GlobalOptions) -> Result<()> {
+    apply_global_output(&mut args.output, globals);
     let filter = crop_side_info::FrontmatterFilter {
         field: args.field,
         value: args.value,
@@ -734,6 +741,12 @@ fn write_snippet(rendered: String, output: Option<PathBuf>) -> Result<()> {
         println!("{}", rendered);
     }
     Ok(())
+}
+
+fn apply_global_output(output: &mut Option<PathBuf>, globals: &GlobalOptions) {
+    if output.is_none() {
+        *output = globals.output().clone();
+    }
 }
 
 fn build_side_info_args(
@@ -767,7 +780,8 @@ fn build_side_info_args(
     }
     crop_args.push("--format".to_string());
     crop_args.push(crop_report_format(globals)?);
-    if let Some(output) = args.output {
+    let output = args.output.or_else(|| globals.output().clone());
+    if let Some(output) = output {
         crop_args.push("--output".to_string());
         crop_args.push(output.display().to_string());
     }
@@ -795,7 +809,8 @@ fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<
     }
     crop_args.push("--format".to_string());
     crop_args.push(crop_report_format(globals)?);
-    if let Some(output) = args.output {
+    let output = args.output.or_else(|| globals.output().clone());
+    if let Some(output) = output {
         crop_args.push("--output".to_string());
         crop_args.push(output.display().to_string());
     }
@@ -898,6 +913,10 @@ mod tests {
         GlobalOptions::new(None, format.to_string(), false, false, None)
     }
 
+    fn globals_with_output(format: &str, output: PathBuf) -> GlobalOptions {
+        GlobalOptions::new(None, format.to_string(), false, false, Some(output))
+    }
+
     #[test]
     fn status_args_map_to_crop_status() {
         let args = build_status_args(StatusArgs {
@@ -963,6 +982,40 @@ mod tests {
                 "json",
                 "--output",
                 "READY.status.json",
+            ]
+        );
+    }
+
+    #[test]
+    fn status_uses_global_output_when_local_output_missing() {
+        let mut status = StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: "markdown".to_string(),
+            output: None,
+        };
+        apply_global_output(
+            &mut status.output,
+            &globals_with_output("text", PathBuf::from("STATUS.md")),
+        );
+
+        let args = build_status_args(status).unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status",
+                "--root",
+                "docs",
+                "--format",
+                "markdown",
+                "--output",
+                "STATUS.md"
             ]
         );
     }
@@ -1256,6 +1309,35 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
+    fn side_info_uses_global_output_when_local_output_missing() {
+        let args = build_side_info_args(
+            "links",
+            SideInfoArgs {
+                root: Some(PathBuf::from("docs")),
+                view: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                output: None,
+            },
+            &globals_with_output("text", PathBuf::from("links.json")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "links",
+                "--root",
+                "docs",
+                "--format",
+                "json",
+                "--output",
+                "links.json"
+            ]
+        );
+    }
+
+    #[test]
     fn side_info_rejects_unsupported_global_format() {
         let err = build_side_info_args(
             "links",
@@ -1291,6 +1373,32 @@ exclude = ["target/**", "node_modules/**"]
                 "artifacts",
                 "--manifest",
                 ".proof\\artifacts.json",
+                "--format",
+                "markdown",
+                "--output",
+                "ARTIFACTS.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn artifacts_uses_global_output_when_local_output_missing() {
+        let args = build_artifacts_args(
+            ArtifactsArgs {
+                root: Some(PathBuf::from(".")),
+                manifest: None,
+                output: None,
+            },
+            &globals_with_output("markdown", PathBuf::from("ARTIFACTS.md")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "artifacts",
+                "--root",
+                ".",
                 "--format",
                 "markdown",
                 "--output",
