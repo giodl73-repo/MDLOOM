@@ -183,7 +183,9 @@ Add `--output inspect.json` or global `-o inspect.json` to save CROP's JSON
 inspection report as a CI or review artifact; PROOF writes the captured report
 even when strict inspection returns a non-zero exit code. Inspection reports are
 JSON-only, so non-JSON global formats such as `-f markdown` are rejected before
-CROP is invoked.
+CROP is invoked. Strict mode applies to store inspection (`--dir`) and is
+rejected with single-file inspection (`--file`) because a single invalid recipe
+already fails during inspection.
 
 ---
 
@@ -220,8 +222,8 @@ This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `-o/--output` is rejected; use `--output-dir` to choose the destination
 directory.
 Use `proof crop prepare` when you want the repeatable docs preflight: it first
-strictly inspects `.crop/views` and the exact `--view` recipe, then runs the
-same side-info sync.
+strictly inspects `.crop/views`, inspects the exact `--view` recipe, then runs
+the same side-info sync.
 When a source uses `proof:links`, `proof:backlinks`, `proof:headings`, or
 `proof:frontmatter`, `proof compile` records the matching CROP JSON as a
 resolved input in `.proof/artifacts.json` and includes it in the compile cache

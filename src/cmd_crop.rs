@@ -494,6 +494,9 @@ fn run_inspect_views(
 }
 
 fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
+    if args.file.is_some() && args.strict {
+        bail!("proof crop inspect-views --strict requires store inspection with --dir");
+    }
     if args.file.is_none()
         && (args.query.is_some() || !args.extensions.is_empty() || !args.exclude_dirs.is_empty())
     {
@@ -582,7 +585,7 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
     commands.push(build_inspect_views_args(InspectViewsArgs {
         file: Some(view.clone()),
         dir: PathBuf::from(".crop\\views"),
-        strict: true,
+        strict: false,
         query: None,
         extensions: Vec::new(),
         exclude_dirs: Vec::new(),
@@ -1554,6 +1557,22 @@ mod tests {
     }
 
     #[test]
+    fn inspect_views_rejects_strict_single_file() {
+        let err = build_inspect_views_args(InspectViewsArgs {
+            file: Some(PathBuf::from(".crop\\views\\ready.json")),
+            dir: PathBuf::from(".crop\\views"),
+            strict: true,
+            query: None,
+            extensions: Vec::new(),
+            exclude_dirs: Vec::new(),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires store inspection"));
+    }
+
+    #[test]
     fn inspect_views_rejects_non_json_global_format() {
         let err = reject_non_json_inspect_format(&globals("markdown")).unwrap_err();
 
@@ -1606,8 +1625,7 @@ mod tests {
                 "view",
                 "--inspect",
                 "--file",
-                ".crop\\views\\proof-guides.json",
-                "--strict"
+                ".crop\\views\\proof-guides.json"
             ]
         );
         assert_eq!(args[2][0], "links");
