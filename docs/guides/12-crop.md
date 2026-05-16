@@ -185,7 +185,8 @@ even when strict inspection returns a non-zero exit code. Inspection reports are
 JSON-only, so non-JSON global formats such as `-f markdown` are rejected before
 CROP is invoked. Strict mode applies to store inspection (`--dir`) and is
 rejected with single-file inspection (`--file`) because a single invalid recipe
-already fails during inspection.
+already fails during inspection. `--file` and a custom `--dir` are mutually
+exclusive so a store path is not silently ignored during single-file inspection.
 
 ---
 

@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
 const DEFAULT_VIEW_OUTPUT: &str = ".crop\\views\\proof-view.json";
+const DEFAULT_VIEW_DIR: &str = ".crop\\views";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -103,7 +104,7 @@ pub(crate) struct CropStatusRequest {
 #[derive(clap::Args)]
 struct ListViewsArgs {
     /// View store directory to list. Defaults to .crop\views
-    #[arg(long, default_value = ".crop\\views")]
+    #[arg(long, default_value = DEFAULT_VIEW_DIR)]
     dir: PathBuf,
     /// Optional JSON output path. Defaults to CROP stdout
     #[arg(long)]
@@ -138,7 +139,7 @@ struct InspectViewsArgs {
 #[derive(clap::Args)]
 struct PrepareArgs {
     /// View store directory to inspect before syncing side-info
-    #[arg(long = "dir", default_value = ".crop\\views")]
+    #[arg(long = "dir", default_value = DEFAULT_VIEW_DIR)]
     dir: PathBuf,
     /// crop.view.v1 recipe to sync into .proof\side-info
     #[arg(long, default_value = ".crop\\views\\proof-guides.json")]
@@ -496,6 +497,9 @@ fn run_inspect_views(
 fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
     if args.file.is_some() && args.strict {
         bail!("proof crop inspect-views --strict requires store inspection with --dir");
+    }
+    if args.file.is_some() && args.dir != PathBuf::from(DEFAULT_VIEW_DIR) {
+        bail!("proof crop inspect-views accepts either --file or --dir, not both");
     }
     if args.file.is_none()
         && (args.query.is_some() || !args.extensions.is_empty() || !args.exclude_dirs.is_empty())
@@ -1570,6 +1574,22 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("requires store inspection"));
+    }
+
+    #[test]
+    fn inspect_views_rejects_file_and_custom_dir() {
+        let err = build_inspect_views_args(InspectViewsArgs {
+            file: Some(PathBuf::from(".crop\\views\\ready.json")),
+            dir: PathBuf::from("other\\views"),
+            strict: false,
+            query: None,
+            extensions: Vec::new(),
+            exclude_dirs: Vec::new(),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("either --file or --dir"));
     }
 
     #[test]
