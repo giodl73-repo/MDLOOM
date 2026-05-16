@@ -130,6 +130,10 @@ and fenced code. Raw HTML is escaped by default. Successful compile runs also
 write `.proof/artifacts.json`, a target-aware manifest of source files, output
 paths, diagnostics, cache status, and resolved directive counts.
 
+PROOF can use SLICE selectors over prepared artifact/report rows without moving
+compile or render policy into SLICE; see
+[`docs/specs/slice-selectors.md`](docs/specs/slice-selectors.md).
+
 `--target pebble` writes a compact `pebble.v1` JSON document for agents,
 retrieval, and transfer. Pebbles preserve stable section IDs, heading paths,
 line numbers, resolved Markdown text, source path, and resolved dependency refs.

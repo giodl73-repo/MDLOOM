@@ -50,6 +50,7 @@ pulldown-cmark = "0.12"
 [dev-dependencies]
 pretty_assertions = "1"
 tempfile = "3"
+slice-core = { git = "https://github.com/giodl73-repo/SLICE", package = "slice-core", rev = "20b64416364fad8a384eb9f17d0a0a19785a20b1" }
 
 [profile.release]
 lto = true
