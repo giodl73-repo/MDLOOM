@@ -2107,6 +2107,51 @@ exclude = ["target/**"]
 }
 
 #[test]
+fn binary_crop_view_uses_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("proof.toml"),
+        r#"
+[files]
+include = ["src/**/*.source.md"]
+"#,
+    )
+    .unwrap();
+    let output_path = dir.path().join(".crop").join("views").join("global.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("crop")
+        .arg("view")
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--name")
+        .arg("global-view")
+        .output()
+        .expect("failed to run proof crop view");
+
+    assert!(
+        output.status.success(),
+        "proof crop view failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let recipe: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
+    assert_eq!(recipe["name"], "global-view");
+    assert_eq!(
+        recipe["root"],
+        PathBuf::from("..").join("..").display().to_string()
+    );
+}
+
+#[test]
 fn binary_crop_side_info_delegates_to_named_crop_report() {
     let bin = debug_bin();
     if !bin.exists() {

@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
+const DEFAULT_VIEW_OUTPUT: &str = ".crop\\views\\proof-view.json";
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     /// CROP executable to invoke
@@ -125,8 +127,8 @@ struct ViewArgs {
     #[arg(long, default_value = ".")]
     root: PathBuf,
     /// Output crop.view.v1 recipe path
-    #[arg(long, default_value = ".crop\\views\\proof-view.json")]
-    output: PathBuf,
+    #[arg(long)]
+    output: Option<PathBuf>,
     /// View name
     #[arg(long, default_value = "proof-view")]
     name: String,
@@ -431,15 +433,15 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
 }
 
 fn run_view(args: ViewArgs, globals: &GlobalOptions) -> Result<()> {
+    let output = view_output_path(&args, globals);
     let recipe = build_view_recipe(&args, globals)?;
-    if let Some(parent) = args.output.parent().filter(|p| !p.as_os_str().is_empty()) {
+    if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
     let json = serde_json::to_string_pretty(&recipe)?;
-    std::fs::write(&args.output, json)
-        .with_context(|| format!("writing {}", args.output.display()))?;
-    println!("wrote {}", args.output.display());
+    std::fs::write(&output, json).with_context(|| format!("writing {}", output.display()))?;
+    println!("wrote {}", output.display());
     Ok(())
 }
 
@@ -459,6 +461,15 @@ struct CropViewRecipe {
 }
 
 fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<CropViewRecipe> {
+    let output = view_output_path(args, globals);
+    build_view_recipe_for_output(args, globals, &output)
+}
+
+fn build_view_recipe_for_output(
+    args: &ViewArgs,
+    globals: &GlobalOptions,
+    output: &Path,
+) -> Result<CropViewRecipe> {
     let config = load_config(&args.root, globals.config())?;
     let include_extensions = if args.extensions.is_empty() {
         extensions_from_include_patterns(&config.files.include)
@@ -474,7 +485,7 @@ fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<CropVie
     Ok(CropViewRecipe {
         schema_version: "crop.view.v1",
         name: args.name.clone(),
-        root: view_root_for_output(&args.root, &args.output)?,
+        root: view_root_for_output(&args.root, output)?,
         task: args
             .task
             .clone()
@@ -485,6 +496,13 @@ fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<CropVie
         exclude_dirs,
         frontmatter_query: build_frontmatter_query(args)?,
     })
+}
+
+fn view_output_path(args: &ViewArgs, globals: &GlobalOptions) -> PathBuf {
+    args.output
+        .clone()
+        .or_else(|| globals.output().clone())
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_VIEW_OUTPUT))
 }
 
 fn view_root_for_output(root: &Path, output: &Path) -> Result<String> {
@@ -1219,7 +1237,7 @@ exclude = ["target/**", "node_modules/**"]
         let recipe = build_view_recipe(
             &ViewArgs {
                 root: dir.path().to_path_buf(),
-                output: PathBuf::from("ready.json"),
+                output: Some(PathBuf::from("ready.json")),
                 name: "ready-guides".to_string(),
                 task: None,
                 token_budget: 8000,
@@ -1254,7 +1272,7 @@ exclude = ["target/**", "node_modules/**"]
         let recipe = build_view_recipe(
             &ViewArgs {
                 root: dir.path().to_path_buf(),
-                output: PathBuf::from("view.json"),
+                output: Some(PathBuf::from("view.json")),
                 name: "all-docs".to_string(),
                 task: Some("all docs".to_string()),
                 token_budget: 12000,
@@ -1276,12 +1294,68 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
+    fn view_recipe_uses_global_output_for_relative_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join(".crop").join("views").join("ready.json");
+        let recipe = build_view_recipe(
+            &ViewArgs {
+                root: dir.path().to_path_buf(),
+                output: None,
+                name: "ready".to_string(),
+                task: None,
+                token_budget: 12000,
+                seed: 0,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                tags: vec![],
+                ops: vec![],
+                content_tags: vec![],
+                frontmatter_query: None,
+            },
+            &globals_with_output("text", output),
+        )
+        .unwrap();
+
+        assert_eq!(
+            recipe.root,
+            PathBuf::from("..").join("..").display().to_string()
+        );
+    }
+
+    #[test]
+    fn view_recipe_keeps_default_output_when_no_global_output() {
+        let recipe = build_view_recipe(
+            &ViewArgs {
+                root: PathBuf::from("."),
+                output: None,
+                name: "default-view".to_string(),
+                task: None,
+                token_budget: 12000,
+                seed: 0,
+                extensions: vec![],
+                exclude_dirs: vec![],
+                tags: vec![],
+                ops: vec![],
+                content_tags: vec![],
+                frontmatter_query: None,
+            },
+            &globals("text"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            recipe.root,
+            PathBuf::from("..").join("..").display().to_string()
+        );
+    }
+
+    #[test]
     fn view_recipe_combines_raw_frontmatter_query_with_shorthands() {
         let dir = tempfile::tempdir().unwrap();
         let recipe = build_view_recipe(
             &ViewArgs {
                 root: dir.path().to_path_buf(),
-                output: PathBuf::from("ready.json"),
+                output: Some(PathBuf::from("ready.json")),
                 name: "ready".to_string(),
                 task: None,
                 token_budget: 12000,
@@ -1309,7 +1383,7 @@ exclude = ["target/**", "node_modules/**"]
         let err = build_view_recipe(
             &ViewArgs {
                 root: dir.path().to_path_buf(),
-                output: PathBuf::from("view.json"),
+                output: Some(PathBuf::from("view.json")),
                 name: "bad".to_string(),
                 task: None,
                 token_budget: 12000,
