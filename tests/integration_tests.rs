@@ -2943,6 +2943,34 @@ fn binary_index_uses_global_output() {
 }
 
 #[test]
+fn binary_index_rejects_global_json_format() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("-f")
+        .arg("json")
+        .arg("index")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .expect("failed to run proof index");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Markdown-only"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_toc_delegates_to_crop_index_with_toc_title() {
     let bin = debug_bin();
     if !bin.exists() {

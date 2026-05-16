@@ -121,7 +121,8 @@ proof catalog --view .crop/views/ready-guides.json --output CATALOG.md
 
 These top-level page commands also honor PROOF's global `-o/--output`, so
 `proof index -o INDEX.md --view .crop/views/ready-guides.json` is equivalent to
-passing the command-local `--output`.
+passing the command-local `--output`. They are Markdown-only page generators, so
+non-Markdown global formats such as `-f json` are rejected instead of ignored.
 
 Preflight every recipe in a view store:
 

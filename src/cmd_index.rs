@@ -36,6 +36,7 @@ struct CorpusPageArgs {
 }
 
 pub(crate) fn run_index_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_global_format("index", globals)?;
     run_index(apply_global_output(args, globals))
 }
 
@@ -44,6 +45,7 @@ pub(crate) fn run_index(args: Args) -> Result<()> {
 }
 
 pub(crate) fn run_toc_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_global_format("toc", globals)?;
     run_toc(apply_global_output(args, globals))
 }
 
@@ -55,6 +57,7 @@ pub(crate) fn run_toc(mut args: Args) -> Result<()> {
 }
 
 pub(crate) fn run_catalog_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_global_format("catalog", globals)?;
     run_catalog(apply_global_output(args, globals))
 }
 
@@ -67,6 +70,17 @@ fn apply_global_output(mut args: Args, globals: &GlobalOptions) -> Args {
         args.page.output = globals.output().clone();
     }
     args
+}
+
+fn reject_non_markdown_global_format(command: &str, globals: &GlobalOptions) -> Result<()> {
+    match globals.format() {
+        "text" | "markdown" => Ok(()),
+        other => bail!(
+            "proof {} is Markdown-only; use text/markdown output format, got {:?}",
+            command,
+            other
+        ),
+    }
 }
 
 fn run_crop_page(command: &str, args: Args) -> Result<()> {
@@ -118,6 +132,10 @@ mod tests {
 
     fn globals(output: Option<PathBuf>) -> GlobalOptions {
         GlobalOptions::new(None, "text".to_string(), false, false, output)
+    }
+
+    fn globals_with_format(format: &str) -> GlobalOptions {
+        GlobalOptions::new(None, format.to_string(), false, false, None)
     }
 
     fn args(page: CorpusPageArgs) -> Args {
@@ -227,6 +245,14 @@ mod tests {
             crop_args,
             vec!["catalog", "--view", "ready.json", "--output", "LOCAL.md"]
         );
+    }
+
+    #[test]
+    fn page_commands_reject_non_markdown_global_format() {
+        let err =
+            reject_non_markdown_global_format("index", &globals_with_format("json")).unwrap_err();
+
+        assert!(err.to_string().contains("Markdown-only"));
     }
 
     #[test]
