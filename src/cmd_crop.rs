@@ -31,6 +31,8 @@ enum CropCommand {
     Prepare(PrepareArgs),
     /// Write a crop.view.v1 recipe from PROOF root/config/tag settings
     View(ViewArgs),
+    /// Run a persisted crop.view.v1 recipe as a JSON context pack
+    RunView(RunViewArgs),
     /// Generate local link side-info
     Links(SideInfoArgs),
     /// Render local link audit rows from CROP link side-info
@@ -163,6 +165,28 @@ struct ViewArgs {
     /// Add a raw crop.view.v1 frontmatter_query clause, e.g. status eq 'ready'
     #[arg(long = "frontmatter-query")]
     frontmatter_query: Option<String>,
+}
+
+#[derive(clap::Args)]
+struct RunViewArgs {
+    /// crop.view.v1 recipe to run
+    #[arg(long)]
+    file: PathBuf,
+    /// Override the view task for a one-off searchable run
+    #[arg(long)]
+    query: Option<String>,
+    /// Restrict view ingest to one or more file extensions, e.g. --extension md
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename while running the view
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
+    /// Emit prefix-cache-aware JSON for the view pack, e.g. generic
+    #[arg(long = "prefix-cache")]
+    prefix_cache: Option<String>,
+    /// Optional JSON output path. Defaults to CROP stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -301,6 +325,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect, globals),
         CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare, globals),
         CropCommand::View(view) => run_view(view, globals),
+        CropCommand::RunView(run_view) => run_run_view(args.crop_bin, run_view, globals),
         CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
         CropCommand::LinkList(link_list) => run_link_list(link_list, globals),
         CropCommand::Backlinks(side_info) => {
@@ -547,6 +572,43 @@ fn view_output_path(args: &ViewArgs, globals: &GlobalOptions) -> PathBuf {
         .clone()
         .or_else(|| globals.output().clone())
         .unwrap_or_else(|| PathBuf::from(DEFAULT_VIEW_OUTPUT))
+}
+
+fn run_run_view(crop_bin: PathBuf, mut args: RunViewArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_json_artifact_global_format("run-view", globals)?;
+    apply_global_output(&mut args.output, globals);
+    let output = args.output.clone();
+    let crop_args = build_run_view_args(args);
+    if let Some(output) = output {
+        run_crop_to_output(crop_bin, crop_args, output)
+    } else {
+        run_crop(crop_bin, crop_args)
+    }
+}
+
+fn build_run_view_args(args: RunViewArgs) -> Vec<String> {
+    let mut crop_args = vec![
+        "view".to_string(),
+        "--file".to_string(),
+        args.file.display().to_string(),
+    ];
+    if let Some(query) = args.query {
+        crop_args.push("--query".to_string());
+        crop_args.push(query);
+    }
+    for extension in args.extensions {
+        crop_args.push("--extension".to_string());
+        crop_args.push(extension);
+    }
+    for exclude_dir in args.exclude_dirs {
+        crop_args.push("--exclude-dir".to_string());
+        crop_args.push(exclude_dir);
+    }
+    if let Some(prefix_cache) = args.prefix_cache {
+        crop_args.push("--prefix-cache".to_string());
+        crop_args.push(prefix_cache);
+    }
+    crop_args
 }
 
 fn view_root_for_output(root: &Path, output: &Path) -> Result<String> {
@@ -1523,6 +1585,35 @@ exclude = ["target/**", "node_modules/**"]
         .unwrap_err();
 
         assert!(err.to_string().contains("single quote"));
+    }
+
+    #[test]
+    fn run_view_args_map_to_crop_view_file() {
+        let args = build_run_view_args(RunViewArgs {
+            file: PathBuf::from(".crop\\views\\ready.json"),
+            query: Some("refresh docs".to_string()),
+            extensions: vec!["md".to_string()],
+            exclude_dirs: vec!["target".to_string()],
+            prefix_cache: Some("generic".to_string()),
+            output: Some(PathBuf::from("pack.json")),
+        });
+
+        assert_eq!(
+            args,
+            vec![
+                "view",
+                "--file",
+                ".crop\\views\\ready.json",
+                "--query",
+                "refresh docs",
+                "--extension",
+                "md",
+                "--exclude-dir",
+                "target",
+                "--prefix-cache",
+                "generic"
+            ]
+        );
     }
 
     #[test]

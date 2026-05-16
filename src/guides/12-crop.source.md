@@ -113,6 +113,19 @@ with `.crop/views`. The command also honors global `-o/--output` when local
 as `-f markdown` are rejected. The resulting view can be reused anywhere a CROP
 command accepts `--view`.
 
+Run the named view as a JSON context pack when an agent or review workflow needs
+the corpus slice itself:
+
+```text
+proof crop run-view --file .crop/views/ready-guides.json --query "refresh guide index" -o READY_GUIDES.pack.json
+```
+
+`proof crop run-view` delegates to CROP's `view --file` surface and forwards
+one-off `--query`, `--extension`, `--exclude-dir`, and `--prefix-cache` values.
+It also honors global `-o/--output` when local `--output` is omitted. View packs
+are JSON-only, so non-JSON global formats such as `-f markdown` are rejected
+before CROP is invoked.
+
 Generate first-class authoring pages from the same view:
 
 ```text
