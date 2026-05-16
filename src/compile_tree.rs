@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::compile::TreeAttrs;
+use crate::compile_directive::TreeAttrs;
 use crate::compile_source;
 use crate::tree::dirtree::{generate as dirtree_generate, DirtreeOptions};
 use crate::tree::schema::{
