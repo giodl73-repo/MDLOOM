@@ -2280,6 +2280,108 @@ fn binary_crop_heading_list_writes_count_output() {
 }
 
 #[test]
+fn binary_crop_frontmatter_list_renders_filtered_snippet() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("frontmatter.json");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "pages": [
+    {
+      "source": "README.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Readme" }
+    },
+    {
+      "source": "draft.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("frontmatter-list")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--field")
+        .arg("tags")
+        .arg("--value")
+        .arg("guide")
+        .output()
+        .expect("failed to run proof crop frontmatter-list");
+
+    assert!(
+        output.status.success(),
+        "proof crop frontmatter-list failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("- [Readme](README.md)"));
+    assert!(!stdout.contains("Draft"));
+}
+
+#[test]
+fn binary_crop_frontmatter_list_writes_table_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("frontmatter.json");
+    let output_path = dir.path().join("snippets").join("READY.md");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "pages": [
+    {
+      "source": "README.md",
+      "keys": ["status", "title"],
+      "fields": { "status": "ready", "title": "Readme" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("frontmatter-list")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--field")
+        .arg("status")
+        .arg("--value")
+        .arg("ready")
+        .arg("--op")
+        .arg("eq")
+        .arg("--format")
+        .arg("table")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop frontmatter-list --output");
+
+    assert!(
+        output.status.success(),
+        "proof crop frontmatter-list --output failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = std::fs::read_to_string(&output_path).unwrap();
+    assert!(rendered.contains("| Source | status |"));
+    assert!(rendered.contains("| [README.md](README.md) | `ready` |"));
+}
+
+#[test]
 fn binary_crop_artifacts_delegates_to_crop_artifacts() {
     let bin = debug_bin();
     if !bin.exists() {

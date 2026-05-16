@@ -128,10 +128,11 @@ This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
 Use `proof crop prepare` when you want the repeatable docs preflight: it first
 strictly inspects `.crop/views`, then runs the same side-info sync.
-When a source uses `proof:backlinks` or `proof:headings`, `proof compile`
-records the matching CROP JSON as a resolved input in `.proof/artifacts.json`
-and includes it in the compile cache key, so rerun `proof crop sync` before
-compiling when the corpus graph has changed.
+When a source uses `proof:backlinks`, `proof:headings`, or
+`proof:frontmatter`, `proof compile` records the matching CROP JSON as a
+resolved input in `.proof/artifacts.json` and includes it in the compile cache
+key, so rerun `proof crop sync` before compiling when the corpus graph has
+changed.
 
 For README or non-compiled Markdown authoring, render a target-specific
 backlink snippet directly from the synced side-info:
@@ -141,6 +142,7 @@ proof crop backlink-list --target README.md
 proof crop backlink-list --target README.md --format table --output BACKLINKS.md
 proof crop heading-list --source README.md
 proof crop heading-list --source README.md --format table --output OUTLINE.md
+proof crop frontmatter-list --field tags --value guide --format table --output GUIDES.md
 ```
 
 PROOF dogfoods this workflow with `.crop/views/proof-guides.json`, a
@@ -164,7 +166,7 @@ _No backlinks._
 <!-- /proof:compiled -->
 
 <!-- proof:compiled from="proof:headings" source="12-crop.source.md" -->
-8
+9
 <!-- /proof:compiled -->
 
 ---
@@ -214,6 +216,32 @@ level/heading/URI table:
 
 Use `side-info="path/to/headings.json"` when a source should consume a
 non-default CROP report.
+
+---
+
+## Insert frontmatter-driven source lists
+
+After `proof crop sync`, authors can render metadata-driven source lists from
+CROP's frontmatter inventory:
+
+````markdown
+\`\`\`proof:frontmatter field=tags value=guide
+\`\`\`
+````
+
+By default the directive reads `.proof/side-info/frontmatter.json` and renders a
+Markdown list using each page's `title` field when present. Use `format=count`
+for a numeric count or `format=table` for a source/field table:
+
+````markdown
+\`\`\`proof:frontmatter field=status value=ready op=eq format=table
+\`\`\`
+````
+
+`op=has` is the default and is useful for array-like fields such as
+`tags: [proof, guide]`; use `op=eq` for exact scalar values such as
+`status: ready`. Use `side-info="path/to/frontmatter.json"` when a source should
+consume a non-default CROP report.
 
 ---
 

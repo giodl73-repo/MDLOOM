@@ -36,6 +36,8 @@ enum CropCommand {
     BacklinkList(BacklinkListArgs),
     /// Generate frontmatter inventory side-info
     Frontmatter(SideInfoArgs),
+    /// Render source metadata rows from CROP frontmatter side-info
+    FrontmatterList(FrontmatterListArgs),
     /// Generate heading inventory side-info
     Headings(SideInfoArgs),
     /// Render headings for one source from CROP heading side-info
@@ -186,6 +188,31 @@ struct HeadingListArgs {
 }
 
 #[derive(clap::Args)]
+struct FrontmatterListArgs {
+    /// CROP frontmatter JSON report to consume
+    #[arg(
+        long = "side-info",
+        default_value = ".proof\\side-info\\frontmatter.json"
+    )]
+    side_info: PathBuf,
+    /// Frontmatter field to filter or render, e.g. tags or status
+    #[arg(long)]
+    field: Option<String>,
+    /// Field value to match
+    #[arg(long)]
+    value: Option<String>,
+    /// Match mode when --value is set: has or eq
+    #[arg(long = "op", default_value = "has")]
+    op: String,
+    /// Render format: list, table, or count
+    #[arg(long, default_value = "list")]
+    format: String,
+    /// Optional output path. Defaults to stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct ArtifactsArgs {
     /// PROOF repository root. CROP reads .proof\artifacts.json under this root
     #[arg(long)]
@@ -231,6 +258,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         CropCommand::Frontmatter(side_info) => {
             run_side_info(args.crop_bin, "frontmatter", side_info, globals)
         }
+        CropCommand::FrontmatterList(frontmatter_list) => run_frontmatter_list(frontmatter_list),
         CropCommand::Headings(side_info) => {
             run_side_info(args.crop_bin, "headings", side_info, globals)
         }
@@ -576,6 +604,24 @@ fn run_backlink_list(args: BacklinkListArgs) -> Result<()> {
 fn run_heading_list(args: HeadingListArgs) -> Result<()> {
     let rendered = crop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
+}
+
+fn run_frontmatter_list(args: FrontmatterListArgs) -> Result<()> {
+    let filter = crop_side_info::FrontmatterFilter {
+        field: args.field,
+        value: args.value,
+        op: parse_frontmatter_match(&args.op)?,
+    };
+    let rendered = crop_side_info::render_frontmatter(&args.side_info, &filter, &args.format)?;
+    write_snippet(rendered, args.output)
+}
+
+fn parse_frontmatter_match(op: &str) -> Result<crop_side_info::FrontmatterMatch> {
+    match op {
+        "has" => Ok(crop_side_info::FrontmatterMatch::Has),
+        "eq" => Ok(crop_side_info::FrontmatterMatch::Eq),
+        _ => bail!("frontmatter match op must be 'has' or 'eq'"),
+    }
 }
 
 fn write_snippet(rendered: String, output: Option<PathBuf>) -> Result<()> {

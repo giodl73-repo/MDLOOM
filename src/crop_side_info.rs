@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 #[derive(Debug, serde::Deserialize)]
@@ -35,6 +36,34 @@ struct HeadingEntry {
     md_uri: String,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct FrontmatterInventory {
+    #[serde(default)]
+    pages: Vec<FrontmatterPage>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct FrontmatterPage {
+    source: String,
+    #[serde(default)]
+    keys: Vec<String>,
+    #[serde(default)]
+    fields: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrontmatterFilter {
+    pub field: Option<String>,
+    pub value: Option<String>,
+    pub op: FrontmatterMatch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrontmatterMatch {
+    Has,
+    Eq,
+}
+
 pub fn render_backlinks(target: &str, report_path: &Path, format: &str) -> Result<String> {
     let content = std::fs::read_to_string(report_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
@@ -49,6 +78,18 @@ pub fn render_headings(source: &str, report_path: &Path, format: &str) -> Result
     let inventory: HeadingInventory = serde_json::from_str(&content)
         .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
     render_headings_inventory(source, &inventory, format)
+}
+
+pub fn render_frontmatter(
+    report_path: &Path,
+    filter: &FrontmatterFilter,
+    format: &str,
+) -> Result<String> {
+    let content = std::fs::read_to_string(report_path)
+        .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
+    let inventory: FrontmatterInventory = serde_json::from_str(&content)
+        .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
+    render_frontmatter_inventory(&inventory, filter, format)
 }
 
 fn render_backlinks_report(target: &str, report: &BacklinksReport, format: &str) -> Result<String> {
@@ -144,6 +185,126 @@ fn render_headings_inventory(
     }
 }
 
+fn render_frontmatter_inventory(
+    inventory: &FrontmatterInventory,
+    filter: &FrontmatterFilter,
+    format: &str,
+) -> Result<String> {
+    let pages: Vec<_> = inventory
+        .pages
+        .iter()
+        .filter(|page| frontmatter_page_matches(page, filter))
+        .collect();
+
+    if pages.is_empty() {
+        return Ok("_No frontmatter matches._".to_string());
+    }
+
+    match format {
+        "count" => Ok(pages.len().to_string()),
+        "table" => render_frontmatter_table(&pages, filter),
+        _ => {
+            let mut lines = Vec::new();
+            for page in pages {
+                let label = page
+                    .fields
+                    .get("title")
+                    .filter(|title| !title.trim().is_empty())
+                    .map(String::as_str)
+                    .unwrap_or(&page.source);
+                lines.push(format!("- [{}]({})", label, page.source));
+            }
+            Ok(lines.join("\n"))
+        }
+    }
+}
+
+fn render_frontmatter_table(
+    pages: &[&FrontmatterPage],
+    filter: &FrontmatterFilter,
+) -> Result<String> {
+    let mut columns = Vec::new();
+    if let Some(field) = &filter.field {
+        columns.push(field.clone());
+    } else {
+        for page in pages {
+            for key in &page.keys {
+                if !columns.contains(key) {
+                    columns.push(key.clone());
+                }
+            }
+        }
+    }
+
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "| Source | {} |",
+        if columns.is_empty() {
+            "Keys".to_string()
+        } else {
+            columns.join(" | ")
+        }
+    ));
+    lines.push(format!(
+        "|--------|{}|",
+        if columns.is_empty() {
+            "------".to_string()
+        } else {
+            columns
+                .iter()
+                .map(|_| "------")
+                .collect::<Vec<_>>()
+                .join("|")
+        }
+    ));
+    for page in pages {
+        if columns.is_empty() {
+            lines.push(format!(
+                "| [{}]({}) | `{}` |",
+                page.source,
+                page.source,
+                page.keys.join(", ")
+            ));
+        } else {
+            let values = columns
+                .iter()
+                .map(|key| {
+                    format!(
+                        "`{}`",
+                        page.fields
+                            .get(key)
+                            .map(String::as_str)
+                            .unwrap_or("")
+                            .replace('|', "\\|")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | ");
+            lines.push(format!(
+                "| [{}]({}) | {} |",
+                page.source, page.source, values
+            ));
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
+fn frontmatter_page_matches(page: &FrontmatterPage, filter: &FrontmatterFilter) -> bool {
+    let Some(field) = &filter.field else {
+        return true;
+    };
+    let Some(actual) = page.fields.get(field) else {
+        return false;
+    };
+    let Some(value) = &filter.value else {
+        return true;
+    };
+    match filter.op {
+        FrontmatterMatch::Has => actual.contains(value),
+        FrontmatterMatch::Eq => actual == value,
+    }
+}
+
 fn normalize_backlink_target(target: &str) -> String {
     let target = target.trim().trim_matches('"').trim_matches('\'');
     let target = target.strip_prefix("md://").unwrap_or(target);
@@ -198,6 +359,26 @@ mod tests {
         .unwrap()
     }
 
+    fn frontmatter_inventory() -> FrontmatterInventory {
+        serde_json::from_str(
+            r#"{
+  "pages": [
+    {
+      "source": "guide.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Guide" }
+    },
+    {
+      "source": "draft.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+    }
+  ]
+}"#,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn renders_backlink_list_for_normalized_target() {
         let rendered =
@@ -245,6 +426,48 @@ mod tests {
         assert_eq!(
             render_headings_inventory("missing.source.md", &heading_inventory(), "list").unwrap(),
             "_No headings._"
+        );
+    }
+
+    #[test]
+    fn renders_frontmatter_list_count_table_and_empty_state() {
+        let filter = FrontmatterFilter {
+            field: Some("tags".to_string()),
+            value: Some("guide".to_string()),
+            op: FrontmatterMatch::Has,
+        };
+        let list = render_frontmatter_inventory(&frontmatter_inventory(), &filter, "list").unwrap();
+        assert!(list.contains("- [Guide](guide.source.md)"));
+        assert!(!list.contains("Draft"));
+
+        assert_eq!(
+            render_frontmatter_inventory(&frontmatter_inventory(), &filter, "count").unwrap(),
+            "1"
+        );
+
+        let table =
+            render_frontmatter_inventory(&frontmatter_inventory(), &filter, "table").unwrap();
+        assert!(table.contains("| Source | tags |"));
+        assert!(table.contains("| [guide.source.md](guide.source.md) | `[proof, guide]` |"));
+
+        let eq_filter = FrontmatterFilter {
+            field: Some("status".to_string()),
+            value: Some("ready".to_string()),
+            op: FrontmatterMatch::Eq,
+        };
+        assert_eq!(
+            render_frontmatter_inventory(&frontmatter_inventory(), &eq_filter, "count").unwrap(),
+            "1"
+        );
+
+        let missing = FrontmatterFilter {
+            field: Some("tags".to_string()),
+            value: Some("missing".to_string()),
+            op: FrontmatterMatch::Has,
+        };
+        assert_eq!(
+            render_frontmatter_inventory(&frontmatter_inventory(), &missing, "list").unwrap(),
+            "_No frontmatter matches._"
         );
     }
 }

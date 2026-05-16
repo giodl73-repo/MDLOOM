@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
 use crate::config::GlintConfig;
@@ -164,7 +164,7 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
-    /// proof:backlinks — render inbound links for a target from CROP side-info.
+    /// proof:backlinks - render inbound links for a target from CROP side-info.
     Backlinks {
         target: String,
         source: Option<String>,
@@ -172,9 +172,19 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
-    /// proof:headings — render headings for a source from CROP side-info.
+    /// proof:headings - render headings for a source from CROP side-info.
     Headings {
         source_doc: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
+    /// proof:frontmatter - render source metadata rows from CROP side-info.
+    Frontmatter {
+        field: Option<String>,
+        value: Option<String>,
+        op: String,
         source: Option<String>,
         format: String,
         line_start: usize,
@@ -339,6 +349,7 @@ impl Directive {
             Directive::Blockquote { line_start, .. } => *line_start,
             Directive::Backlinks { line_start, .. } => *line_start,
             Directive::Headings { line_start, .. } => *line_start,
+            Directive::Frontmatter { line_start, .. } => *line_start,
             Directive::Chart { line_start, .. } => *line_start,
         }
     }
@@ -359,6 +370,7 @@ impl Directive {
             Directive::Blockquote { line_end, .. } => *line_end,
             Directive::Backlinks { line_end, .. } => *line_end,
             Directive::Headings { line_end, .. } => *line_end,
+            Directive::Frontmatter { line_end, .. } => *line_end,
             Directive::Chart { line_end, .. } => *line_end,
         }
     }
@@ -915,6 +927,31 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         line_end,
                     });
                 }
+                "frontmatter" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:frontmatter")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let field = extract_attr_value(&info_after, "field")
+                        .or_else(|| extract_attr_value(&info_after, "key"));
+                    let value = extract_attr_value(&info_after, "value");
+                    let source = extract_attr_value(&info_after, "side-info")
+                        .or_else(|| extract_attr_value(&info_after, "side_info"));
+                    let op =
+                        extract_attr_value(&info_after, "op").unwrap_or_else(|| "has".to_string());
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "list".to_string());
+                    directives.push(Directive::Frontmatter {
+                        field,
+                        value,
+                        op,
+                        source,
+                        format,
+                        line_start,
+                        line_end,
+                    });
+                }
                 "chart" => {
                     let info_after = info_after_backticks
                         .strip_prefix("proof:chart")
@@ -1043,6 +1080,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
         Some("backlinks")
     } else if rest.starts_with("headings") {
         Some("headings")
+    } else if rest.starts_with("frontmatter") {
+        Some("frontmatter")
     } else if rest.starts_with("chart") {
         Some("chart")
     } else if rest.starts_with("numbered-list") {
@@ -1635,6 +1674,44 @@ pub fn compile_file(
                     }
                 }
             }
+            Directive::Frontmatter {
+                field,
+                value,
+                op,
+                source,
+                format,
+                ..
+            } => {
+                let report_path = source.as_deref().map(|p| root.join(p)).unwrap_or_else(|| {
+                    root.join(".proof")
+                        .join("side-info")
+                        .join("frontmatter.json")
+                });
+                let filter = frontmatter_filter(field, value, op);
+                match filter.and_then(|filter| {
+                    crop_side_info::render_frontmatter(&report_path, &filter, format)
+                }) {
+                    Ok(rendered) => {
+                        resolved_count += 1;
+                        format!(
+                            "<!-- proof:compiled from=\"proof:frontmatter\" -->\n{}\n<!-- /proof:compiled -->",
+                            rendered
+                        )
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: field.clone().unwrap_or_default(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("frontmatter error: {}", e),
+                            source_line: line_start + 1 + source_line_offset,
+                        });
+                        source_fallback(&source_lines, line_start, line_end)
+                    }
+                }
+            }
 
             Directive::Chart {
                 attrs,
@@ -1775,6 +1852,13 @@ fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf>
                 .as_deref()
                 .map(|p| root.join(p))
                 .unwrap_or_else(|| root.join(".proof").join("side-info").join("headings.json")),
+            Directive::Frontmatter { source, .. } => {
+                source.as_deref().map(|p| root.join(p)).unwrap_or_else(|| {
+                    root.join(".proof")
+                        .join("side-info")
+                        .join("frontmatter.json")
+                })
+            }
             _ => {
                 continue;
             }
@@ -1784,6 +1868,23 @@ fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf>
         }
     }
     paths
+}
+
+fn frontmatter_filter(
+    field: &Option<String>,
+    value: &Option<String>,
+    op: &str,
+) -> Result<crop_side_info::FrontmatterFilter> {
+    let op = match op {
+        "has" => crop_side_info::FrontmatterMatch::Has,
+        "eq" => crop_side_info::FrontmatterMatch::Eq,
+        _ => bail!("frontmatter match op must be 'has' or 'eq'"),
+    };
+    Ok(crop_side_info::FrontmatterFilter {
+        field: field.clone(),
+        value: value.clone(),
+        op,
+    })
 }
 
 fn dependency_parse_keys(

@@ -417,6 +417,153 @@ fn headings_directive_tracks_side_info_and_invalidates_compile_cache() {
 }
 
 #[test]
+fn frontmatter_directive_renders_default_crop_side_info() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("frontmatter.json"),
+        r#"{
+  "schema_version": "crop.markdown-frontmatter.v1",
+  "pages": [
+    {
+      "source": "guide.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Guide" }
+    },
+    {
+      "source": "draft.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let src = "# Guide\n\n```proof:frontmatter field=tags value=guide\n```\n";
+    let (out, violations) = compile_str(src, "guide.source.md", dir.path());
+
+    assert!(violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(out.contains("- [Guide](guide.source.md)"));
+    assert!(!out.contains("Draft"));
+}
+
+#[test]
+fn frontmatter_directive_supports_count_table_and_empty_formats() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    std::fs::write(
+        side_info.join("frontmatter.json"),
+        r#"{
+  "pages": [
+    {
+      "source": "guide.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Guide" }
+    },
+    {
+      "source": "draft.source.md",
+      "keys": ["status", "tags", "title"],
+      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let count_src =
+        "# Guide\n\n```proof:frontmatter field=status value=ready op=eq format=count\n```\n";
+    let (count_out, count_violations) = compile_str(count_src, "guide.source.md", dir.path());
+    assert!(count_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(count_out.contains("\n1\n"));
+
+    let table_src = "# Guide\n\n```proof:frontmatter field=tags value=proof format=table\n```\n";
+    let (table_out, table_violations) = compile_str(table_src, "guide.source.md", dir.path());
+    assert!(table_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(table_out.contains("| Source | tags |"));
+    assert!(table_out.contains("| [guide.source.md](guide.source.md) | `[proof, guide]` |"));
+
+    let empty_src = "# Missing\n\n```proof:frontmatter field=tags value=missing\n```\n";
+    let (empty_out, empty_violations) = compile_str(empty_src, "missing.source.md", dir.path());
+    assert!(empty_violations
+        .iter()
+        .all(|v| v.severity != ViolationSeverity::Error));
+    assert!(empty_out.contains("_No frontmatter matches._"));
+}
+
+#[test]
+fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join(".proof").join("side-info");
+    std::fs::create_dir_all(&side_info).unwrap();
+    let frontmatter_path = side_info.join("frontmatter.json");
+    std::fs::write(
+        &frontmatter_path,
+        r#"{
+  "pages": [
+    {
+      "source": "guide.source.md",
+      "keys": ["status", "title"],
+      "fields": { "status": "ready", "title": "Guide" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let src_path = dir.path().join("guide.source.md");
+    let out_path = dir.path().join("guide.md");
+    std::fs::write(
+        &src_path,
+        "# Guide\n\n```proof:frontmatter field=status value=ready op=eq format=count\n```\n",
+    )
+    .unwrap();
+    let cfg = GlintConfig::default();
+
+    let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!first.from_cache);
+    assert_eq!(first.resolved_files, vec![frontmatter_path.clone()]);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n1\n"));
+
+    let second = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(second.from_cache);
+
+    std::fs::write(
+        &frontmatter_path,
+        r#"{
+  "pages": [
+    {
+      "source": "guide.source.md",
+      "keys": ["status", "title"],
+      "fields": { "status": "ready", "title": "Guide" }
+    },
+    {
+      "source": "reference.source.md",
+      "keys": ["status", "title"],
+      "fields": { "status": "ready", "title": "Reference" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let third = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
+    assert!(!third.from_cache);
+    assert!(std::fs::read_to_string(&out_path)
+        .unwrap()
+        .contains("\n2\n"));
+}
+
+#[test]
 fn source_frontmatter_is_stripped_from_compile_output() {
     let dir = tempfile::tempdir().unwrap();
     let src = "---\ntags: [ops, runbook]\nops: [compile]\n---\n# Tagged Source\n\nBody.\n";
