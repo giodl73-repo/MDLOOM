@@ -155,7 +155,8 @@ proof crop sync --view .crop/views/ready-guides.json
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
 Use `proof crop prepare` when you want the repeatable docs preflight: it first
-strictly inspects `.crop/views`, then runs the same side-info sync.
+strictly inspects `.crop/views` and the exact `--view` recipe, then runs the
+same side-info sync.
 When a source uses `proof:links`, `proof:backlinks`, `proof:headings`, or
 `proof:frontmatter`, `proof compile` records the matching CROP JSON as a
 resolved input in `.proof/artifacts.json` and includes it in the compile cache

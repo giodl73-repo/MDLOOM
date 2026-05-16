@@ -404,14 +404,20 @@ fn run_prepare(crop_bin: PathBuf, args: PrepareArgs) -> Result<()> {
 }
 
 fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
+    let view = args.view;
     let mut commands = vec![build_inspect_views_args(InspectViewsArgs {
         file: None,
         dir: args.dir,
         strict: true,
     })];
+    commands.push(build_inspect_views_args(InspectViewsArgs {
+        file: Some(view.clone()),
+        dir: PathBuf::from(".crop\\views"),
+        strict: true,
+    }));
     commands.extend(build_sync_args(SyncArgs {
         root: None,
-        view: Some(args.view),
+        view: Some(view),
         output_dir: args.output_dir,
         extensions: Vec::new(),
         exclude_dirs: Vec::new(),
@@ -1036,22 +1042,32 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(args.len(), 5);
+        assert_eq!(args.len(), 6);
         assert_eq!(
             args[0],
             vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
         );
-        assert_eq!(args[1][0], "links");
-        assert_eq!(args[2][0], "backlinks");
-        assert_eq!(args[3][0], "frontmatter");
-        assert_eq!(args[4][0], "headings");
-        for crop_args in &args[1..] {
+        assert_eq!(
+            args[1],
+            vec![
+                "view",
+                "--inspect",
+                "--file",
+                ".crop\\views\\proof-guides.json",
+                "--strict"
+            ]
+        );
+        assert_eq!(args[2][0], "links");
+        assert_eq!(args[3][0], "backlinks");
+        assert_eq!(args[4][0], "frontmatter");
+        assert_eq!(args[5][0], "headings");
+        for crop_args in &args[2..] {
             assert!(crop_args.contains(&"--view".to_string()));
             assert!(crop_args.contains(&".crop\\views\\proof-guides.json".to_string()));
             assert!(crop_args.contains(&"--format".to_string()));
             assert!(crop_args.contains(&"json".to_string()));
         }
-        assert!(args[2].contains(&output_dir.join("backlinks.json").display().to_string()));
+        assert!(args[3].contains(&output_dir.join("backlinks.json").display().to_string()));
     }
 
     #[test]

@@ -2182,10 +2182,17 @@ fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
 
     let args = std::fs::read_to_string(&args_file).expect("fake crop args");
     let lines: Vec<_> = args.lines().collect();
-    assert_eq!(lines.len(), 5, "got: {}", args);
+    assert_eq!(lines.len(), 6, "got: {}", args);
     assert!(lines[0].contains("view --inspect"), "got: {}", args);
     assert!(lines[0].contains("--strict"), "got: {}", args);
-    for (line, command) in lines[1..]
+    assert!(lines[1].contains("view --inspect"), "got: {}", args);
+    assert!(
+        lines[1].contains(&view_file.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(lines[1].contains("--strict"), "got: {}", args);
+    for (line, command) in lines[2..]
         .iter()
         .zip(["links", "backlinks", "frontmatter", "headings"])
     {
