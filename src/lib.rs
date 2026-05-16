@@ -10,6 +10,7 @@ pub mod compile_chart;
 pub(crate) mod compile_crop;
 #[allow(dead_code)]
 pub mod compile_directive;
+pub(crate) mod compile_format;
 pub(crate) mod compile_math;
 #[allow(dead_code)]
 pub mod compile_prose;

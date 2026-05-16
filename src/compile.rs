@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::compile_chart;
 use crate::compile_crop::{self, SideInfoKind};
 use crate::compile_directive;
+use crate::compile_format;
 use crate::compile_math;
 use crate::compile_prose;
 use crate::compile_source;
@@ -1193,7 +1194,7 @@ pub fn compile_file(
                             &mut violations,
                         );
                         resolved_count += 1;
-                        format_include_block(uri, &content)
+                        compile_format::include_block(uri, &content)
                     }
                     Err(e) => {
                         violations.push(CompileViolation {
@@ -1271,7 +1272,7 @@ pub fn compile_file(
                         .strip_prefix("```\n")
                         .and_then(|s| s.strip_suffix("\n```"))
                         .unwrap_or(&composed);
-                    format_layout_block(uris, inner)
+                    compile_format::layout_block(uris, inner)
                 }
             }
 
@@ -1294,7 +1295,7 @@ pub fn compile_file(
                             &mut violations,
                         );
                         resolved_count += 1;
-                        format_include_block(uri, &content)
+                        compile_format::include_block(uri, &content)
                     }
                     Err(e) => {
                         violations.push(CompileViolation {
@@ -1950,24 +1951,6 @@ fn validate_davinci(
 // ─────────────────────────────────────────────────────────
 // Output formatting with traceability
 // ─────────────────────────────────────────────────────────
-
-fn format_include_block(uri: &str, content: &str) -> String {
-    // Content from mdpath may or may not be fenced — normalize
-    let lines = extract_content_lines(content);
-    let body = lines.join("\n");
-    format!(
-        "<!-- proof:compiled from=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-        uri, body
-    )
-}
-
-fn format_layout_block(uris: &[String], composed_inner: &str) -> String {
-    let uris_str = uris.join(",");
-    format!(
-        "<!-- proof:compiled from=\"proof:layout\"\n     uris=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-        uris_str, composed_inner
-    )
-}
 
 // ─────────────────────────────────────────────────────────
 // Source reconstruction
@@ -3421,7 +3404,7 @@ mod tests {
 
     #[test]
     fn test_format_include_block_has_traceability() {
-        let out = format_include_block("md://figures/foo.md#:0", "CONTENT\nLINE2");
+        let out = compile_format::include_block("md://figures/foo.md#:0", "CONTENT\nLINE2");
         assert!(out.contains("<!-- proof:compiled from=\"md://figures/foo.md#:0\" -->"));
         assert!(out.contains("<!-- /proof:compiled -->"));
         assert!(out.contains("CONTENT"));
@@ -3431,7 +3414,7 @@ mod tests {
     #[test]
     fn test_format_include_block_strips_fence() {
         // Content that arrives already-fenced from older resolve paths
-        let out = format_include_block("md://x.md#:0", "```\nFOO\nBAR\n```");
+        let out = compile_format::include_block("md://x.md#:0", "```\nFOO\nBAR\n```");
         // Should strip the fence and re-wrap
         assert!(out.contains("FOO"));
         assert!(out.contains("BAR"));
@@ -3440,7 +3423,7 @@ mod tests {
     #[test]
     fn test_format_layout_block_has_uris() {
         let uris = vec!["md://a.md#:0".to_string(), "md://b.md#:0".to_string()];
-        let out = format_layout_block(&uris, "COMPOSED");
+        let out = compile_format::layout_block(&uris, "COMPOSED");
         assert!(out.contains("proof:layout"));
         assert!(out.contains("md://a.md#:0"));
         assert!(out.contains("md://b.md#:0"));
