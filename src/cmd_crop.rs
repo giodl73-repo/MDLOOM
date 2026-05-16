@@ -73,7 +73,10 @@ struct StatusArgs {
     /// Limit --strict to selected issue classes: broken-links, orphan-pages, duplicate-anchors
     #[arg(long = "strict-on")]
     strict_on: Vec<String>,
-    /// Optional Markdown output path. Defaults to CROP stdout
+    /// Output format: markdown or json
+    #[arg(long, default_value = "markdown")]
+    format: String,
+    /// Optional output path. Defaults to CROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -330,6 +333,8 @@ fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
         crop_args.push("--strict-on".to_string());
         crop_args.push(strict_on);
     }
+    crop_args.push("--format".to_string());
+    crop_args.push(crop_report_format_value(&args.format)?);
     if let Some(output) = args.output {
         crop_args.push("--output".to_string());
         crop_args.push(output.display().to_string());
@@ -802,9 +807,15 @@ fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
 }
 
 fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
-    match globals.format() {
-        "text" => Ok("json".to_string()),
-        "json" | "markdown" => Ok(globals.format().to_string()),
+    crop_report_format_value(match globals.format() {
+        "text" => "json",
+        other => other,
+    })
+}
+
+fn crop_report_format_value(format: &str) -> Result<String> {
+    match format {
+        "json" | "markdown" => Ok(format.to_string()),
         other => bail!(
             "proof crop report format must be json or markdown, got {:?}",
             other
@@ -851,6 +862,7 @@ mod tests {
             exclude_dirs: vec!["target".to_string()],
             strict: true,
             strict_on: vec!["broken-links".to_string(), "duplicate-anchors".to_string()],
+            format: "markdown".to_string(),
             output: Some(PathBuf::from("STATUS.md")),
         })
         .unwrap();
@@ -872,8 +884,39 @@ mod tests {
                 "broken-links",
                 "--strict-on",
                 "duplicate-anchors",
+                "--format",
+                "markdown",
                 "--output",
                 "STATUS.md"
+            ]
+        );
+    }
+
+    #[test]
+    fn status_args_can_request_json_contract() {
+        let args = build_status_args(StatusArgs {
+            root: None,
+            view: Some(PathBuf::from(".crop\\views\\ready.json")),
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: "json".to_string(),
+            output: Some(PathBuf::from("READY.status.json")),
+        })
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status",
+                "--view",
+                ".crop\\views\\ready.json",
+                "--format",
+                "json",
+                "--output",
+                "READY.status.json",
             ]
         );
     }
@@ -888,11 +931,30 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
+            format: "markdown".to_string(),
             output: None,
         })
         .unwrap_err();
 
         assert!(err.to_string().contains("either --root or --view"));
+    }
+
+    #[test]
+    fn status_rejects_unsupported_report_format() {
+        let err = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: "yaml".to_string(),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("json or markdown"));
     }
 
     #[test]

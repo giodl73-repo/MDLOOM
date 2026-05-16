@@ -46,6 +46,13 @@ policy while still using CROP's strict status semantics:
 proof crop status --root docs/guides --strict --strict-on broken-links --output docs/STATUS.md
 ```
 
+Use `--format json` when an agent, registry, or CI job should consume CROP's
+`crop.corpus-status.v1` contract instead of Markdown:
+
+```text
+proof crop status --view .crop/views/ready-guides.json --format json --strict --strict-on broken-links --output READY_GUIDES.status.json
+```
+
 You can pass the same generic filters CROP exposes:
 
 ```text

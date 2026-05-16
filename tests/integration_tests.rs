@@ -1776,7 +1776,7 @@ fn binary_crop_status_delegates_to_crop_status() {
     let dir = tempfile::tempdir().unwrap();
     let args_file = dir.path().join("crop-args.txt");
     let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let output_path = dir.path().join("STATUS.md");
+    let output_path = dir.path().join("STATUS.json");
 
     let output = std::process::Command::new(&bin)
         .arg("crop")
@@ -1785,6 +1785,8 @@ fn binary_crop_status_delegates_to_crop_status() {
         .arg("status")
         .arg("--root")
         .arg(dir.path())
+        .arg("--format")
+        .arg("json")
         .arg("--output")
         .arg(&output_path)
         .arg("--strict")
@@ -1832,6 +1834,7 @@ fn binary_crop_status_delegates_to_crop_status() {
     assert!(args.contains("PROOF Guides"), "got: {}", args);
     assert!(args.contains("--extension md"), "got: {}", args);
     assert!(args.contains("--exclude-dir target"), "got: {}", args);
+    assert!(args.contains("--format json"), "got: {}", args);
 }
 
 #[test]
