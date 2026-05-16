@@ -88,6 +88,7 @@ pub struct LinkFilter {
 }
 
 pub fn render_backlinks(target: &str, report_path: &Path, format: &str) -> Result<String> {
+    validate_snippet_format(format)?;
     let content = std::fs::read_to_string(report_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
     let report: BacklinksReport = serde_json::from_str(&content)
@@ -96,6 +97,7 @@ pub fn render_backlinks(target: &str, report_path: &Path, format: &str) -> Resul
 }
 
 pub fn render_headings(source: &str, report_path: &Path, format: &str) -> Result<String> {
+    validate_snippet_format(format)?;
     let content = std::fs::read_to_string(report_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
     let inventory: HeadingInventory = serde_json::from_str(&content)
@@ -108,6 +110,7 @@ pub fn render_frontmatter(
     filter: &FrontmatterFilter,
     format: &str,
 ) -> Result<String> {
+    validate_snippet_format(format)?;
     let content = std::fs::read_to_string(report_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
     let inventory: FrontmatterInventory = serde_json::from_str(&content)
@@ -116,11 +119,22 @@ pub fn render_frontmatter(
 }
 
 pub fn render_links(report_path: &Path, filter: &LinkFilter, format: &str) -> Result<String> {
+    validate_snippet_format(format)?;
     let content = std::fs::read_to_string(report_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", report_path.display(), e))?;
     let audit: LinkAudit = serde_json::from_str(&content)
         .map_err(|e| anyhow::anyhow!("parsing {}: {}", report_path.display(), e))?;
     render_link_audit(&audit, filter, format)
+}
+
+fn validate_snippet_format(format: &str) -> Result<()> {
+    match format {
+        "list" | "table" | "count" => Ok(()),
+        other => anyhow::bail!(
+            "CROP side-info snippet format must be list, table, or count, got {:?}",
+            other
+        ),
+    }
 }
 
 fn render_backlinks_report(target: &str, report: &BacklinksReport, format: &str) -> Result<String> {
@@ -633,5 +647,32 @@ mod tests {
             render_link_audit(&link_audit(), &missing, "list").unwrap(),
             "_No links._"
         );
+    }
+
+    #[test]
+    fn public_render_rejects_unknown_snippet_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("links.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "links": [
+    { "source": "guide.source.md", "target": "reference.source.md", "status": "ok" }
+  ]
+}"#,
+        )
+        .unwrap();
+
+        let err = render_links(
+            &path,
+            &LinkFilter {
+                source: None,
+                status: None,
+            },
+            "markdown",
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("list, table, or count"));
     }
 }
