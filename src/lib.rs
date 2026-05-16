@@ -14,6 +14,7 @@ pub mod compile_directive;
 pub(crate) mod compile_element;
 pub(crate) mod compile_format;
 pub(crate) mod compile_math;
+pub(crate) mod compile_output;
 #[allow(dead_code)]
 pub mod compile_prose;
 pub(crate) mod compile_region;

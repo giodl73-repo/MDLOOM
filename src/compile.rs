@@ -6,6 +6,7 @@ use crate::compile_crop;
 use crate::compile_directive;
 use crate::compile_format;
 use crate::compile_math;
+use crate::compile_output;
 use crate::compile_prose;
 use crate::compile_source;
 use crate::compile_symbol;
@@ -61,6 +62,8 @@ pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
     compile_directive::parse_directives(source)
 }
 
+pub use compile_output::derive_output_path;
+
 // ─────────────────────────────────────────────────────────
 
 pub fn compile_file(
@@ -96,7 +99,7 @@ pub fn compile_file(
 
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
-    let (_, source_body, source_line_offset) = split_frontmatter(&source_text);
+    let (_, source_body, source_line_offset) = compile_output::split_frontmatter(&source_text);
     let compile_attrs = format!(r#"{{"frontmatter_offset":{}}}"#, source_line_offset);
     let directives = collect_directives(source_body);
 
@@ -360,7 +363,7 @@ pub fn compile_file(
                             ),
                             source_line: line_start + 1 + source_line_offset,
                         });
-                        source_fallback(&source_lines, line_start, line_end)
+                        compile_output::source_fallback(&source_lines, line_start, line_end)
                     }
                 }
             }
@@ -542,7 +545,7 @@ pub fn compile_file(
                             toc
                         )
                     }
-                    None => source_fallback(&source_lines, line_start, line_end),
+                    None => compile_output::source_fallback(&source_lines, line_start, line_end),
                 }
             }
 
@@ -566,7 +569,7 @@ pub fn compile_file(
                         message: format!("xref error: {}", e),
                         source_line: line_start + 1 + source_line_offset,
                     });
-                    source_fallback(&source_lines, line_start, line_end)
+                    compile_output::source_fallback(&source_lines, line_start, line_end)
                 }
             },
 
@@ -605,7 +608,7 @@ pub fn compile_file(
                         message: format!("backlinks error: {}", e),
                         source_line: line_start + 1 + source_line_offset,
                     });
-                    source_fallback(&source_lines, line_start, line_end)
+                    compile_output::source_fallback(&source_lines, line_start, line_end)
                 }
             },
             Directive::Links {
@@ -635,7 +638,7 @@ pub fn compile_file(
                         message: format!("links error: {}", e),
                         source_line: line_start + 1 + source_line_offset,
                     });
-                    source_fallback(&source_lines, line_start, line_end)
+                    compile_output::source_fallback(&source_lines, line_start, line_end)
                 }
             },
             Directive::Headings {
@@ -658,7 +661,7 @@ pub fn compile_file(
                         message: format!("headings error: {}", e),
                         source_line: line_start + 1 + source_line_offset,
                     });
-                    source_fallback(&source_lines, line_start, line_end)
+                    compile_output::source_fallback(&source_lines, line_start, line_end)
                 }
             },
             Directive::Frontmatter {
@@ -690,7 +693,7 @@ pub fn compile_file(
                         message: format!("frontmatter error: {}", e),
                         source_line: line_start + 1 + source_line_offset,
                     });
-                    source_fallback(&source_lines, line_start, line_end)
+                    compile_output::source_fallback(&source_lines, line_start, line_end)
                 }
             },
 
@@ -772,7 +775,7 @@ pub fn compile_file(
 
     // Rebuild source with replacements applied, preserving trailing newline
     let had_trailing_newline = source_body.ends_with('\n');
-    let mut output_text = apply_replacements(&source_lines, &replacements);
+    let mut output_text = compile_output::apply_replacements(&source_lines, &replacements);
     if had_trailing_newline && !output_text.ends_with('\n') {
         output_text.push('\n');
     }
@@ -826,113 +829,13 @@ pub fn compile_file(
 // ─────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────
-// Source reconstruction
-// ─────────────────────────────────────────────────────────
-
-fn apply_replacements(source_lines: &[&str], replacements: &[(usize, usize, String)]) -> String {
-    if replacements.is_empty() {
-        return source_lines.join("\n");
-    }
-
-    let mut out: Vec<String> = Vec::new();
-    let mut cursor = 0usize;
-
-    for (start, end, replacement) in replacements {
-        // Pass through lines before this directive
-        for line in &source_lines[cursor..*start] {
-            out.push(line.to_string());
-        }
-        // Insert replacement
-        out.push(replacement.clone());
-        // Skip over the original directive block (start..=end)
-        cursor = end + 1;
-    }
-
-    // Trailing lines after last replacement
-    for line in &source_lines[cursor..] {
-        out.push(line.to_string());
-    }
-
-    out.join("\n")
-}
-
-// ─────────────────────────────────────────────────────────
-// Output path derivation
-// ─────────────────────────────────────────────────────────
-
-/// Derive output path from source path.
-/// `foo.source.md` → `foo.md` (drops `.source.`).
-/// Any other `.md` file → None (require explicit -o).
-// ─────────────────────────────────────────────────────────
-// proof:element compile arm
-// ─────────────────────────────────────────────────────────
-
-#[allow(clippy::too_many_arguments)]
-/// Safe fallback: return source lines for the directive block, guarded against OOB.
-pub(crate) fn source_fallback(
-    source_lines: &[&str],
-    source_line: usize,
-    line_end: usize,
-) -> String {
-    if source_line <= line_end && line_end < source_lines.len() {
-        source_lines[source_line..=line_end].join("\n")
-    } else {
-        String::new()
-    }
-}
-
-// ─────────────────────────────────────────────────────────
-// Dashboard compile helpers
-// ─────────────────────────────────────────────────────────
-
-/// Split a `.dashboard.source.md` source into (frontmatter_yaml, body, body_offset_in_lines).
-/// Front-matter is the block between the opening `---` on line 0 and the next `---`.
-/// If no front-matter is present, returns ("", source, 0).
-pub(crate) fn split_frontmatter(source: &str) -> (String, &str, usize) {
-    let lines: Vec<&str> = source.lines().collect();
-    if lines.first().map(|l| l.trim()) != Some("---") {
-        return (String::new(), source, 0);
-    }
-    // Find closing ---
-    let close_idx = match lines.iter().skip(1).position(|l| l.trim() == "---") {
-        Some(i) => i + 1,
-        None => return (String::new(), source, 0),
-    };
-    let fm = lines[1..close_idx].join("\n");
-    // Compute byte offset to end of closing --- + newline
-    let mut byte_offset = 0usize;
-    for line in &lines[..=close_idx] {
-        byte_offset += line.len() + 1; // +1 for the '\n'
-    }
-    let byte_offset = byte_offset.min(source.len());
-    let body = &source[byte_offset..];
-    let body_offset_lines = close_idx + 1;
-    (fm, body, body_offset_lines)
-}
-
-pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
-    let name = source.file_name()?.to_str()?;
-    let parent = source.parent().unwrap_or(Path::new("."));
-    // Check longer suffixes before shorter ones (longest-first)
-    if let Some(stem) = name.strip_suffix(".slides.source.md") {
-        return Some(parent.join(format!("{}.slides.md", stem)));
-    }
-    if let Some(stem) = name.strip_suffix(".dashboard.source.md") {
-        return Some(parent.join(format!("{}.dashboard.md", stem)));
-    }
-    if let Some(stem) = name.strip_suffix(".source.md") {
-        return Some(parent.join(format!("{}.md", stem)));
-    }
-    None
-}
-
-// ─────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compile_output::{apply_replacements, split_frontmatter};
 
     // ── parse_directives ──────────────────────────────────
 

@@ -1,8 +1,9 @@
 use std::path::Path;
 
-use crate::compile::{source_fallback, CompileViolation, ViolationSeverity};
+use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::ElementAttrs;
 use crate::compile_format;
+use crate::compile_output::source_fallback;
 use crate::compile_source;
 use crate::element::row::{render_row_foreach, validate_r1, RowConfig, RowElement};
 use crate::element::{
