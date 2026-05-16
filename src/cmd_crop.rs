@@ -74,8 +74,8 @@ struct StatusArgs {
     #[arg(long = "strict-on")]
     strict_on: Vec<String>,
     /// Output format: markdown or json
-    #[arg(long, default_value = "markdown")]
-    format: String,
+    #[arg(long)]
+    format: Option<String>,
     /// Optional output path. Defaults to CROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
@@ -318,6 +318,8 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
 
 fn run_status(crop_bin: PathBuf, mut args: StatusArgs, globals: &GlobalOptions) -> Result<()> {
     apply_global_output(&mut args.output, globals);
+    normalize_global_text_format(&mut args.format, globals);
+    apply_global_report_format(&mut args.format, globals);
     run_crop(crop_bin, build_status_args(args)?)
 }
 
@@ -330,7 +332,7 @@ fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
         exclude_dirs: args.exclude_dirs,
         strict: args.strict,
         strict_on: args.strict_on,
-        format: args.format,
+        format: args.format.unwrap_or_else(|| "markdown".to_string()),
         output: args.output,
     })
 }
@@ -749,6 +751,18 @@ fn apply_global_output(output: &mut Option<PathBuf>, globals: &GlobalOptions) {
     }
 }
 
+fn apply_global_report_format(format: &mut Option<String>, globals: &GlobalOptions) {
+    if format.is_none() && globals.format() != "text" {
+        *format = Some(globals.format().to_string());
+    }
+}
+
+fn normalize_global_text_format(format: &mut Option<String>, globals: &GlobalOptions) {
+    if format.as_deref() == Some("text") && globals.format() == "text" {
+        *format = None;
+    }
+}
+
 fn build_side_info_args(
     command: &str,
     args: SideInfoArgs,
@@ -927,7 +941,7 @@ mod tests {
             exclude_dirs: vec!["target".to_string()],
             strict: true,
             strict_on: vec!["broken-links".to_string(), "duplicate-anchors".to_string()],
-            format: "markdown".to_string(),
+            format: Some("markdown".to_string()),
             output: Some(PathBuf::from("STATUS.md")),
         })
         .unwrap();
@@ -967,7 +981,7 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
-            format: "json".to_string(),
+            format: Some("json".to_string()),
             output: Some(PathBuf::from("READY.status.json")),
         })
         .unwrap();
@@ -996,7 +1010,7 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
-            format: "markdown".to_string(),
+            format: Some("markdown".to_string()),
             output: None,
         };
         apply_global_output(
@@ -1021,6 +1035,72 @@ mod tests {
     }
 
     #[test]
+    fn status_uses_global_format_when_local_format_missing() {
+        let mut status = StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: None,
+            output: None,
+        };
+        apply_global_report_format(&mut status.format, &globals("json"));
+
+        let args = build_status_args(status).unwrap();
+
+        assert_eq!(args, vec!["status", "--root", "docs", "--format", "json"]);
+    }
+
+    #[test]
+    fn status_defaults_to_markdown_without_local_or_global_format() {
+        let args = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format: None,
+            output: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec!["status", "--root", "docs", "--format", "markdown"]
+        );
+    }
+
+    #[test]
+    fn status_normalizes_global_text_default_to_markdown() {
+        let mut format = Some("text".to_string());
+        normalize_global_text_format(&mut format, &globals("text"));
+        apply_global_report_format(&mut format, &globals("text"));
+
+        let args = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec![],
+            format,
+            output: None,
+        })
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec!["status", "--root", "docs", "--format", "markdown"]
+        );
+    }
+
+    #[test]
     fn status_rejects_root_and_view() {
         let err = build_status_args(StatusArgs {
             root: Some(PathBuf::from("docs")),
@@ -1030,7 +1110,7 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
-            format: "markdown".to_string(),
+            format: Some("markdown".to_string()),
             output: None,
         })
         .unwrap_err();
@@ -1048,7 +1128,7 @@ mod tests {
             exclude_dirs: vec![],
             strict: false,
             strict_on: vec![],
-            format: "yaml".to_string(),
+            format: Some("yaml".to_string()),
             output: None,
         })
         .unwrap_err();

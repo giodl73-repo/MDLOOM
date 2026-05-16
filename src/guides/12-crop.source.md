@@ -60,8 +60,8 @@ For the same CROP-backed health surface from the top-level status command, use
 proof status --crop --view .crop/views/ready-guides.json --crop-format json --strict --strict-on broken-links -o READY_GUIDES.status.json
 ```
 
-`proof crop status` also honors PROOF's global `-o/--output` when command-local
-`--output` is not supplied.
+`proof crop status` also honors PROOF's global `-o/--output` and `-f/--format`
+when command-local `--output` or `--format` values are not supplied.
 
 You can pass the same generic filters CROP exposes:
 

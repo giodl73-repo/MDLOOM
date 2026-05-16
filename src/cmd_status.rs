@@ -28,8 +28,8 @@ pub(crate) struct Args {
     #[arg(long = "strict-on")]
     strict_on: Vec<String>,
     /// CROP status output format with --crop: markdown or json
-    #[arg(long = "crop-format", default_value = "markdown")]
-    crop_format: String,
+    #[arg(long = "crop-format")]
+    crop_format: Option<String>,
     /// Restrict CROP status to one or more extensions
     #[arg(long = "extension")]
     extensions: Vec<String>,
@@ -52,7 +52,7 @@ fn reject_crop_only_options(args: &Args) -> Result<()> {
         || !args.strict_on.is_empty()
         || !args.extensions.is_empty()
         || !args.exclude_dirs.is_empty()
-        || args.crop_format != "markdown"
+        || args.crop_format.is_some()
         || args.crop_bin != PathBuf::from("crop")
     {
         bail!("proof status CROP options require --crop");
@@ -82,8 +82,18 @@ fn build_crop_status_args(args: Args, globals: &GlobalOptions) -> Result<Vec<Str
         exclude_dirs: args.exclude_dirs,
         strict: args.strict,
         strict_on: args.strict_on,
-        format: args.crop_format,
+        format: crop_status_format(args.crop_format, globals),
         output: globals.output().clone(),
+    })
+}
+
+fn crop_status_format(crop_format: Option<String>, globals: &GlobalOptions) -> String {
+    crop_format.unwrap_or_else(|| {
+        if globals.format() == "text" {
+            "markdown".to_string()
+        } else {
+            globals.format().to_string()
+        }
     })
 }
 
@@ -243,6 +253,10 @@ mod tests {
         GlobalOptions::new(None, "text".to_string(), false, false, output)
     }
 
+    fn globals_with_format(format: &str) -> GlobalOptions {
+        GlobalOptions::new(None, format.to_string(), false, false, None)
+    }
+
     #[test]
     fn crop_status_args_use_root_by_default() {
         let dir = tempfile::tempdir().unwrap();
@@ -254,7 +268,7 @@ mod tests {
                 view: None,
                 strict: true,
                 strict_on: vec!["broken-links".to_string()],
-                crop_format: "json".to_string(),
+                crop_format: Some("json".to_string()),
                 extensions: vec!["md".to_string()],
                 exclude_dirs: vec!["target".to_string()],
             },
@@ -293,7 +307,7 @@ mod tests {
                 view: Some(PathBuf::from(".crop\\views\\ready.json")),
                 strict: false,
                 strict_on: vec![],
-                crop_format: "markdown".to_string(),
+                crop_format: None,
                 extensions: vec![],
                 exclude_dirs: vec![],
             },
@@ -314,6 +328,36 @@ mod tests {
     }
 
     #[test]
+    fn crop_status_args_use_global_format_when_crop_format_missing() {
+        let args = build_crop_status_args(
+            Args {
+                dir: PathBuf::from("."),
+                crop: true,
+                crop_bin: PathBuf::from("crop"),
+                view: Some(PathBuf::from(".crop\\views\\ready.json")),
+                strict: false,
+                strict_on: vec![],
+                crop_format: None,
+                extensions: vec![],
+                exclude_dirs: vec![],
+            },
+            &globals_with_format("json"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "status".to_string(),
+                "--view".to_string(),
+                ".crop\\views\\ready.json".to_string(),
+                "--format".to_string(),
+                "json".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn local_status_rejects_crop_only_options() {
         let err = reject_crop_only_options(&Args {
             dir: PathBuf::from("."),
@@ -322,7 +366,7 @@ mod tests {
             view: Some(PathBuf::from("ready.json")),
             strict: false,
             strict_on: vec![],
-            crop_format: "markdown".to_string(),
+            crop_format: None,
             extensions: vec![],
             exclude_dirs: vec![],
         })
