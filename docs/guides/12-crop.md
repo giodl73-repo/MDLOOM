@@ -68,8 +68,9 @@ status directory is not silently ignored.
 
 `proof crop status` also honors PROOF's global `-o/--output` and `-f/--format`
 when command-local `--output` or `--format` values are not supplied. Command-local
-`--format` values follow CROP's contract exactly: use `markdown` or `json`;
-`--format text` is rejected instead of being treated as an alias.
+`proof crop status --format` and `proof status --crop --crop-format` values
+follow CROP's contract exactly: use `markdown` or `json`; `text` is rejected
+instead of being treated as an alias.
 
 You can pass the same generic filters CROP exposes:
 

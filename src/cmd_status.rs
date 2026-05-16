@@ -28,7 +28,7 @@ pub(crate) struct Args {
     #[arg(long = "strict-on")]
     strict_on: Vec<String>,
     /// CROP status output format with --crop: markdown or json
-    #[arg(long = "crop-format")]
+    #[arg(long = "crop-format", value_parser = ["markdown", "json"])]
     crop_format: Option<String>,
     /// Restrict CROP status to one or more extensions
     #[arg(long = "extension")]

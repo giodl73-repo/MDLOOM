@@ -1496,6 +1496,37 @@ fn binary_status_crop_delegates_to_crop_status() {
 }
 
 #[test]
+fn binary_status_crop_rejects_local_text_format() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("status")
+        .arg("--crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--view")
+        .arg(".crop\\views\\ready.json")
+        .arg("--crop-format")
+        .arg("text")
+        .output()
+        .expect("failed to run proof status --crop");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid value"), "got: {}", stderr);
+    assert!(stderr.contains("markdown"), "got: {}", stderr);
+    assert!(stderr.contains("json"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_status_crop_rejects_dir_with_view() {
     let bin = debug_bin();
     if !bin.exists() {
