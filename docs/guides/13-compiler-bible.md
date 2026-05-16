@@ -25,14 +25,18 @@ Good pulses:
 ```dependency
 Wave 8 directive module split
 ├── Pulse: directive parser facade
+├── Pulse: public compile types
+├── Pulse: output and cache orchestration
 ├── Pulse: source resolution boundary
-├── Pulse: chart data resolver
+├── Pulse: figure include/table/layout renderer
+├── Pulse: chart renderer
 ├── Pulse: tree renderer
 ├── Pulse: element and row renderer
 ├── Pulse: slide compiler
 ├── Pulse: dashboard compiler
 ├── Pulse: region no-chrome renderer
-└── Pulse: compile validation helpers
+├── Pulse: compile validation helpers
+└── Pulse: owner-module test migration
 ```
 <!-- /proof:compiled -->
 
@@ -42,7 +46,9 @@ Wave 8 directive module split
 
 `compile.rs` is the facade. It owns command-visible orchestration: reading the
 source, dispatching special artifact routes, coordinating replacement
-application, and returning public result types.
+application, coordinating cache side inputs, writing compiled output, and
+returning public result types. It should stay production-only: behavior tests
+belong beside the module that owns the behavior.
 
 Focused modules own behavior families:
 
@@ -118,4 +124,5 @@ Before changing a compiler phase:
 5. Validate with focused tests and then the full suite.
 
 The preferred end state is boring: `compile.rs` should read like the compiler
-table of contents, not like the implementation of every directive.
+table of contents, not like the implementation or test suite of every
+directive.
