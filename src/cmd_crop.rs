@@ -121,6 +121,15 @@ struct InspectViewsArgs {
     /// Exit non-zero when any view recipe fails inspection
     #[arg(long)]
     strict: bool,
+    /// Override the inspected view task for a one-off searchable run
+    #[arg(long)]
+    query: Option<String>,
+    /// Restrict inspected view ingest to one or more file extensions, e.g. --extension md
+    #[arg(long = "extension")]
+    extensions: Vec<String>,
+    /// Exclude directories by basename while inspecting one view
+    #[arg(long = "exclude-dir")]
+    exclude_dirs: Vec<String>,
     /// Optional JSON output path. Defaults to CROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
@@ -460,7 +469,7 @@ fn run_inspect_views(
     reject_non_json_inspect_format(globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
-    let crop_args = build_inspect_views_args(args);
+    let crop_args = build_inspect_views_args(args)?;
     if let Some(output) = output {
         run_crop_to_output(crop_bin, crop_args, output)
     } else {
@@ -468,7 +477,13 @@ fn run_inspect_views(
     }
 }
 
-fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
+fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
+    if args.file.is_none()
+        && (args.query.is_some() || !args.extensions.is_empty() || !args.exclude_dirs.is_empty())
+    {
+        bail!("proof crop inspect-views --query, --extension, and --exclude-dir require --file");
+    }
+
     let mut crop_args = vec!["view".to_string(), "--inspect".to_string()];
     if let Some(file) = args.file {
         crop_args.push("--file".to_string());
@@ -480,8 +495,20 @@ fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
     if args.strict {
         crop_args.push("--strict".to_string());
     }
+    if let Some(query) = args.query {
+        crop_args.push("--query".to_string());
+        crop_args.push(query);
+    }
+    for extension in args.extensions {
+        crop_args.push("--extension".to_string());
+        crop_args.push(extension);
+    }
+    for exclude_dir in args.exclude_dirs {
+        crop_args.push("--exclude-dir".to_string());
+        crop_args.push(exclude_dir);
+    }
 
-    crop_args
+    Ok(crop_args)
 }
 
 fn reject_non_json_inspect_format(globals: &GlobalOptions) -> Result<()> {
@@ -520,14 +547,20 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
         file: None,
         dir: args.dir,
         strict: true,
+        query: None,
+        extensions: Vec::new(),
+        exclude_dirs: Vec::new(),
         output: None,
-    })];
+    })?];
     commands.push(build_inspect_views_args(InspectViewsArgs {
         file: Some(view.clone()),
         dir: PathBuf::from(".crop\\views"),
         strict: true,
+        query: None,
+        extensions: Vec::new(),
+        exclude_dirs: Vec::new(),
         output: None,
-    }));
+    })?);
     commands.extend(build_sync_args(SyncArgs {
         root: None,
         view: Some(view),
@@ -1377,8 +1410,12 @@ mod tests {
             file: None,
             dir: PathBuf::from(".crop\\views"),
             strict: true,
+            query: None,
+            extensions: Vec::new(),
+            exclude_dirs: Vec::new(),
             output: None,
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             args,
@@ -1392,13 +1429,44 @@ mod tests {
             file: Some(PathBuf::from(".crop\\views\\ready.json")),
             dir: PathBuf::from(".crop\\views"),
             strict: false,
+            query: Some("refresh docs".to_string()),
+            extensions: vec!["md".to_string()],
+            exclude_dirs: vec!["target".to_string()],
             output: None,
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             args,
-            vec!["view", "--inspect", "--file", ".crop\\views\\ready.json"]
+            vec![
+                "view",
+                "--inspect",
+                "--file",
+                ".crop\\views\\ready.json",
+                "--query",
+                "refresh docs",
+                "--extension",
+                "md",
+                "--exclude-dir",
+                "target"
+            ]
         );
+    }
+
+    #[test]
+    fn inspect_views_rejects_store_filter_overrides() {
+        let err = build_inspect_views_args(InspectViewsArgs {
+            file: None,
+            dir: PathBuf::from(".crop\\views"),
+            strict: false,
+            query: Some("refresh docs".to_string()),
+            extensions: Vec::new(),
+            exclude_dirs: Vec::new(),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("require --file"));
     }
 
     #[test]

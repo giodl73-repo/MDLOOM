@@ -2196,6 +2196,82 @@ fn binary_crop_inspect_views_can_inspect_single_file() {
 }
 
 #[test]
+fn binary_crop_inspect_views_forwards_single_file_overrides() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("inspect-views")
+        .arg("--file")
+        .arg(&view_file)
+        .arg("--query")
+        .arg("refresh docs")
+        .arg("--extension")
+        .arg("md")
+        .arg("--exclude-dir")
+        .arg("target")
+        .output()
+        .expect("failed to run proof crop inspect-views --file");
+
+    assert!(
+        output.status.success(),
+        "proof crop inspect-views --file failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("--file"), "got: {}", args);
+    assert!(
+        args.contains(&view_file.display().to_string()),
+        "got: {}",
+        args
+    );
+    assert!(args.contains("--query"), "got: {}", args);
+    assert!(args.contains("refresh docs"), "got: {}", args);
+    assert!(args.contains("--extension md"), "got: {}", args);
+    assert!(args.contains("--exclude-dir target"), "got: {}", args);
+}
+
+#[test]
+fn binary_crop_inspect_views_rejects_store_overrides() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("inspect-views")
+        .arg("--query")
+        .arg("refresh docs")
+        .output()
+        .expect("failed to run proof crop inspect-views");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("require --file"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_crop_inspect_views_writes_output() {
     let bin = debug_bin();
     if !bin.exists() {
