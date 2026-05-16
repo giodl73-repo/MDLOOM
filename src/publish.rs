@@ -1,93 +1,119 @@
+use pulldown_cmark::{html, Event, Options, Parser};
+
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
-    let mut body = String::new();
-    let mut paragraph = Vec::new();
-    let mut in_code = false;
-    let mut code = String::new();
-
-    for line in markdown.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("```") {
-            flush_paragraph(&mut body, &mut paragraph);
-            if in_code {
-                body.push_str("<pre><code>");
-                body.push_str(&escape_html(code.trim_end_matches('\n')));
-                body.push_str("</code></pre>\n");
-                code.clear();
-                in_code = false;
-            } else {
-                in_code = true;
-            }
-            continue;
-        }
-
-        if in_code {
-            code.push_str(line);
-            code.push('\n');
-            continue;
-        }
-
-        if trimmed.is_empty() {
-            flush_paragraph(&mut body, &mut paragraph);
-            continue;
-        }
-
-        if let Some((level, text)) = parse_heading(trimmed) {
-            flush_paragraph(&mut body, &mut paragraph);
-            body.push_str(&format!(
-                "<h{level}>{}</h{level}>\n",
-                escape_html(text.trim())
-            ));
-            continue;
-        }
-
-        paragraph.push(trimmed.to_string());
-    }
-
-    if in_code {
-        body.push_str("<pre><code>");
-        body.push_str(&escape_html(code.trim_end_matches('\n')));
-        body.push_str("</code></pre>\n");
-    }
-    flush_paragraph(&mut body, &mut paragraph);
+    let title = document_title(markdown, title);
+    let body = markdown_to_html_fragment(markdown);
 
     format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>{}</title>\n</head>\n<body>\n{}</body>\n</html>\n",
-        escape_html(title),
+        concat!(
+            "<!doctype html>\n",
+            "<html lang=\"en\">\n",
+            "<head>\n",
+            "<meta charset=\"utf-8\">\n",
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
+            "<title>{}</title>\n",
+            "<style>\n",
+            ":root {{ color-scheme: light dark; }}\n",
+            "body {{ font-family: system-ui, sans-serif; line-height: 1.55; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }}\n",
+            "pre, code {{ font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }}\n",
+            "pre {{ overflow-x: auto; padding: 1rem; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .5rem; }}\n",
+            "table {{ border-collapse: collapse; width: 100%; }}\n",
+            "th, td {{ border: 1px solid color-mix(in srgb, currentColor 20%, transparent); padding: .35rem .5rem; }}\n",
+            "img {{ max-width: 100%; }}\n",
+            "</style>\n",
+            "</head>\n",
+            "<body>\n",
+            "{}",
+            "</body>\n",
+            "</html>\n"
+        ),
+        escape_html(&title),
         body
     )
 }
 
-fn flush_paragraph(body: &mut String, paragraph: &mut Vec<String>) {
-    if paragraph.is_empty() {
-        return;
-    }
-    body.push_str("<p>");
-    body.push_str(&escape_html(&paragraph.join(" ")));
-    body.push_str("</p>\n");
-    paragraph.clear();
+fn markdown_to_html_fragment(markdown: &str) -> String {
+    let parser = Parser::new_ext(markdown, markdown_options()).map(|event| match event {
+        Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),
+        other => other,
+    });
+    let mut html_out = String::new();
+    html::push_html(&mut html_out, parser);
+    html_out
 }
 
-fn parse_heading(line: &str) -> Option<(usize, &str)> {
-    let hashes = line.chars().take_while(|&c| c == '#').count();
-    if !(1..=6).contains(&hashes) {
-        return None;
-    }
-    let rest = line.get(hashes..)?;
-    if !rest.starts_with(' ') {
-        return None;
-    }
-    Some((hashes, rest))
+fn markdown_options() -> Options {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options
+}
+
+fn document_title(markdown: &str, fallback: &str) -> String {
+    markdown
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("# ")
+                .map(str::trim)
+                .filter(|title| !title.is_empty())
+        })
+        .unwrap_or(fallback)
+        .to_string()
 }
 
 fn escape_html(text: &str) -> String {
-    text.chars()
-        .flat_map(|c| match c {
-            '&' => "&amp;".chars().collect::<Vec<_>>(),
-            '<' => "&lt;".chars().collect::<Vec<_>>(),
-            '>' => "&gt;".chars().collect::<Vec<_>>(),
-            '"' => "&quot;".chars().collect::<Vec<_>>(),
-            '\'' => "&#39;".chars().collect::<Vec<_>>(),
-            _ => vec![c],
-        })
-        .collect()
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_backend_renders_common_markdown_blocks() {
+        let html = markdown_to_html_document(
+            "# Guide\n\n- one\n- two\n\n| A | B |\n|---|---|\n| x | y |\n\n[home](README.md)\n",
+            "fallback",
+        );
+
+        assert!(html.contains("<title>Guide</title>"), "got:\n{}", html);
+        assert!(html.contains("<ul>"), "got:\n{}", html);
+        assert!(html.contains("<li>one</li>"), "got:\n{}", html);
+        assert!(html.contains("<table>"), "got:\n{}", html);
+        assert!(
+            html.contains("<a href=\"README.md\">home</a>"),
+            "got:\n{}",
+            html
+        );
+    }
+
+    #[test]
+    fn html_backend_escapes_raw_html() {
+        let html = markdown_to_html_document("# Safe\n\n<script>alert(1)</script>\n", "fallback");
+
+        assert!(!html.contains("<script>"), "got:\n{}", html);
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+    }
+
+    #[test]
+    fn html_backend_escapes_title_fallback() {
+        let html = markdown_to_html_document("Body only\n", "A < B");
+
+        assert!(html.contains("<title>A &lt; B</title>"), "got:\n{}", html);
+    }
 }

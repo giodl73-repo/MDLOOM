@@ -832,7 +832,10 @@ COMPILE OPTIONS
   `md` is the canonical compile target and preserves proof's terminal-first
   renderer contract. `html` is the first publish target: proof resolves source
   directives to markdown, strips source frontmatter, then emits a standalone HTML
-  document. `--watch` currently supports only `--target md`.
+  document. The HTML backend supports common Markdown blocks including headings,
+  lists, tables, links, task lists, strikethrough, and fenced code; raw HTML is
+  escaped rather than passed through. `--watch` currently supports only
+  `--target md`.
 
   Planned publish targets include PPTX and richer site/PDF backends after the
   artifact manifest records source inputs, compile target, output path, and

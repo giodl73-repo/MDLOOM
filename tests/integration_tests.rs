@@ -1802,7 +1802,7 @@ fn binary_compile_target_html_writes_html_document() {
         html
     );
     assert!(
-        html.contains("<pre><code>A -&gt; B</code></pre>"),
+        html.contains("<pre><code class=\"language-text\">A -&gt; B"),
         "got:\n{}",
         html
     );

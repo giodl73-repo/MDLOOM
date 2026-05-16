@@ -43,12 +43,23 @@ proof compile src/guides/math.source.md -o docs/guides/math.md
 # Compile a whole directory, output to docs/
 proof compile src/guides/ --output-dir docs/guides/
 
+# Publish one source file as standalone HTML
+proof compile src/guides/math.source.md --target html -o docs/guides/math.html
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
 # Validate directives without writing output
 proof compile --check src/guides/
 ```
+
+`--target html` resolves the same source directives as the default Markdown
+target, then renders the resolved Markdown as a standalone HTML document with a
+small built-in stylesheet. The HTML backend supports common Markdown blocks
+including headings, lists, tables, links, task lists, strikethrough, and fenced
+code. Raw HTML in source Markdown is escaped rather than passed through, so the
+publish backend stays safe by default. Watch mode remains Markdown-only until
+target-aware watch manifests are modeled.
 
 ---
 

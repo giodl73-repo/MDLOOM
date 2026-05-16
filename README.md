@@ -121,10 +121,11 @@ proof compile file.source.md --target html -o out.html
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
-directives, strips source-only frontmatter, and writes a standalone HTML document.
-Successful compile runs also write `.proof/artifacts.json`, a target-aware
-manifest of source files, output paths, diagnostics, cache status, and resolved
-directive counts.
+directives, strips source-only frontmatter, and writes a standalone HTML document
+with common Markdown support for lists, tables, links, task lists, strikethrough,
+and fenced code. Raw HTML is escaped by default. Successful compile runs also
+write `.proof/artifacts.json`, a target-aware manifest of source files, output
+paths, diagnostics, cache status, and resolved directive counts.
 
 `.source.md` files may start with source-only frontmatter for corpus tagging.
 The block is stripped from normal compiled output and surfaced by status/stats:
