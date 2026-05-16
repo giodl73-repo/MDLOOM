@@ -1978,6 +1978,49 @@ fn binary_crop_sync_generates_all_side_info_reports() {
 }
 
 #[test]
+fn binary_crop_backlink_list_renders_target_snippet() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("backlinks.json");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "pages": [
+    {
+      "source": "README.md",
+      "inbound_links": [
+        { "source": "docs/guide.md", "target": "README.md#overview" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("backlink-list")
+        .arg("--target")
+        .arg("md://README.md#overview")
+        .arg("--side-info")
+        .arg(&side_info)
+        .output()
+        .expect("failed to run proof crop backlink-list");
+
+    assert!(
+        output.status.success(),
+        "proof crop backlink-list failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("- [guide.md](docs/guide.md)"));
+}
+
+#[test]
 fn binary_crop_artifacts_delegates_to_crop_artifacts() {
     let bin = debug_bin();
     if !bin.exists() {

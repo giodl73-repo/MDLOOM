@@ -126,6 +126,14 @@ proof crop sync --view .crop/views/ready-guides.json
 This writes `.proof/side-info/links.json`, `.proof/side-info/backlinks.json`,
 `.proof/side-info/frontmatter.json`, and `.proof/side-info/headings.json`.
 
+For README or non-compiled Markdown authoring, render a target-specific
+backlink snippet directly from the synced side-info:
+
+```text
+proof crop backlink-list --target README.md
+proof crop backlink-list --target README.md --format table --output BACKLINKS.md
+```
+
 ---
 
 ## Insert backlink lists in source documents

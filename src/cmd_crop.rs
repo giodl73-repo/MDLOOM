@@ -1,6 +1,7 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
+use proof_lib::crop_side_info;
 use proof_lib::lint::load_config_for_path as load_config;
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -29,6 +30,8 @@ enum CropCommand {
     Links(SideInfoArgs),
     /// Generate backlink and orphan side-info
     Backlinks(SideInfoArgs),
+    /// Render inbound links for one target from CROP backlinks side-info
+    BacklinkList(BacklinkListArgs),
     /// Generate frontmatter inventory side-info
     Frontmatter(SideInfoArgs),
     /// Generate heading inventory side-info
@@ -131,6 +134,25 @@ struct SideInfoArgs {
 }
 
 #[derive(clap::Args)]
+struct BacklinkListArgs {
+    /// Target source/page to render inbound links for
+    #[arg(long)]
+    target: String,
+    /// CROP backlinks JSON report to consume
+    #[arg(
+        long = "side-info",
+        default_value = ".proof\\side-info\\backlinks.json"
+    )]
+    side_info: PathBuf,
+    /// Render format: list, table, or count
+    #[arg(long, default_value = "list")]
+    format: String,
+    /// Optional output path. Defaults to stdout
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
 struct ArtifactsArgs {
     /// PROOF repository root. CROP reads .proof\artifacts.json under this root
     #[arg(long)]
@@ -171,6 +193,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         CropCommand::Backlinks(side_info) => {
             run_side_info(args.crop_bin, "backlinks", side_info, globals)
         }
+        CropCommand::BacklinkList(backlink_list) => run_backlink_list(backlink_list),
         CropCommand::Frontmatter(side_info) => {
             run_side_info(args.crop_bin, "frontmatter", side_info, globals)
         }
@@ -485,6 +508,21 @@ fn run_side_info(
     globals: &GlobalOptions,
 ) -> Result<()> {
     run_crop(crop_bin, build_side_info_args(command, args, globals)?)
+}
+
+fn run_backlink_list(args: BacklinkListArgs) -> Result<()> {
+    let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
+    if let Some(output) = args.output {
+        if let Some(parent) = output.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
+        }
+        std::fs::write(&output, rendered)
+            .with_context(|| format!("writing {}", output.display()))?;
+    } else {
+        println!("{}", rendered);
+    }
+    Ok(())
 }
 
 fn build_side_info_args(

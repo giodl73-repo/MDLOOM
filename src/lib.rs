@@ -18,6 +18,7 @@ pub mod compile_toc;
 #[allow(dead_code)]
 pub mod compile_tree;
 pub mod config;
+pub mod crop_side_info;
 pub mod dashboard;
 pub mod davinci;
 pub mod depends;
