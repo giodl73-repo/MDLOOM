@@ -217,3 +217,153 @@ fn render_blockquote_boxed(body: &[&str], attribution: Option<&str>) -> String {
     out.push(bot);
     out.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn heading_slug_basic() {
+        assert_eq!(heading_slug("Authentication"), "authentication");
+        assert_eq!(heading_slug("API Reference"), "api-reference");
+        assert_eq!(heading_slug("What's New?"), "whats-new");
+    }
+
+    #[test]
+    fn xref_inline_renders_see_link() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("api.md"),
+            "# API Guide\n\n## Authentication\n\nContent.\n",
+        )
+        .unwrap();
+
+        let result = render_xref("md://api.md#authentication", None, "inline", dir.path())
+            .expect("render_xref should succeed");
+        assert!(
+            result.contains("See:"),
+            "inline format should start with See:"
+        );
+        assert!(
+            result.contains("Authentication"),
+            "should resolve heading text"
+        );
+        assert!(
+            result.contains("api.md#authentication"),
+            "should include link"
+        );
+    }
+
+    #[test]
+    fn xref_note_format_renders_blockquote() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("ref.md"),
+            "# Ref\n\n## Background\n\nContent.\n",
+        )
+        .unwrap();
+        let result = render_xref("md://ref.md#background", None, "note", dir.path()).unwrap();
+        assert!(
+            result.starts_with("> **See also:**"),
+            "note format must use blockquote"
+        );
+        assert!(result.contains("Background"));
+    }
+
+    #[test]
+    fn xref_label_override_used_instead_of_heading() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("guide.md"),
+            "# Guide\n\n## Setup\n\nContent.\n",
+        )
+        .unwrap();
+        let result = render_xref(
+            "md://guide.md#setup",
+            Some("the setup section"),
+            "inline",
+            dir.path(),
+        )
+        .unwrap();
+        assert!(
+            result.contains("the setup section"),
+            "label override must appear in output"
+        );
+        assert!(!result.contains("Setup") || result.contains("the setup section"));
+    }
+
+    #[test]
+    fn xref_missing_file_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = render_xref("md://nonexistent.md", None, "inline", dir.path());
+        assert!(result.is_err(), "missing target file should return Err");
+    }
+
+    #[test]
+    fn blockquote_indent_default_no_attribution() {
+        let out = render_blockquote("To be or not to be.", None, "indent");
+        assert_eq!(out, "> To be or not to be.");
+    }
+
+    #[test]
+    fn blockquote_indent_with_attribution() {
+        let out = render_blockquote("To be or not to be.", Some("Hamlet"), "indent");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines, vec!["> To be or not to be.", ">", "> — Hamlet"]);
+    }
+
+    #[test]
+    fn blockquote_indent_multi_paragraph_preserves_blank_lines() {
+        let text = "First paragraph.\n\nSecond paragraph.";
+        let out = render_blockquote(text, None, "indent");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(
+            lines,
+            vec!["> First paragraph.", ">", "> Second paragraph."]
+        );
+    }
+
+    #[test]
+    fn blockquote_indent_trims_leading_and_trailing_blank_lines() {
+        let text = "\n\nThe quote.\n\n";
+        let out = render_blockquote(text, None, "indent");
+        assert_eq!(out, "> The quote.");
+    }
+
+    #[test]
+    fn blockquote_unknown_style_falls_back_to_indent() {
+        let out_unknown = render_blockquote("hi", None, "marble");
+        let out_indent = render_blockquote("hi", None, "indent");
+        assert_eq!(
+            out_unknown, out_indent,
+            "unknown style must fall back to indent (permissive parsing)"
+        );
+    }
+
+    #[test]
+    fn blockquote_boxed_renders_frame() {
+        let out = render_blockquote("Hello world", None, "boxed");
+        let lines: Vec<&str> = out.lines().collect();
+        assert!(lines.len() >= 3);
+        assert!(lines.first().unwrap().starts_with('┌'));
+        assert!(lines.first().unwrap().ends_with('┐'));
+        assert!(lines.last().unwrap().starts_with('└'));
+        assert!(lines.last().unwrap().ends_with('┘'));
+        assert!(lines
+            .iter()
+            .any(|l| l.starts_with('│') && l.contains("Hello world") && l.ends_with('│')));
+    }
+
+    #[test]
+    fn blockquote_boxed_with_attribution_right_aligned() {
+        let out = render_blockquote("To be.", Some("Hamlet"), "boxed");
+        let lines: Vec<&str> = out.lines().collect();
+        let attr_line = lines[lines.len() - 2];
+        assert!(
+            attr_line.contains("— Hamlet"),
+            "expected attribution in penultimate line, got {:?}",
+            attr_line
+        );
+        assert!(attr_line.starts_with('│') && attr_line.ends_with('│'));
+    }
+}

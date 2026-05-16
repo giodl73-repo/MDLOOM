@@ -147,3 +147,110 @@ pub(crate) fn compile_toc(
         None => compile_output::source_fallback(source_lines, line_start, line_end),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_DOC: &str = "\
+# Doc Title
+
+## Intro
+
+Some prose.
+
+## API Reference
+
+### Endpoints
+
+#### GET /widgets
+
+#### POST /widgets
+
+### Authentication
+
+## Migration
+
+### Upgrade Steps
+";
+
+    #[test]
+    fn toc_no_section_lists_everything() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", None);
+        assert!(out.contains("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Migration"));
+        assert!(out.contains("Upgrade Steps"));
+    }
+
+    #[test]
+    fn toc_section_filters_to_descendants() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Authentication"));
+        assert!(out.contains("GET /widgets"));
+        assert!(
+            !out.contains("API Reference"),
+            "section anchor heading must be excluded from output, got:\n{}",
+            out
+        );
+        assert!(
+            !out.contains("Migration"),
+            "headings outside the section must be excluded, got:\n{}",
+            out
+        );
+        assert!(!out.contains("Upgrade Steps"));
+        assert!(!out.contains("Intro"));
+    }
+
+    #[test]
+    fn toc_section_respects_max_depth() {
+        let out = generate_toc(SAMPLE_DOC, 3, "list", Some("API Reference"));
+        assert!(out.contains("Endpoints"));
+        assert!(out.contains("Authentication"));
+        assert!(
+            !out.contains("GET /widgets"),
+            "H4 must be filtered by max_depth=3, got:\n{}",
+            out
+        );
+        assert!(!out.contains("POST /widgets"));
+    }
+
+    #[test]
+    fn toc_section_case_insensitive_match() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("api reference"));
+        assert!(
+            out.contains("Endpoints"),
+            "section match must be case-insensitive, got:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn toc_section_not_found_returns_empty() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Nonexistent Section"));
+        assert!(
+            out.is_empty(),
+            "missing section should produce empty TOC, got:\n{}",
+            out
+        );
+    }
+
+    #[test]
+    fn toc_section_works_for_h3_anchor() {
+        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Endpoints"));
+        assert!(out.contains("GET /widgets"));
+        assert!(out.contains("POST /widgets"));
+        assert!(!out.contains("Authentication"));
+    }
+
+    #[test]
+    fn toc_section_numbered_renumbers_from_section() {
+        let out = generate_toc(SAMPLE_DOC, 4, "numbered", Some("API Reference"));
+        assert!(
+            out.starts_with("1. Endpoints"),
+            "numbered TOC must renumber from the section root, got:\n{}",
+            out
+        );
+    }
+}
