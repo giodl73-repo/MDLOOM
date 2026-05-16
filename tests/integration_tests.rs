@@ -3313,6 +3313,110 @@ fn binary_crop_link_list_rejects_global_json_format() {
 }
 
 #[test]
+fn binary_crop_link_list_rejects_invalid_local_status_before_reading_side_info() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let missing_side_info = dir.path().join("missing-links.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("link-list")
+        .arg("--side-info")
+        .arg(&missing_side_info)
+        .arg("--status")
+        .arg("maybe")
+        .output()
+        .expect("failed to run proof crop link-list");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid value"), "got: {}", stderr);
+    assert!(stderr.contains("all"), "got: {}", stderr);
+    assert!(stderr.contains("ok"), "got: {}", stderr);
+    assert!(stderr.contains("broken"), "got: {}", stderr);
+    assert!(
+        !stderr.contains("missing-links.json"),
+        "side-info should not be read before parser rejection, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn binary_crop_backlink_list_rejects_invalid_local_format_before_reading_side_info() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let missing_side_info = dir.path().join("missing-backlinks.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("backlink-list")
+        .arg("--target")
+        .arg("README.md")
+        .arg("--side-info")
+        .arg(&missing_side_info)
+        .arg("--format")
+        .arg("yaml")
+        .output()
+        .expect("failed to run proof crop backlink-list");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid value"), "got: {}", stderr);
+    assert!(stderr.contains("list"), "got: {}", stderr);
+    assert!(stderr.contains("table"), "got: {}", stderr);
+    assert!(stderr.contains("count"), "got: {}", stderr);
+    assert!(
+        !stderr.contains("missing-backlinks.json"),
+        "side-info should not be read before parser rejection, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn binary_crop_frontmatter_list_rejects_invalid_local_op_before_reading_side_info() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let missing_side_info = dir.path().join("missing-frontmatter.json");
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("frontmatter-list")
+        .arg("--side-info")
+        .arg(&missing_side_info)
+        .arg("--field")
+        .arg("tags")
+        .arg("--value")
+        .arg("guide")
+        .arg("--op")
+        .arg("contains")
+        .output()
+        .expect("failed to run proof crop frontmatter-list");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid value"), "got: {}", stderr);
+    assert!(stderr.contains("has"), "got: {}", stderr);
+    assert!(stderr.contains("eq"), "got: {}", stderr);
+    assert!(
+        !stderr.contains("missing-frontmatter.json"),
+        "side-info should not be read before parser rejection, got: {}",
+        stderr
+    );
+}
+
+#[test]
 fn binary_crop_link_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {

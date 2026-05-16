@@ -248,7 +248,9 @@ proof crop frontmatter-list --field tags --value guide --format table --output G
 
 These snippet commands render Markdown snippets with command-local
 `--format list|table|count`; non-Markdown global formats such as `-f json` are
-rejected instead of ignored.
+rejected instead of ignored. `proof crop link-list --status` is limited to
+`all|ok|broken`, and `proof crop frontmatter-list --op` is limited to `has|eq`,
+so invalid filter values fail before side-info files are read.
 
 PROOF dogfoods this workflow with `.crop/views/proof-guides.json`, a
 `crop.view.v1` recipe generated from the proof-authored guide sources:

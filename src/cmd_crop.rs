@@ -242,7 +242,7 @@ struct BacklinkListArgs {
     )]
     side_info: PathBuf,
     /// Render format: list, table, or count
-    #[arg(long, default_value = "list")]
+    #[arg(long, default_value = "list", value_parser = ["list", "table", "count"])]
     format: String,
     /// Optional output path. Defaults to stdout
     #[arg(long)]
@@ -258,10 +258,10 @@ struct LinkListArgs {
     #[arg(long)]
     source: Option<String>,
     /// Link status to include: all, ok, or broken
-    #[arg(long, default_value = "all")]
+    #[arg(long, default_value = "all", value_parser = ["all", "ok", "broken"])]
     status: String,
     /// Render format: list, table, or count
-    #[arg(long, default_value = "list")]
+    #[arg(long, default_value = "list", value_parser = ["list", "table", "count"])]
     format: String,
     /// Optional output path. Defaults to stdout
     #[arg(long)]
@@ -277,7 +277,7 @@ struct HeadingListArgs {
     #[arg(long = "side-info", default_value = ".proof\\side-info\\headings.json")]
     side_info: PathBuf,
     /// Render format: list, table, or count
-    #[arg(long, default_value = "list")]
+    #[arg(long, default_value = "list", value_parser = ["list", "table", "count"])]
     format: String,
     /// Optional output path. Defaults to stdout
     #[arg(long)]
@@ -299,10 +299,10 @@ struct FrontmatterListArgs {
     #[arg(long)]
     value: Option<String>,
     /// Match mode when --value is set: has or eq
-    #[arg(long = "op", default_value = "has")]
+    #[arg(long = "op", default_value = "has", value_parser = ["has", "eq"])]
     op: String,
     /// Render format: list, table, or count
-    #[arg(long, default_value = "list")]
+    #[arg(long, default_value = "list", value_parser = ["list", "table", "count"])]
     format: String,
     /// Optional output path. Defaults to stdout
     #[arg(long)]
