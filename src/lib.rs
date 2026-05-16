@@ -63,6 +63,7 @@ pub mod frontmatter;
 pub mod layout;
 pub mod lint;
 pub mod math;
+pub mod publication;
 pub mod publish;
 pub mod runner;
 pub mod slide;

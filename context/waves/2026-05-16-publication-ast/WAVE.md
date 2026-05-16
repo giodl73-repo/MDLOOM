@@ -35,7 +35,7 @@ systems, chart/media embedding, or LaTeX.
 
 | Pulse | Title | Status | Outcome |
 |------:|-------|--------|---------|
-| 01 | AST and theme contract | todo | Define typed publication AST/theme modules and lock extraction tests. |
+| 01 | AST and theme contract | done | Added exported typed publication AST/theme module with built-in theme tokens and L0 contract tests. |
 | 02 | Markdown AST extraction | todo | Convert resolved Markdown into PublicationDocument blocks/inlines. |
 | 03 | HTML/site adoption | todo | Render HTML and static site pages from the AST with CSS theme tokens. |
 | 04 | JSON/Pebble/PDF adoption | todo | Feed report summaries, Pebble chunks, and PDF text output from AST sections. |

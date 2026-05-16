@@ -2,7 +2,7 @@
 wave: publication-ast
 pulse: 01
 date: 2026-05-16
-status: todo
+status: done
 depends_on: []
 governing_roles: ["COMPOSE", "SCHEMA", "BOOK", "BENCH"]
 ---
@@ -32,14 +32,14 @@ backend behavior yet.
 
 ## Deliverables checklist
 
-- [ ] Add typed `PublicationDocument`, `PublicationBlock`, `PublicationInline`,
+- [x] Add typed `PublicationDocument`, `PublicationBlock`, `PublicationInline`,
       and `PublicationTheme` structures.
-- [ ] Add built-in theme definitions for `plain`, `professional`, and `dense`.
-- [ ] Add schema/version constants and stable theme names.
-- [ ] Add L0 tests for defaults, theme lookup, serialization, and block
+- [x] Add built-in theme definitions for `plain`, `professional`, and `dense`.
+- [x] Add schema/version constants and stable theme names.
+- [x] Add L0 tests for defaults, theme lookup, serialization, and block
       construction.
-- [ ] Export the module from `proof_lib`.
-- [ ] Keep backend behavior unchanged in this pulse.
+- [x] Export the module from `proof_lib`.
+- [x] Keep backend behavior unchanged in this pulse.
 
 ## Validation gates
 
@@ -58,4 +58,15 @@ backend behavior yet.
 
 ## Evidence
 
-- Pending.
+- Added `src/publication.rs` with `proof.publication_ast.v1`, typed document,
+  block, inline, note, list item, and theme structures.
+- Added built-in `plain`, `professional`, and `dense` theme token definitions
+  covering fonts, colors, spacing, typography, and slide defaults.
+- Exported `proof_lib::publication` without migrating any backend behavior yet.
+- Validation:
+  - `cargo fmt --check`
+  - `cargo test publication_theme_lookup_returns_builtin_tokens`
+  - `cargo test publication_ast_serializes_schema_and_blocks`
+  - `cargo test`
+  - `cargo build`
+  - `git diff --check`
