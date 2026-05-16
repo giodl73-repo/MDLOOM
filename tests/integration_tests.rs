@@ -2100,6 +2100,57 @@ fn binary_compile_target_site_writes_static_site() {
 }
 
 #[test]
+fn binary_compile_target_pdf_writes_pdf() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("guide.source.md");
+    let output_path = dir.path().join("guide.pdf");
+    std::fs::write(
+        &source,
+        "# Guide\n\nBody with <angle> text.\n\n## Steps\n\n- one\n- two\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("pdf")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let pdf = std::fs::read(&output_path).expect("pdf output");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let pdf_text = String::from_utf8_lossy(&pdf);
+    assert!(pdf_text.contains("/Producer (PROOF)"), "got:\n{}", pdf_text);
+    assert!(pdf_text.contains("(Guide) Tj"), "got:\n{}", pdf_text);
+    assert!(
+        pdf_text.contains("Body with <angle> text"),
+        "got:\n{}",
+        pdf_text
+    );
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"][0]["target"], "pdf");
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

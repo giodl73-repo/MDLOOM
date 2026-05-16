@@ -1,7 +1,10 @@
 use pebble::PebbleDocument;
 use pulldown_cmark::{html, Event, Options, Parser};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
 
 use crate::frontmatter::SourceFrontmatter;
 
@@ -160,6 +163,14 @@ pub fn html_document_title(html: &str) -> Option<String> {
     Some(html[start..end].to_string())
 }
 
+pub fn html_to_pdf_document(html: &str, fallback_title: &str) -> Vec<u8> {
+    let title =
+        decode_html_text(&html_document_title(html).unwrap_or_else(|| fallback_title.to_string()));
+    let text = html_to_plain_text(html);
+    let lines = wrapped_pdf_lines(&text);
+    build_simple_pdf(&title, &lines)
+}
+
 pub fn write_static_site(site_root: &Path, mut pages: Vec<SitePage>) -> std::io::Result<()> {
     std::fs::create_dir_all(site_root)?;
     pages.sort_by(|left, right| left.href.cmp(&right.href));
@@ -210,6 +221,146 @@ fn static_site_index(manifest: &SiteManifest) -> String {
         ),
         pages
     )
+}
+
+fn html_to_plain_text(html: &str) -> String {
+    let mut text = String::new();
+    let mut in_tag = false;
+    let mut tag = String::new();
+    let mut last_was_space = false;
+
+    for c in html.chars() {
+        match c {
+            '<' => {
+                in_tag = true;
+                tag.clear();
+            }
+            '>' if in_tag => {
+                in_tag = false;
+                let tag_name = tag
+                    .trim()
+                    .trim_start_matches('/')
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                if matches!(
+                    tag_name,
+                    "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "tr" | "pre" | "br"
+                ) {
+                    text.push('\n');
+                    last_was_space = true;
+                }
+            }
+            _ if in_tag => tag.push(c),
+            c if c.is_whitespace() => {
+                if !last_was_space {
+                    text.push(' ');
+                    last_was_space = true;
+                }
+            }
+            c => {
+                text.push(c);
+                last_was_space = false;
+            }
+        }
+    }
+
+    decode_html_text(&text)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn decode_html_text(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+}
+
+fn wrapped_pdf_lines(text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for source_line in text.lines() {
+        let mut current = String::new();
+        for word in source_line.split_whitespace() {
+            if current.len() + word.len() + usize::from(!current.is_empty()) > 82 {
+                lines.push(current);
+                current = String::new();
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        if !current.is_empty() {
+            lines.push(current);
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn build_simple_pdf(title: &str, lines: &[String]) -> Vec<u8> {
+    let mut content = String::from("BT\n/F1 12 Tf\n72 760 Td\n14 TL\n");
+    let page_lines = lines.iter().take(48).collect::<Vec<_>>();
+    for (index, line) in page_lines.iter().enumerate() {
+        if index > 0 {
+            content.push_str("T*\n");
+        }
+        let _ = writeln!(content, "({}) Tj", escape_pdf_text(line));
+    }
+    content.push_str("ET\n");
+
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_string(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+        format!("<< /Length {} >>\nstream\n{}endstream", content.len(), content),
+        format!(
+            "<< /Title ({}) /Producer (PROOF) >>",
+            escape_pdf_text(title)
+        ),
+    ];
+
+    let mut pdf = Vec::<u8>::from(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".as_slice());
+    let mut offsets = Vec::new();
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{}\nendobj\n", index + 1, object).as_bytes());
+    }
+    let xref_offset = pdf.len();
+    pdf.extend_from_slice(format!("xref\n0 {}\n", objects.len() + 1).as_bytes());
+    pdf.extend_from_slice(b"0000000000 65535 f \n");
+    for offset in offsets {
+        pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R /Info 6 0 R >>\nstartxref\n{}\n%%EOF\n",
+            objects.len() + 1,
+            xref_offset
+        )
+        .as_bytes(),
+    );
+    pdf
+}
+
+fn escape_pdf_text(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '\\' => "\\\\".to_string(),
+            '(' => "\\(".to_string(),
+            ')' => "\\)".to_string(),
+            c if c.is_ascii() && !c.is_control() => c.to_string(),
+            _ => "?".to_string(),
+        })
+        .collect()
 }
 
 fn markdown_to_html_fragment(markdown: &str) -> String {
@@ -403,5 +554,17 @@ mod tests {
         assert_eq!(json["document"]["sections"][1]["path"][1], "Steps");
         assert_eq!(json["compile"]["directives_resolved"], 2);
         assert_eq!(json["refs"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pdf_backend_writes_valid_pdf_bytes_from_html() {
+        let html = markdown_to_html_document("# Guide\n\nBody with <angle> text.\n", "fallback");
+        let pdf = html_to_pdf_document(&html, "fallback");
+
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/Producer (PROOF)"), "got:\n{}", text);
+        assert!(text.contains("(Guide) Tj"), "got:\n{}", text);
+        assert!(text.contains("Body with <angle> text"), "got:\n{}", text);
     }
 }

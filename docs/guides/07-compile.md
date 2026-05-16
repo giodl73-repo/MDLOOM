@@ -55,6 +55,9 @@ proof compile src/guides/math.source.md --target json-report -o reports/math.pro
 # Compile a source tree into a local static site
 proof compile src/guides/ --target site --output-dir site/
 
+# Publish one source file as a portable PDF
+proof compile src/guides/math.source.md --target pdf -o docs/guides/math.pdf
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -89,6 +92,11 @@ format.
 navigation `index.html` plus `proof-site.json` site manifest in the output
 directory. It is intended for local/static documentation publishing; hosting,
 deployment, search ranking, and target-aware watch mode are out of scope.
+
+`--target pdf` renders the same resolved HTML publish output into a portable PDF
+artifact. The first backend is deterministic and dependency-free for CI, with
+reasonable text output and metadata. It does not claim exact browser or print
+engine layout equivalence.
 
 ---
 

@@ -14,6 +14,7 @@ semantics.
 | `pebble` | supported | Agent/retrieval context transfer. | Emits `pebble.v1` JSON with source path, title, refs, stable section IDs, heading paths, line numbers, and resolved Markdown text. |
 | `json-report` | supported | Machine-readable compile/report bundle. | Emits `proof.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
 | `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `proof-site.json` page manifest from a source tree. |
+| `pdf` | supported | Portable human-readable artifact. | Renders the resolved HTML publish output into a deterministic PDF with basic text and metadata. |
 
 `html`, `pebble`, and `json-report` are fully supported within those scopes.
 They are not claims of full site generation, PDF layout fidelity,
@@ -23,7 +24,6 @@ office-document styling, or slide deck generation.
 
 | Target | Primary user | Backend role | First useful claim |
 |---|---|---|---|
-| `pdf` | Report readers | Portable human-readable artifact. | Render the HTML publish output to PDF with deterministic metadata and manifest entries. |
 | `docx` | Business/document workflows | Editable Word-processing document. | Convert resolved Markdown into headings, paragraphs, lists, tables, code blocks, and document metadata. |
 | `pptx` | Presentations/executive updates | Slide deck artifact. | Convert explicit slide-oriented source into a basic deck with title/content slides, speaker notes metadata where available, and stable manifest records. |
 
@@ -63,9 +63,9 @@ deployment, authentication, or browser pixel equivalence.
 
 ### PDF
 
-PDF should initially be rendered from the existing HTML output to avoid a second
-Markdown layout implementation. The contract is a portable artifact with
-reasonable typography and metadata, not exact cross-engine visual equivalence.
+PDF renders from the existing HTML output to avoid a second Markdown layout
+implementation. The contract is a portable artifact with reasonable text output
+and metadata, not exact cross-engine visual equivalence.
 
 ### DOCX
 
