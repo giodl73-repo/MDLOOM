@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use crate::compile_crop::{self, SideInfoKind};
 use crate::compile_directive;
 use crate::compile_math;
+use crate::compile_prose;
 use crate::compile_symbol;
+use crate::compile_toc;
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
 use crate::diagnostic::Severity;
@@ -1523,7 +1525,12 @@ pub fn compile_file(
                 match content_opt {
                     Some(content) => {
                         resolved_count += 1;
-                        let toc = generate_toc(&content, *max_depth, style, section.as_deref());
+                        let toc = compile_toc::generate_toc(
+                            &content,
+                            *max_depth,
+                            style,
+                            section.as_deref(),
+                        );
                         format!(
                             "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
                             toc
@@ -1535,7 +1542,7 @@ pub fn compile_file(
 
             Directive::Xref {
                 uri, label, format, ..
-            } => match render_xref(uri, label.as_deref(), format, root) {
+            } => match compile_prose::render_xref(uri, label.as_deref(), format, root) {
                 Ok(rendered) => {
                     resolved_count += 1;
                     format!(
@@ -1564,7 +1571,8 @@ pub fn compile_file(
                 ..
             } => {
                 resolved_count += 1;
-                let rendered = render_blockquote(text, attribution.as_deref(), style);
+                let rendered =
+                    compile_prose::render_blockquote(text, attribution.as_deref(), style);
                 format!(
                     "<!-- proof:compiled from=\"proof:blockquote\" -->\n{}\n<!-- /proof:compiled -->",
                     rendered
@@ -2154,108 +2162,6 @@ fn generate_tree_block(
     ))
 }
 
-fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
-    let (target_level, _) = headings.last().unwrap();
-    let target_depth = target_level - min_level;
-    let mut counters: Vec<usize> = vec![0; target_depth + 1];
-    for (level, _) in headings {
-        let depth = level - min_level;
-        if depth <= target_depth {
-            counters[depth] += 1;
-            for d in (depth + 1)..=target_depth {
-                counters[d] = 0;
-            }
-        }
-    }
-    let parts: Vec<String> = counters[..=target_depth]
-        .iter()
-        .map(|n| n.to_string())
-        .collect();
-    format!("{}.", parts.join("."))
-}
-
-fn generate_toc(content: &str, max_depth: usize, style: &str, section: Option<&str>) -> String {
-    // Collect every ATX heading outside fenced code blocks. Depth filtering and
-    // section narrowing happen below so that a target section can sit at any
-    // level relative to `max_depth`.
-    let mut all: Vec<(usize, String)> = Vec::new();
-    let mut in_fence = false;
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-        if trimmed.starts_with('#') {
-            let level = trimmed.chars().take_while(|&c| c == '#').count();
-            let text = trimmed[level..].trim().to_string();
-            if !text.is_empty() {
-                all.push((level, text));
-            }
-        }
-    }
-
-    // If `section` is given, narrow `all` to the descendants of the first
-    // heading whose text matches (case-insensitive trim). Descendants run from
-    // the heading after the match through to the next heading at the same or
-    // shallower level. The matching heading itself is excluded — only its
-    // children are listed.
-    let scoped: Vec<(usize, String)> = if let Some(target) = section {
-        let want = target.trim().to_lowercase();
-        let start = all
-            .iter()
-            .position(|(_, t)| t.trim().to_lowercase() == want);
-        match start {
-            Some(idx) => {
-                let parent_level = all[idx].0;
-                let mut out = Vec::new();
-                for (level, text) in all.iter().skip(idx + 1) {
-                    if *level <= parent_level {
-                        break;
-                    }
-                    out.push((*level, text.clone()));
-                }
-                out
-            }
-            None => Vec::new(),
-        }
-    } else {
-        all
-    };
-
-    // Apply max_depth as the last filter so it always means "the absolute
-    // heading level cap" (`level <= max_depth`).
-    let headings: Vec<(usize, String)> = scoped
-        .into_iter()
-        .filter(|(level, _)| *level <= max_depth)
-        .collect();
-
-    if headings.is_empty() {
-        return String::new();
-    }
-    let min_level = headings.iter().map(|(l, _)| *l).min().unwrap_or(1);
-    let mut out = String::new();
-    for (i, (level, text)) in headings.iter().enumerate() {
-        let depth = level - min_level;
-        let indent = "  ".repeat(depth);
-        if style == "tree" && depth > 0 {
-            let is_last = !headings[i + 1..].iter().any(|(l, _)| *l <= *level);
-            let connector = if is_last { "└── " } else { "├── " };
-            let parent_indent = "  ".repeat(depth.saturating_sub(1));
-            out.push_str(&format!("{}  {}{}\n", parent_indent, connector, text));
-        } else if style == "numbered" {
-            let number = build_numbered_label(&headings[..=i], min_level);
-            out.push_str(&format!("{}{} {}\n", indent, number, text));
-        } else {
-            out.push_str(&format!("{}- {}\n", indent, text));
-        }
-    }
-    out.trim_end().to_string()
-}
-
 fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
     let render_iw = indent_width.max(2);
 
@@ -2485,88 +2391,6 @@ fn parse_outline_number_prefix(s: &str) -> Option<(usize, String, String)> {
     Some((dot_count, normalized, label))
 }
 
-/// Render a `proof:xref` directive as a formatted cross-reference.
-///
-/// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
-/// reading the target file and finding the heading whose slug matches.
-/// Falls back to the URI path if no specific heading is found.
-fn render_xref(uri: &str, label: Option<&str>, format: &str, root: &Path) -> Result<String> {
-    let parsed =
-        mdpath::parse(uri).map_err(|e| anyhow::anyhow!("invalid xref URI {:?}: {}", uri, e))?;
-
-    let target_path = root.join(&parsed.path);
-    if !target_path.exists() {
-        anyhow::bail!("xref target file not found: {:?}", parsed.path);
-    }
-
-    // Resolve heading text from the heading_path (if any)
-    let heading_text: String = if parsed.heading_path.is_empty() {
-        // No heading — use filename without extension
-        target_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(&parsed.path)
-            .replace('-', " ")
-            .replace('_', " ")
-    } else {
-        let content = std::fs::read_to_string(&target_path)?;
-        let slug_target = parsed.heading_path.last().map(|s| s.as_str()).unwrap_or("");
-        find_heading_by_slug(&content, slug_target).unwrap_or_else(|| slug_target.replace('-', " "))
-    };
-
-    let display_label = label.unwrap_or(&heading_text);
-
-    // Build a relative link to the target (path + anchor slug if heading present)
-    let anchor = if parsed.heading_path.is_empty() {
-        String::new()
-    } else {
-        let slug = heading_slug(&heading_text);
-        format!("#{}", slug)
-    };
-    let link = format!("{}{}", parsed.path, anchor);
-
-    let rendered = match format {
-        "note" => format!("> **See also:** [{}]({})", display_label, link),
-        "callout" => format!("→ [{}]({})", display_label, link),
-        _ => format!("*See: [{}]({})*", display_label, link), // "inline" default
-    };
-
-    Ok(rendered)
-}
-
-/// Find a heading in `content` whose GitHub-style slug matches `target_slug`.
-fn find_heading_by_slug(content: &str, target_slug: &str) -> Option<String> {
-    let mut in_fence = false;
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-        if trimmed.starts_with('#') {
-            let level = trimmed.chars().take_while(|&c| c == '#').count();
-            let text = trimmed[level..].trim();
-            if !text.is_empty() && heading_slug(text) == target_slug {
-                return Some(text.to_string());
-            }
-        }
-    }
-    None
-}
-
-/// Produce a GitHub-style heading anchor slug from heading text.
-/// Lowercase, spaces → hyphens, strip non-alphanumeric/non-hyphen.
-fn heading_slug(text: &str) -> String {
-    text.to_lowercase()
-        .chars()
-        .map(|c| if c == ' ' { '-' } else { c })
-        .filter(|c| c.is_alphanumeric() || *c == '-')
-        .collect()
-}
-
 fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
     // Split off any query string (?select=… &filter=… etc.) before delegating
     // resolution so mdpath sees a clean URI. Transforms apply to table content
@@ -2763,105 +2587,6 @@ fn parse_filter_term(term: &str) -> Option<(&str, FilterOp, String)> {
 // ─────────────────────────────────────────────────────────
 // proof:element compile arm
 // ─────────────────────────────────────────────────────────
-
-/// Render a `proof:blockquote` directive for prose documents.
-///
-/// Distinct from `proof:quote` (slide-only, centered, curly-quoted): this is
-/// left-aligned, indented, with optional attribution on a trailing line. Two
-/// styles are supported:
-///
-/// - `style="indent"` (default) — emits standard markdown blockquote syntax:
-///   each line of the body is prefixed with `> `, blank lines remain `>`-prefixed
-///   to keep the quote contiguous, and attribution appears as a trailing
-///   `> — Name` line.
-///
-/// - `style="boxed"` — emits an ASCII-framed quote using `┌─...─┐ │ ... │ └─...─┘`,
-///   left-aligned within the frame. Attribution renders inside the frame on its
-///   own right-aligned line. Frame width is `max(visual_width(line) for line in body) + 4`,
-///   capped at the longest body line so the box hugs the content.
-///
-/// Unknown `style=` values silently fall back to `"indent"`.
-fn render_blockquote(text: &str, attribution: Option<&str>, style: &str) -> String {
-    let body_lines: Vec<&str> = text.lines().collect();
-    // Trim leading and trailing blank lines so authors can leave whitespace
-    // around the body for readability without it becoming part of the output.
-    let trimmed_body = trim_blank_edges(&body_lines);
-
-    match style {
-        "boxed" => render_blockquote_boxed(&trimmed_body, attribution),
-        // "indent" and any unknown style fall back to markdown blockquote.
-        _ => render_blockquote_indent(&trimmed_body, attribution),
-    }
-}
-
-fn trim_blank_edges<'a>(lines: &[&'a str]) -> Vec<&'a str> {
-    let start = lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
-    let end = lines
-        .iter()
-        .rposition(|l| !l.trim().is_empty())
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    if start >= end {
-        Vec::new()
-    } else {
-        lines[start..end].to_vec()
-    }
-}
-
-fn render_blockquote_indent(body: &[&str], attribution: Option<&str>) -> String {
-    let mut out: Vec<String> = body
-        .iter()
-        .map(|line| {
-            if line.trim().is_empty() {
-                ">".to_string()
-            } else {
-                format!("> {}", line)
-            }
-        })
-        .collect();
-    if let Some(by) = attribution {
-        if !out.is_empty() {
-            out.push(">".to_string());
-        }
-        out.push(format!("> — {}", by));
-    }
-    out.join("\n")
-}
-
-fn render_blockquote_boxed(body: &[&str], attribution: Option<&str>) -> String {
-    use crate::layout::visual_width;
-
-    if body.is_empty() && attribution.is_none() {
-        return String::new();
-    }
-
-    // Compute inner width: longest body line, or attribution length, whichever wider.
-    let body_max = body.iter().map(|l| visual_width(l)).max().unwrap_or(0);
-    let attr_w = attribution.map(|a| visual_width(a) + 2).unwrap_or(0); // "— "
-    let inner_w = body_max.max(attr_w);
-
-    let horizontal = "─".repeat(inner_w + 2); // 1 cell of padding each side
-    let top = format!("┌{}┐", horizontal);
-    let bot = format!("└{}┘", horizontal);
-
-    let mut out = vec![top];
-    for line in body {
-        let pad = inner_w.saturating_sub(visual_width(line));
-        out.push(format!("│ {}{} │", line, " ".repeat(pad)));
-    }
-    if let Some(by) = attribution {
-        // Insert a blank padded row before the attribution if there was body content.
-        if !body.is_empty() {
-            out.push(format!("│ {} │", " ".repeat(inner_w)));
-        }
-        let attr_text = format!("— {}", by);
-        let pad = inner_w.saturating_sub(visual_width(&attr_text));
-        // Right-align attribution inside the frame.
-        out.push(format!("│ {}{} │", " ".repeat(pad), attr_text));
-    }
-    out.push(bot);
-    out.join("\n")
-}
 
 /// Resolve a proof:chart directive's data — either from an md:// table or
 /// from the inline `label: value` body.
@@ -5159,7 +4884,7 @@ Some prose.
 
     #[test]
     fn toc_no_section_lists_everything() {
-        let out = generate_toc(SAMPLE_DOC, 4, "list", None);
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "list", None);
         assert!(out.contains("API Reference"));
         assert!(out.contains("Endpoints"));
         assert!(out.contains("Migration"));
@@ -5168,7 +4893,7 @@ Some prose.
 
     #[test]
     fn toc_section_filters_to_descendants() {
-        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("API Reference"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "list", Some("API Reference"));
         assert!(out.contains("Endpoints"));
         assert!(out.contains("Authentication"));
         assert!(out.contains("GET /widgets"));
@@ -5191,7 +4916,7 @@ Some prose.
     #[test]
     fn toc_section_respects_max_depth() {
         // max-depth=3 + section="API Reference" => H3 only (H4 endpoints excluded)
-        let out = generate_toc(SAMPLE_DOC, 3, "list", Some("API Reference"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 3, "list", Some("API Reference"));
         assert!(out.contains("Endpoints"));
         assert!(out.contains("Authentication"));
         assert!(
@@ -5204,7 +4929,7 @@ Some prose.
 
     #[test]
     fn toc_section_case_insensitive_match() {
-        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("api reference"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "list", Some("api reference"));
         assert!(
             out.contains("Endpoints"),
             "section match must be case-insensitive, got:\n{}",
@@ -5214,7 +4939,7 @@ Some prose.
 
     #[test]
     fn toc_section_not_found_returns_empty() {
-        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Nonexistent Section"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "list", Some("Nonexistent Section"));
         assert!(
             out.is_empty(),
             "missing section should produce empty TOC, got:\n{}",
@@ -5225,7 +4950,7 @@ Some prose.
     #[test]
     fn toc_section_works_for_h3_anchor() {
         // section= can target any heading, not just H2
-        let out = generate_toc(SAMPLE_DOC, 4, "list", Some("Endpoints"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "list", Some("Endpoints"));
         assert!(out.contains("GET /widgets"));
         assert!(out.contains("POST /widgets"));
         // Must stop at sibling ### Authentication
@@ -5234,7 +4959,7 @@ Some prose.
 
     #[test]
     fn toc_section_numbered_renumbers_from_section() {
-        let out = generate_toc(SAMPLE_DOC, 4, "numbered", Some("API Reference"));
+        let out = compile_toc::generate_toc(SAMPLE_DOC, 4, "numbered", Some("API Reference"));
         // Within the section, the first H3 is "1." (re-rooted by min_level)
         assert!(
             out.starts_with("1. Endpoints"),
@@ -5292,9 +5017,15 @@ Some prose.
 
     #[test]
     fn heading_slug_basic() {
-        assert_eq!(heading_slug("Authentication"), "authentication");
-        assert_eq!(heading_slug("API Reference"), "api-reference");
-        assert_eq!(heading_slug("What's New?"), "whats-new");
+        assert_eq!(
+            compile_prose::heading_slug("Authentication"),
+            "authentication"
+        );
+        assert_eq!(
+            compile_prose::heading_slug("API Reference"),
+            "api-reference"
+        );
+        assert_eq!(compile_prose::heading_slug("What's New?"), "whats-new");
     }
 
     #[test]
@@ -5303,8 +5034,9 @@ Some prose.
         let target = dir.path().join("api.md");
         std::fs::write(&target, "# API Guide\n\n## Authentication\n\nContent.\n").unwrap();
 
-        let result = render_xref("md://api.md#authentication", None, "inline", dir.path())
-            .expect("render_xref should succeed");
+        let result =
+            compile_prose::render_xref("md://api.md#authentication", None, "inline", dir.path())
+                .expect("render_xref should succeed");
         assert!(
             result.contains("See:"),
             "inline format should start with See:"
@@ -5327,7 +5059,8 @@ Some prose.
             "# Ref\n\n## Background\n\nContent.\n",
         )
         .unwrap();
-        let result = render_xref("md://ref.md#background", None, "note", dir.path()).unwrap();
+        let result =
+            compile_prose::render_xref("md://ref.md#background", None, "note", dir.path()).unwrap();
         assert!(
             result.starts_with("> **See also:**"),
             "note format must use blockquote"
@@ -5343,7 +5076,7 @@ Some prose.
             "# Guide\n\n## Setup\n\nContent.\n",
         )
         .unwrap();
-        let result = render_xref(
+        let result = compile_prose::render_xref(
             "md://guide.md#setup",
             Some("the setup section"),
             "inline",
@@ -5360,7 +5093,7 @@ Some prose.
     #[test]
     fn xref_missing_file_returns_error() {
         let dir = tempfile::tempdir().unwrap();
-        let result = render_xref("md://nonexistent.md", None, "inline", dir.path());
+        let result = compile_prose::render_xref("md://nonexistent.md", None, "inline", dir.path());
         assert!(result.is_err(), "missing target file should return Err");
     }
 
@@ -5380,13 +5113,13 @@ Some prose.
 
     #[test]
     fn blockquote_indent_default_no_attribution() {
-        let out = render_blockquote("To be or not to be.", None, "indent");
+        let out = compile_prose::render_blockquote("To be or not to be.", None, "indent");
         assert_eq!(out, "> To be or not to be.");
     }
 
     #[test]
     fn blockquote_indent_with_attribution() {
-        let out = render_blockquote("To be or not to be.", Some("Hamlet"), "indent");
+        let out = compile_prose::render_blockquote("To be or not to be.", Some("Hamlet"), "indent");
         // Body line, blank quote line, attribution line.
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines, vec!["> To be or not to be.", ">", "> — Hamlet"]);
@@ -5397,7 +5130,7 @@ Some prose.
         // Inner blank lines stay as `>` (so the rendered markdown is still one
         // contiguous quote, not two adjacent ones).
         let text = "First paragraph.\n\nSecond paragraph.";
-        let out = render_blockquote(text, None, "indent");
+        let out = compile_prose::render_blockquote(text, None, "indent");
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(
             lines,
@@ -5408,14 +5141,14 @@ Some prose.
     #[test]
     fn blockquote_indent_trims_leading_and_trailing_blank_lines() {
         let text = "\n\nThe quote.\n\n";
-        let out = render_blockquote(text, None, "indent");
+        let out = compile_prose::render_blockquote(text, None, "indent");
         assert_eq!(out, "> The quote.");
     }
 
     #[test]
     fn blockquote_unknown_style_falls_back_to_indent() {
-        let out_unknown = render_blockquote("hi", None, "marble");
-        let out_indent = render_blockquote("hi", None, "indent");
+        let out_unknown = compile_prose::render_blockquote("hi", None, "marble");
+        let out_indent = compile_prose::render_blockquote("hi", None, "indent");
         assert_eq!(
             out_unknown, out_indent,
             "unknown style must fall back to indent (permissive parsing)"
@@ -5424,7 +5157,7 @@ Some prose.
 
     #[test]
     fn blockquote_boxed_renders_frame() {
-        let out = render_blockquote("Hello world", None, "boxed");
+        let out = compile_prose::render_blockquote("Hello world", None, "boxed");
         let lines: Vec<&str> = out.lines().collect();
         // Top, content, bottom — at minimum.
         assert!(lines.len() >= 3);
@@ -5440,7 +5173,7 @@ Some prose.
 
     #[test]
     fn blockquote_boxed_with_attribution_right_aligned() {
-        let out = render_blockquote("To be.", Some("Hamlet"), "boxed");
+        let out = compile_prose::render_blockquote("To be.", Some("Hamlet"), "boxed");
         let lines: Vec<&str> = out.lines().collect();
         // Last content line (before bottom border) should hold the attribution.
         let attr_line = lines[lines.len() - 2];
