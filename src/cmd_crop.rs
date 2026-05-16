@@ -731,12 +731,14 @@ fn run_side_info(
 }
 
 fn run_backlink_list(mut args: BacklinkListArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_snippet_global_format("backlink-list", globals)?;
     apply_global_output(&mut args.output, globals);
     let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
 fn run_link_list(mut args: LinkListArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_snippet_global_format("link-list", globals)?;
     apply_global_output(&mut args.output, globals);
     let status = link_status_filter(&args.status)?;
     let filter = crop_side_info::LinkFilter {
@@ -756,12 +758,14 @@ fn link_status_filter(status: &str) -> Result<Option<String>> {
 }
 
 fn run_heading_list(mut args: HeadingListArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_snippet_global_format("heading-list", globals)?;
     apply_global_output(&mut args.output, globals);
     let rendered = crop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
 fn run_frontmatter_list(mut args: FrontmatterListArgs, globals: &GlobalOptions) -> Result<()> {
+    reject_non_markdown_snippet_global_format("frontmatter-list", globals)?;
     apply_global_output(&mut args.output, globals);
     let filter = crop_side_info::FrontmatterFilter {
         field: args.field,
@@ -792,6 +796,17 @@ fn write_snippet(rendered: String, output: Option<PathBuf>) -> Result<()> {
         println!("{}", rendered);
     }
     Ok(())
+}
+
+fn reject_non_markdown_snippet_global_format(command: &str, globals: &GlobalOptions) -> Result<()> {
+    match globals.format() {
+        "text" | "markdown" | "list" | "table" | "count" => Ok(()),
+        other => bail!(
+            "proof crop {} renders Markdown snippets; use text/markdown global output format or list/table/count snippet format, got {:?}",
+            command,
+            other
+        ),
+    }
 }
 
 fn apply_global_output(output: &mut Option<PathBuf>, globals: &GlobalOptions) {
@@ -1576,6 +1591,14 @@ exclude = ["target/**", "node_modules/**"]
                 "links.json"
             ]
         );
+    }
+
+    #[test]
+    fn snippet_commands_reject_non_markdown_global_format() {
+        let err =
+            reject_non_markdown_snippet_global_format("link-list", &globals("json")).unwrap_err();
+
+        assert!(err.to_string().contains("Markdown snippets"));
     }
 
     #[test]

@@ -193,6 +193,10 @@ proof crop heading-list --source README.md --format table --output OUTLINE.md
 proof crop frontmatter-list --field tags --value guide --format table --output GUIDES.md
 ```
 
+These snippet commands render Markdown snippets with command-local
+`--format list|table|count`; non-Markdown global formats such as `-f json` are
+rejected instead of ignored.
+
 PROOF dogfoods this workflow with `.crop/views/proof-guides.json`, a
 `crop.view.v1` recipe generated from the proof-authored guide sources:
 

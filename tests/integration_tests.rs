@@ -2647,6 +2647,32 @@ fn binary_crop_link_list_renders_filtered_snippet() {
 }
 
 #[test]
+fn binary_crop_link_list_rejects_global_json_format() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("links.json");
+    std::fs::write(&side_info, r#"{"links":[]}"#).unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("-f")
+        .arg("json")
+        .arg("crop")
+        .arg("link-list")
+        .arg("--side-info")
+        .arg(&side_info)
+        .output()
+        .expect("failed to run proof crop link-list");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Markdown snippets"), "got: {}", stderr);
+}
+
+#[test]
 fn binary_crop_link_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {
