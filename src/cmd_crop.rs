@@ -660,7 +660,7 @@ fn run_run_view(crop_bin: PathBuf, mut args: RunViewArgs, globals: &GlobalOption
     reject_non_json_artifact_global_format("run-view", globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
-    let crop_args = build_run_view_args(args);
+    let crop_args = build_run_view_args(args)?;
     if let Some(output) = output {
         run_crop_to_output(crop_bin, crop_args, output)
     } else {
@@ -668,7 +668,7 @@ fn run_run_view(crop_bin: PathBuf, mut args: RunViewArgs, globals: &GlobalOption
     }
 }
 
-fn build_run_view_args(args: RunViewArgs) -> Vec<String> {
+fn build_run_view_args(args: RunViewArgs) -> Result<Vec<String>> {
     let mut crop_args = vec![
         "view".to_string(),
         "--file".to_string(),
@@ -687,10 +687,21 @@ fn build_run_view_args(args: RunViewArgs) -> Vec<String> {
         crop_args.push(exclude_dir);
     }
     if let Some(prefix_cache) = args.prefix_cache {
+        validate_prefix_cache(&prefix_cache)?;
         crop_args.push("--prefix-cache".to_string());
         crop_args.push(prefix_cache);
     }
-    crop_args
+    Ok(crop_args)
+}
+
+fn validate_prefix_cache(prefix_cache: &str) -> Result<()> {
+    match prefix_cache {
+        "generic" => Ok(()),
+        other => bail!(
+            "proof crop run-view --prefix-cache must be generic, got {:?}",
+            other
+        ),
+    }
 }
 
 fn view_root_for_output(root: &Path, output: &Path) -> Result<String> {
@@ -1741,7 +1752,8 @@ exclude = ["target/**", "node_modules/**"]
             exclude_dirs: vec!["target".to_string()],
             prefix_cache: Some("generic".to_string()),
             output: Some(PathBuf::from("pack.json")),
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             args,
@@ -1759,6 +1771,21 @@ exclude = ["target/**", "node_modules/**"]
                 "generic"
             ]
         );
+    }
+
+    #[test]
+    fn run_view_rejects_unknown_prefix_cache() {
+        let err = build_run_view_args(RunViewArgs {
+            file: PathBuf::from(".crop\\views\\ready.json"),
+            query: None,
+            extensions: Vec::new(),
+            exclude_dirs: Vec::new(),
+            prefix_cache: Some("specialized".to_string()),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("must be generic"));
     }
 
     #[test]

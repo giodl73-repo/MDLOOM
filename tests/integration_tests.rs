@@ -2711,6 +2711,37 @@ fn binary_crop_run_view_rejects_global_markdown_format() {
 }
 
 #[test]
+fn binary_crop_run_view_rejects_unknown_prefix_cache() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join("ready.json");
+    std::fs::write(&view_file, "{}").unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("run-view")
+        .arg("--file")
+        .arg(&view_file)
+        .arg("--prefix-cache")
+        .arg("specialized")
+        .output()
+        .expect("failed to run proof crop run-view");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("must be generic"), "got: {}", stderr);
+    assert!(!args_file.exists(), "CROP should not be invoked");
+}
+
+#[test]
 fn binary_crop_view_rejects_global_markdown_format() {
     let bin = debug_bin();
     if !bin.exists() {
