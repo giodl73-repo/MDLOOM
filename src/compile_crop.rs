@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
+use crate::compile_directive::Directive;
 use crate::crop_side_info;
 
 #[derive(Clone, Copy)]
@@ -26,6 +27,46 @@ pub(crate) fn side_info_path(root: &Path, explicit: Option<&str>, kind: SideInfo
     explicit
         .map(|p| root.join(p))
         .unwrap_or_else(|| root.join(".proof").join("side-info").join(kind.filename()))
+}
+
+pub(crate) fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for directive in directives {
+        let path = match directive {
+            Directive::Backlinks { source, .. } => {
+                side_info_path(root, source.as_deref(), SideInfoKind::Backlinks)
+            }
+            Directive::Links { source, .. } => {
+                side_info_path(root, source.as_deref(), SideInfoKind::Links)
+            }
+            Directive::Headings { source, .. } => {
+                side_info_path(root, source.as_deref(), SideInfoKind::Headings)
+            }
+            Directive::Frontmatter { source, .. } => {
+                side_info_path(root, source.as_deref(), SideInfoKind::Frontmatter)
+            }
+            _ => {
+                continue;
+            }
+        };
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths
+}
+
+pub(crate) fn dependency_parse_keys(
+    paths: &[PathBuf],
+    path_index: &mut crate::cache::PathIndex,
+) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| match std::fs::read_to_string(path) {
+            Ok(content) => crate::cache::get_or_compute_parse_key(path, &content, path_index),
+            Err(_) => format!("missing:{}", path.display()),
+        })
+        .collect()
 }
 
 pub(crate) fn frontmatter_filter(

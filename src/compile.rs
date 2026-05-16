@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use crate::compile_chart;
-use crate::compile_crop::{self, SideInfoKind};
+use crate::compile_crop;
 use crate::compile_directive;
 use crate::compile_format;
 use crate::compile_math;
@@ -99,8 +99,9 @@ pub fn compile_file(
     // Build a minimal directive-attrs JSON for cache keying, then check Tier 3.
     // On hit: write cached output (skip if identical), return early with from_cache=true.
     let mut path_index = crate::cache::load_path_index(root);
-    let resolved_files = side_info_dependencies(&directives, root);
-    let dependency_parse_keys = dependency_parse_keys(&resolved_files, &mut path_index);
+    let resolved_files = compile_crop::side_info_dependencies(&directives, root);
+    let dependency_parse_keys =
+        compile_crop::dependency_parse_keys(&resolved_files, &mut path_index);
     {
         let source_parse_key =
             crate::cache::get_or_compute_parse_key(source_path, &source_text, &mut path_index);
@@ -813,46 +814,6 @@ pub fn compile_file(
         resolved_files,
         written: true,
     })
-}
-
-fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf> {
-    let mut paths = Vec::new();
-    for directive in directives {
-        let path = match directive {
-            Directive::Backlinks { source, .. } => {
-                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Backlinks)
-            }
-            Directive::Links { source, .. } => {
-                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Links)
-            }
-            Directive::Headings { source, .. } => {
-                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Headings)
-            }
-            Directive::Frontmatter { source, .. } => {
-                compile_crop::side_info_path(root, source.as_deref(), SideInfoKind::Frontmatter)
-            }
-            _ => {
-                continue;
-            }
-        };
-        if !paths.contains(&path) {
-            paths.push(path);
-        }
-    }
-    paths
-}
-
-fn dependency_parse_keys(
-    paths: &[PathBuf],
-    path_index: &mut crate::cache::PathIndex,
-) -> Vec<String> {
-    paths
-        .iter()
-        .map(|path| match std::fs::read_to_string(path) {
-            Ok(content) => crate::cache::get_or_compute_parse_key(path, &content, path_index),
-            Err(_) => format!("missing:{}", path.display()),
-        })
-        .collect()
 }
 
 // ─────────────────────────────────────────────────────────
