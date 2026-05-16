@@ -2376,6 +2376,49 @@ fn publish_backends_consume_resolved_compile_output() {
 }
 
 #[test]
+fn publication_ast_uses_resolved_compile_output() {
+    use proof_lib::compile::compile_file;
+    use proof_lib::publication::{PublicationBlock, PublicationDocument};
+    use proof_lib::GlintConfig;
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("doc.source.md");
+    let output_path = dir.path().join("doc.md");
+    std::fs::write(
+        &source,
+        "# Source\n\n```proof:toc max-depth=2 style=list\n```\n\n## Install\n## Usage\n",
+    )
+    .unwrap();
+
+    let cfg = GlintConfig::default();
+    let result = compile_file(&source, &output_path, dir.path(), &cfg).unwrap();
+    assert!(
+        result.violations.is_empty(),
+        "compile violations: {}",
+        result.violations.len()
+    );
+
+    let markdown = std::fs::read_to_string(&output_path).unwrap();
+    assert!(!markdown.contains("```proof:toc"), "got:\n{}", markdown);
+
+    let doc = PublicationDocument::from_resolved_markdown(&markdown, "fallback");
+    assert_eq!(doc.title, "Source");
+    assert_eq!(doc.metadata["heading_path.source"], "Source");
+    assert_eq!(doc.metadata["heading_path.install"], "Source > Install");
+    assert!(
+        serde_json::to_string(&doc).unwrap().contains("Install"),
+        "got:\n{}",
+        serde_json::to_string_pretty(&doc).unwrap()
+    );
+    assert!(doc.blocks.iter().any(|block| {
+        matches!(
+            block,
+            PublicationBlock::Heading { text, .. } if text == "Usage"
+        )
+    }));
+}
+
+#[test]
 fn binary_compile_writes_artifact_manifest() {
     let bin = debug_bin();
     if !bin.exists() {

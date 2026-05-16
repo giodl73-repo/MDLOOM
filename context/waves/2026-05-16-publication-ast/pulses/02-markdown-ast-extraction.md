@@ -2,7 +2,7 @@
 wave: publication-ast
 pulse: 02
 date: 2026-05-16
-status: todo
+status: done
 depends_on: ["publication-ast/pulse-01"]
 governing_roles: ["COMPOSE", "SCHEMA", "BENCH"]
 ---
@@ -31,12 +31,12 @@ to support existing publish backend claims.
 
 ## Deliverables checklist
 
-- [ ] Add resolved-Markdown to `PublicationDocument` extraction.
-- [ ] Support headings, paragraphs, links, inline code, lists, code blocks, and
+- [x] Add resolved-Markdown to `PublicationDocument` extraction.
+- [x] Support headings, paragraphs, links, inline code, lists, code blocks, and
       tables.
-- [ ] Preserve document title, heading paths, stable IDs, and metadata hooks.
-- [ ] Add L0 extraction tests for nested lists, links, code, tables, and headings.
-- [ ] Add L1 test proving extraction happens after directive resolution.
+- [x] Preserve document title, heading paths, stable IDs, and metadata hooks.
+- [x] Add L0 extraction tests for nested lists, links, code, tables, and headings.
+- [x] Add L1 test proving extraction happens after directive resolution.
 
 ## Validation gates
 
@@ -53,4 +53,21 @@ to support existing publish backend claims.
 
 ## Evidence
 
-- Pending.
+- Added `PublicationDocument::from_resolved_markdown` for resolved Markdown
+  extraction into headings, paragraphs, nested lists, fenced code blocks,
+  tables, and rich inline spans.
+- Heading extraction preserves stable slug IDs and stores path metadata under
+  `heading_path.<id>`.
+- Added L0 coverage with `publication_markdown_extracts_common_blocks`.
+- Added L1 coverage with `publication_ast_uses_resolved_compile_output`,
+  proving AST extraction consumes compiled Markdown after `proof:toc`
+  resolution rather than raw source directives.
+- Validation:
+  - `cargo fmt --check`
+  - `cargo test publication_markdown_extracts_common_blocks`
+  - `cargo test publication_ast_uses_resolved_compile_output`
+  - `cargo test`
+  - `cargo test --test integration_tests`
+  - `cargo build`
+  - `cargo clippy -- -D warnings`
+  - `git diff --check`

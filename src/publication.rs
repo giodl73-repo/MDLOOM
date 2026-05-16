@@ -36,6 +36,29 @@ impl PublicationDocument {
     pub fn push_block(&mut self, block: PublicationBlock) {
         self.blocks.push(block);
     }
+
+    pub fn from_resolved_markdown(markdown: &str, fallback_title: &str) -> Self {
+        let blocks = markdown_blocks(markdown);
+        let title = blocks
+            .iter()
+            .find_map(|block| match block {
+                PublicationBlock::Heading { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| fallback_title.to_string());
+        let mut doc = Self::new(PublicationKind::Document, title);
+        let mut heading_path: Vec<String> = Vec::new();
+        for block in &blocks {
+            if let PublicationBlock::Heading { level, text, id } = block {
+                heading_path.truncate(level.saturating_sub(1));
+                heading_path.push(text.clone());
+                doc.metadata
+                    .insert(format!("heading_path.{id}"), heading_path.join(" > "));
+            }
+        }
+        doc.blocks = blocks;
+        doc
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,6 +339,285 @@ impl PublicationTheme {
     }
 }
 
+fn markdown_blocks(markdown: &str) -> Vec<PublicationBlock> {
+    let lines = markdown.lines().collect::<Vec<_>>();
+    let mut blocks = Vec::new();
+    let mut index = 0usize;
+
+    while index < lines.len() {
+        let line = lines[index];
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            index += 1;
+            continue;
+        }
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            let fence = if trimmed.starts_with("~~~") {
+                "~~~"
+            } else {
+                "```"
+            };
+            let language = trimmed
+                .strip_prefix(fence)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string);
+            index += 1;
+            let mut code = Vec::new();
+            while index < lines.len() && !lines[index].trim_start().starts_with(fence) {
+                code.push(lines[index]);
+                index += 1;
+            }
+            if index < lines.len() {
+                index += 1;
+            }
+            blocks.push(PublicationBlock::CodeBlock {
+                language,
+                text: code.join("\n"),
+            });
+            continue;
+        }
+        if let Some((level, title)) = markdown_heading(line) {
+            blocks.push(PublicationBlock::heading(
+                level,
+                inline_plain_text(title),
+                slugify(title),
+            ));
+            index += 1;
+            continue;
+        }
+        if is_markdown_table_start(&lines, index) {
+            let headers = table_cells(lines[index]);
+            index += 2;
+            let mut rows = Vec::new();
+            while index < lines.len()
+                && lines[index].contains('|')
+                && !lines[index].trim().is_empty()
+            {
+                rows.push(table_cells(lines[index]));
+                index += 1;
+            }
+            blocks.push(PublicationBlock::Table { headers, rows });
+            continue;
+        }
+        if markdown_list_item(line).is_some() {
+            let (list, next) = parse_list(&lines, index, list_indent(line));
+            blocks.push(list);
+            index = next;
+            continue;
+        }
+
+        let mut paragraph = vec![trimmed.to_string()];
+        index += 1;
+        while index < lines.len() {
+            let next = lines[index];
+            if next.trim().is_empty()
+                || next.trim_start().starts_with("```")
+                || next.trim_start().starts_with("~~~")
+                || markdown_heading(next).is_some()
+                || markdown_list_item(next).is_some()
+                || is_markdown_table_start(&lines, index)
+            {
+                break;
+            }
+            paragraph.push(next.trim().to_string());
+            index += 1;
+        }
+        blocks.push(PublicationBlock::Paragraph {
+            inlines: markdown_inlines(&paragraph.join(" ")),
+        });
+    }
+
+    blocks
+}
+
+fn parse_list(lines: &[&str], start: usize, base_indent: usize) -> (PublicationBlock, usize) {
+    let mut index = start;
+    let mut ordered = false;
+    let mut items: Vec<PublicationListItem> = Vec::new();
+
+    while index < lines.len() {
+        if lines[index].trim().is_empty() {
+            break;
+        }
+        let indent = list_indent(lines[index]);
+        if indent < base_indent {
+            break;
+        }
+        if indent > base_indent {
+            if let Some(last) = items.last_mut() {
+                let (nested, next) = parse_list(lines, index, indent);
+                last.blocks.push(nested);
+                index = next;
+                continue;
+            }
+            break;
+        }
+        let Some((is_ordered, text)) = markdown_list_item(lines[index]) else {
+            break;
+        };
+        ordered |= is_ordered;
+        items.push(PublicationListItem {
+            blocks: vec![PublicationBlock::Paragraph {
+                inlines: markdown_inlines(text),
+            }],
+        });
+        index += 1;
+    }
+
+    (PublicationBlock::List { ordered, items }, index)
+}
+
+fn markdown_inlines(text: &str) -> Vec<PublicationInline> {
+    let mut output = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(stripped) = rest.strip_prefix("**") {
+            if let Some(end) = stripped.find("**") {
+                output.push(PublicationInline::Strong {
+                    children: markdown_inlines(&stripped[..end]),
+                });
+                rest = &stripped[end + 2..];
+                continue;
+            }
+        }
+        if let Some(stripped) = rest.strip_prefix('*') {
+            if let Some(end) = stripped.find('*') {
+                output.push(PublicationInline::Emphasis {
+                    children: markdown_inlines(&stripped[..end]),
+                });
+                rest = &stripped[end + 1..];
+                continue;
+            }
+        }
+        if let Some(stripped) = rest.strip_prefix('`') {
+            if let Some(end) = stripped.find('`') {
+                output.push(PublicationInline::Code {
+                    text: stripped[..end].to_string(),
+                });
+                rest = &stripped[end + 1..];
+                continue;
+            }
+        }
+        if let Some(stripped) = rest.strip_prefix('[') {
+            if let Some(close) = stripped.find("](") {
+                if let Some(end) = stripped[close + 2..].find(')') {
+                    let href_end = close + 2 + end;
+                    output.push(PublicationInline::Link {
+                        href: stripped[close + 2..href_end].to_string(),
+                        children: markdown_inlines(&stripped[..close]),
+                    });
+                    rest = &stripped[href_end + 1..];
+                    continue;
+                }
+            }
+        }
+
+        let next = rest
+            .char_indices()
+            .skip(1)
+            .find_map(|(index, c)| matches!(c, '*' | '`' | '[').then_some(index))
+            .unwrap_or(rest.len());
+        output.push(PublicationInline::Text {
+            text: rest[..next].to_string(),
+        });
+        rest = &rest[next..];
+    }
+    output
+}
+
+fn inline_plain_text(text: &str) -> String {
+    markdown_inlines(text)
+        .iter()
+        .map(inline_text)
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn inline_text(inline: &PublicationInline) -> String {
+    match inline {
+        PublicationInline::Text { text } | PublicationInline::Code { text } => text.clone(),
+        PublicationInline::Emphasis { children } | PublicationInline::Strong { children } => {
+            children.iter().map(inline_text).collect()
+        }
+        PublicationInline::Link { children, .. } => children.iter().map(inline_text).collect(),
+    }
+}
+
+fn markdown_heading(line: &str) -> Option<(usize, &str)> {
+    let trimmed = line.trim_start();
+    let hashes = trimmed.chars().take_while(|c| *c == '#').count();
+    if !(1..=6).contains(&hashes) {
+        return None;
+    }
+    let rest = trimmed.get(hashes..)?;
+    if !rest.starts_with(' ') {
+        return None;
+    }
+    let title = rest.trim();
+    (!title.is_empty()).then_some((hashes, title))
+}
+
+fn markdown_list_item(line: &str) -> Option<(bool, &str)> {
+    let trimmed = line.trim_start();
+    if let Some(text) = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+    {
+        return Some((false, text.trim()));
+    }
+    let dot = trimmed.find('.')?;
+    if dot == 0 || !trimmed[..dot].chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    trimmed[dot + 1..]
+        .strip_prefix(' ')
+        .map(|text| (true, text.trim()))
+}
+
+fn list_indent(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+fn is_markdown_table_start(lines: &[&str], index: usize) -> bool {
+    index + 1 < lines.len()
+        && lines[index].contains('|')
+        && lines[index + 1]
+            .chars()
+            .all(|c| matches!(c, '|' | '-' | ':' | ' '))
+        && lines[index + 1].contains('-')
+}
+
+fn table_cells(line: &str) -> Vec<String> {
+    line.trim()
+        .trim_matches('|')
+        .split('|')
+        .map(|cell| inline_plain_text(cell.trim()))
+        .collect()
+}
+
+fn slugify(title: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = false;
+    for c in title.chars().flat_map(char::to_lowercase) {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+            last_dash = false;
+        } else if !last_dash && !slug.is_empty() {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    if slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        "section".to_string()
+    } else {
+        slug
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,5 +677,61 @@ mod tests {
             json["blocks"][2]["items"][0]["blocks"][0]["type"],
             "paragraph"
         );
+    }
+
+    #[test]
+    fn publication_markdown_extracts_common_blocks() {
+        let doc = PublicationDocument::from_resolved_markdown(
+            "# Guide\n\nIntro with [home](README.md), `code`, and **bold** text.\n\n- one\n  - nested\n- two\n\n1. first\n2. second\n\n| A | B |\n|---|---|\n| x | y |\n\n```rust\nlet x = 1;\n```\n\n## Details\n\nMore.\n",
+            "fallback",
+        );
+
+        assert_eq!(doc.schema, PUBLICATION_AST_SCHEMA);
+        assert_eq!(doc.title, "Guide");
+        assert_eq!(doc.metadata["heading_path.guide"], "Guide");
+        assert_eq!(doc.metadata["heading_path.details"], "Guide > Details");
+        assert!(matches!(
+            doc.blocks[0],
+            PublicationBlock::Heading { level: 1, .. }
+        ));
+
+        let PublicationBlock::Paragraph { inlines } = &doc.blocks[1] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|inline| matches!(
+            inline,
+            PublicationInline::Link { href, .. } if href == "README.md"
+        )));
+        assert!(inlines
+            .iter()
+            .any(|inline| matches!(inline, PublicationInline::Code { text } if text == "code")));
+        assert!(inlines
+            .iter()
+            .any(|inline| matches!(inline, PublicationInline::Strong { .. })));
+
+        let PublicationBlock::List { ordered, items } = &doc.blocks[2] else {
+            panic!("expected unordered list");
+        };
+        assert!(!ordered);
+        assert_eq!(items.len(), 2);
+        assert!(matches!(items[0].blocks[1], PublicationBlock::List { .. }));
+
+        let PublicationBlock::List { ordered, items } = &doc.blocks[3] else {
+            panic!("expected ordered list");
+        };
+        assert!(*ordered);
+        assert_eq!(items.len(), 2);
+
+        let PublicationBlock::Table { headers, rows } = &doc.blocks[4] else {
+            panic!("expected table");
+        };
+        assert_eq!(headers, &["A".to_string(), "B".to_string()]);
+        assert_eq!(rows[0], vec!["x".to_string(), "y".to_string()]);
+
+        let PublicationBlock::CodeBlock { language, text } = &doc.blocks[5] else {
+            panic!("expected code block");
+        };
+        assert_eq!(language.as_deref(), Some("rust"));
+        assert_eq!(text, "let x = 1;");
     }
 }
