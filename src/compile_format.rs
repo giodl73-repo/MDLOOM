@@ -30,3 +30,34 @@ pub(crate) fn row_block(uri: &str, rendered: &str) -> String {
         uri, rendered
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn include_block_has_traceability() {
+        let out = include_block("md://figures/foo.md#:0", "CONTENT\nLINE2");
+        assert!(out.contains("<!-- proof:compiled from=\"md://figures/foo.md#:0\" -->"));
+        assert!(out.contains("<!-- /proof:compiled -->"));
+        assert!(out.contains("CONTENT"));
+        assert!(out.contains("LINE2"));
+    }
+
+    #[test]
+    fn include_block_strips_fence() {
+        let out = include_block("md://x.md#:0", "```\nFOO\nBAR\n```");
+        assert!(out.contains("FOO"));
+        assert!(out.contains("BAR"));
+    }
+
+    #[test]
+    fn layout_block_has_uris() {
+        let uris = vec!["md://a.md#:0".to_string(), "md://b.md#:0".to_string()];
+        let out = layout_block(&uris, "COMPOSED");
+        assert!(out.contains("proof:layout"));
+        assert!(out.contains("md://a.md#:0"));
+        assert!(out.contains("md://b.md#:0"));
+        assert!(out.contains("COMPOSED"));
+    }
+}

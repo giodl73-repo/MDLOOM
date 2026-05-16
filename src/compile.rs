@@ -6,8 +6,6 @@ use crate::compile_chart;
 use crate::compile_crop;
 use crate::compile_directive;
 use crate::compile_figure;
-#[cfg(test)]
-use crate::compile_format;
 use crate::compile_math;
 use crate::compile_output;
 use crate::compile_prose;
@@ -21,10 +19,10 @@ use crate::element::{ElementAlign, ElementKind};
 use crate::runner::Runner;
 
 #[cfg(test)]
+use crate::compile_directive::proof_directive_kind;
+#[cfg(test)]
 use crate::compile_directive::ElementAttrs;
 use crate::compile_directive::{collect_directives, Directive};
-#[cfg(test)]
-use crate::compile_directive::{proof_directive_kind, LayoutAttrs};
 
 pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
     compile_directive::parse_directives(source)
@@ -511,74 +509,6 @@ mod tests {
         let src = "```proof:include\nmd://a.md#:0\n```\n\nBetween.\n\n```proof:include\nmd://b.md#:0\n```";
         let dirs = parse_directives(src);
         assert_eq!(dirs.len(), 2);
-    }
-
-    // ── layout_attrs_parse ────────────────────────────────
-
-    #[test]
-    fn test_attrs_parse_gap() {
-        let attrs = LayoutAttrs::parse("gap=4");
-        assert_eq!(attrs.gap, 4);
-    }
-
-    #[test]
-    fn test_attrs_parse_labels_quoted() {
-        let attrs = LayoutAttrs::parse("labels=\"Go,Rust,C#\"");
-        assert_eq!(attrs.labels, vec!["Go", "Rust", "C#"]);
-    }
-
-    #[test]
-    fn test_attrs_parse_border_flag() {
-        let attrs = LayoutAttrs::parse("border");
-        assert!(attrs.border);
-    }
-
-    #[test]
-    fn test_attrs_parse_defaults() {
-        let attrs = LayoutAttrs::parse("");
-        assert_eq!(attrs.gap, 3);
-        assert_eq!(attrs.align, "top");
-        assert_eq!(attrs.width, 120);
-        assert!(!attrs.border);
-    }
-
-    #[test]
-    fn test_attrs_parse_combined() {
-        let attrs = LayoutAttrs::parse("gap=2 align=center cols=3 width=200");
-        assert_eq!(attrs.gap, 2);
-        assert_eq!(attrs.align, "center");
-        assert_eq!(attrs.cols, Some(3));
-        assert_eq!(attrs.width, 200);
-    }
-
-    // ── format helpers ────────────────────────────────────
-
-    #[test]
-    fn test_format_include_block_has_traceability() {
-        let out = compile_format::include_block("md://figures/foo.md#:0", "CONTENT\nLINE2");
-        assert!(out.contains("<!-- proof:compiled from=\"md://figures/foo.md#:0\" -->"));
-        assert!(out.contains("<!-- /proof:compiled -->"));
-        assert!(out.contains("CONTENT"));
-        assert!(out.contains("LINE2"));
-    }
-
-    #[test]
-    fn test_format_include_block_strips_fence() {
-        // Content that arrives already-fenced from older resolve paths
-        let out = compile_format::include_block("md://x.md#:0", "```\nFOO\nBAR\n```");
-        // Should strip the fence and re-wrap
-        assert!(out.contains("FOO"));
-        assert!(out.contains("BAR"));
-    }
-
-    #[test]
-    fn test_format_layout_block_has_uris() {
-        let uris = vec!["md://a.md#:0".to_string(), "md://b.md#:0".to_string()];
-        let out = compile_format::layout_block(&uris, "COMPOSED");
-        assert!(out.contains("proof:layout"));
-        assert!(out.contains("md://a.md#:0"));
-        assert!(out.contains("md://b.md#:0"));
-        assert!(out.contains("COMPOSED"));
     }
 
     // ── end-to-end compile (no mdpath) ────────────────────
