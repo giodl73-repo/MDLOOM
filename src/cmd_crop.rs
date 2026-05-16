@@ -394,6 +394,7 @@ fn run_inspect_views(
     mut args: InspectViewsArgs,
     globals: &GlobalOptions,
 ) -> Result<()> {
+    reject_non_json_inspect_format(globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
     let crop_args = build_inspect_views_args(args);
@@ -418,6 +419,16 @@ fn build_inspect_views_args(args: InspectViewsArgs) -> Vec<String> {
     }
 
     crop_args
+}
+
+fn reject_non_json_inspect_format(globals: &GlobalOptions) -> Result<()> {
+    match globals.format() {
+        "text" | "json" => Ok(()),
+        other => bail!(
+            "proof crop inspect-views emits JSON; use text/json output format, got {:?}",
+            other
+        ),
+    }
 }
 
 fn run_prepare(crop_bin: PathBuf, args: PrepareArgs) -> Result<()> {
@@ -1249,6 +1260,13 @@ mod tests {
             args,
             vec!["view", "--inspect", "--file", ".crop\\views\\ready.json"]
         );
+    }
+
+    #[test]
+    fn inspect_views_rejects_non_json_global_format() {
+        let err = reject_non_json_inspect_format(&globals("markdown")).unwrap_err();
+
+        assert!(err.to_string().contains("emits JSON"));
     }
 
     #[test]

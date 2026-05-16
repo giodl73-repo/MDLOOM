@@ -138,7 +138,9 @@ proof crop inspect-views --file .crop/views/ready-guides.json
 
 Add `--output inspect.json` or global `-o inspect.json` to save CROP's JSON
 inspection report as a CI or review artifact; PROOF writes the captured report
-even when strict inspection returns a non-zero exit code.
+even when strict inspection returns a non-zero exit code. Inspection reports are
+JSON-only, so non-JSON global formats such as `-f markdown` are rejected before
+CROP is invoked.
 
 ---
 
