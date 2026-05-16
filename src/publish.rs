@@ -1,9 +1,9 @@
+use pebble::PebbleDocument;
 use pulldown_cmark::{html, Event, Options, Parser};
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
-    let title = document_title(markdown, title);
+    let title = pebble::document_title(markdown, title);
     let body = markdown_to_html_fragment(markdown);
 
     format!(
@@ -40,40 +40,10 @@ pub fn markdown_to_pebble_document(
     source_path: &Path,
     resolved_files: &[PathBuf],
 ) -> String {
-    let title = document_title(markdown, fallback_title);
-    let pebble = PebbleDocument {
-        schema: "pebble.v1",
-        kind: "document",
-        title,
-        source: path_string(source_path),
-        format: "markdown",
-        sections: markdown_sections(markdown),
-        refs: resolved_files
-            .iter()
-            .map(|path| path_string(path))
-            .collect(),
-    };
-    serde_json::to_string(&pebble).expect("serializing Pebble document cannot fail")
-}
-
-#[derive(Serialize)]
-struct PebbleDocument {
-    schema: &'static str,
-    kind: &'static str,
-    title: String,
-    source: String,
-    format: &'static str,
-    sections: Vec<PebbleSection>,
-    refs: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct PebbleSection {
-    id: String,
-    path: Vec<String>,
-    level: usize,
-    line: usize,
-    text: String,
+    let refs = resolved_files.iter().map(|path| path_string(path));
+    PebbleDocument::from_markdown(markdown, fallback_title, path_string(source_path), refs)
+        .to_json()
+        .expect("serializing Pebble document cannot fail")
 }
 
 fn markdown_to_html_fragment(markdown: &str) -> String {
@@ -93,146 +63,6 @@ fn markdown_options() -> Options {
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_FOOTNOTES);
     options
-}
-
-fn document_title(markdown: &str, fallback: &str) -> String {
-    markdown
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            trimmed
-                .strip_prefix("# ")
-                .map(str::trim)
-                .filter(|title| !title.is_empty())
-        })
-        .unwrap_or(fallback)
-        .to_string()
-}
-
-fn markdown_sections(markdown: &str) -> Vec<PebbleSection> {
-    let mut sections = Vec::new();
-    let mut current_start = 1usize;
-    let mut current_level = 0usize;
-    let mut current_path: Vec<String> = Vec::new();
-    let mut current_text = String::new();
-    let mut heading_stack: Vec<(usize, String)> = Vec::new();
-
-    for (index, line) in markdown.lines().enumerate() {
-        let line_number = index + 1;
-        if let Some((level, heading)) = parse_heading(line) {
-            push_section(
-                &mut sections,
-                current_start,
-                current_level,
-                &current_path,
-                &current_text,
-            );
-            while heading_stack
-                .last()
-                .is_some_and(|(stack_level, _)| *stack_level >= level)
-            {
-                heading_stack.pop();
-            }
-            heading_stack.push((level, heading.to_string()));
-            current_path = heading_stack
-                .iter()
-                .map(|(_, heading)| heading.clone())
-                .collect();
-            current_start = line_number;
-            current_level = level;
-            current_text.clear();
-        }
-        current_text.push_str(line);
-        current_text.push('\n');
-    }
-
-    push_section(
-        &mut sections,
-        current_start,
-        current_level,
-        &current_path,
-        &current_text,
-    );
-
-    if sections.is_empty() {
-        sections.push(PebbleSection {
-            id: "document".to_string(),
-            path: Vec::new(),
-            level: 0,
-            line: 1,
-            text: String::new(),
-        });
-    }
-
-    sections
-}
-
-fn push_section(
-    sections: &mut Vec<PebbleSection>,
-    line: usize,
-    level: usize,
-    path: &[String],
-    text: &str,
-) {
-    let text = text.trim().to_string();
-    if text.is_empty() {
-        return;
-    }
-    let base = path.last().map_or("preamble", String::as_str);
-    let id = unique_section_id(sections, base);
-    sections.push(PebbleSection {
-        id,
-        path: path.to_vec(),
-        level,
-        line,
-        text,
-    });
-}
-
-fn unique_section_id(sections: &[PebbleSection], heading: &str) -> String {
-    let base = slugify(heading);
-    let base = if base.is_empty() {
-        "section".to_string()
-    } else {
-        base
-    };
-    let mut id = base.clone();
-    let mut suffix = 2usize;
-    while sections.iter().any(|section| section.id == id) {
-        id = format!("{}-{}", base, suffix);
-        suffix += 1;
-    }
-    id
-}
-
-fn slugify(text: &str) -> String {
-    let mut slug = String::new();
-    let mut last_dash = false;
-    for c in text.chars().flat_map(char::to_lowercase) {
-        if c.is_ascii_alphanumeric() {
-            slug.push(c);
-            last_dash = false;
-        } else if !last_dash && !slug.is_empty() {
-            slug.push('-');
-            last_dash = true;
-        }
-    }
-    if last_dash {
-        slug.pop();
-    }
-    slug
-}
-
-fn parse_heading(line: &str) -> Option<(usize, &str)> {
-    let hashes = line.chars().take_while(|&c| c == '#').count();
-    if !(1..=6).contains(&hashes) {
-        return None;
-    }
-    let rest = line.get(hashes..)?;
-    if !rest.starts_with(' ') {
-        return None;
-    }
-    Some((hashes, rest.trim()))
 }
 
 fn path_string(path: &Path) -> String {

@@ -40,6 +40,7 @@ proof-math   = { path = "crates/proof-math" }
 # pointing at `../mdpath` — see README for the snippet. Once mdpath
 # publishes to crates.io we'll switch to a version constraint.
 mdpath = { git = "https://github.com/giodl73-repo/MDPATH", rev = "6666cb4368ebc4b1b7ec8d77169b524821e90e9c" }
+pebble = { git = "https://github.com/giodl73-repo/PEBBLE", rev = "ec4ac5a1995b1d49a2070d345e4bad8975602178" }
 # Figure import — image-to-ASCII conversion
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
 # SVG rasterization (optional — enable with --features svg)

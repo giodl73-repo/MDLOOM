@@ -746,6 +746,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pebble"
+version = "0.1.0"
+source = "git+https://github.com/giodl73-repo/PEBBLE?rev=ec4ac5a1995b1d49a2070d345e4bad8975602178#ec4ac5a1995b1d49a2070d345e4bad8975602178"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "pretty_assertions"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -785,6 +794,7 @@ dependencies = [
  "image",
  "mdpath",
  "notify",
+ "pebble",
  "pretty_assertions",
  "proof-canvas",
  "proof-math",
