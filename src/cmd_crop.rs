@@ -343,6 +343,9 @@ pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<S
     if args.root.is_some() && args.view.is_some() {
         bail!("proof crop status accepts either --root or --view, not both");
     }
+    if !args.strict && !args.strict_on.is_empty() {
+        bail!("proof crop status --strict-on requires --strict");
+    }
 
     let mut crop_args = vec!["status".to_string()];
     if let Some(root) = args.root {
@@ -1152,6 +1155,24 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("json or markdown"));
+    }
+
+    #[test]
+    fn status_rejects_strict_policy_without_strict() {
+        let err = build_status_args(StatusArgs {
+            root: Some(PathBuf::from("docs")),
+            view: None,
+            title: None,
+            extensions: vec![],
+            exclude_dirs: vec![],
+            strict: false,
+            strict_on: vec!["broken-links".to_string()],
+            format: Some("markdown".to_string()),
+            output: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires --strict"));
     }
 
     #[test]
