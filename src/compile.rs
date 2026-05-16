@@ -1178,7 +1178,7 @@ pub fn compile_file(
                         });
                     }
                 }
-                match resolve_uri_cached(uri, root, &mut path_index) {
+                match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
                     Ok((content, fig_file)) => {
                         lint_figure(
                             uri,
@@ -1217,7 +1217,7 @@ pub fn compile_file(
                 let mut figures: Vec<Vec<String>> = Vec::new();
                 let mut any_err = false;
                 for uri in uris {
-                    match resolve_uri_cached(uri, root, &mut path_index) {
+                    match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
                         Ok((content, fig_file)) => {
                             lint_figure(
                                 uri,
@@ -1278,39 +1278,41 @@ pub fn compile_file(
                 }
             }
 
-            Directive::Table { uri, .. } => match resolve_uri_cached(uri, root, &mut path_index) {
-                Ok((content, fig_file)) => {
-                    lint_figure(
-                        uri,
-                        &content,
-                        &fig_file,
-                        line_start + 1 + source_line_offset,
-                        &runner,
-                        &mut violations,
-                    );
-                    validate_davinci(
-                        uri,
-                        &content,
-                        config,
-                        line_start + source_line_offset,
-                        &mut violations,
-                    );
-                    resolved_count += 1;
-                    format_include_block(uri, &content)
+            Directive::Table { uri, .. } => {
+                match compile_source::resolve_uri_cached(uri, root, &mut path_index) {
+                    Ok((content, fig_file)) => {
+                        lint_figure(
+                            uri,
+                            &content,
+                            &fig_file,
+                            line_start + 1 + source_line_offset,
+                            &runner,
+                            &mut violations,
+                        );
+                        validate_davinci(
+                            uri,
+                            &content,
+                            config,
+                            line_start + source_line_offset,
+                            &mut violations,
+                        );
+                        resolved_count += 1;
+                        format_include_block(uri, &content)
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: uri.clone(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("{}", e),
+                            source_line: line_start + 1 + source_line_offset,
+                        });
+                        source_lines[line_start..=line_end].join("\n")
+                    }
                 }
-                Err(e) => {
-                    violations.push(CompileViolation {
-                        code: "COMPILE-002",
-                        severity: ViolationSeverity::Error,
-                        uri: uri.clone(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("{}", e),
-                        source_line: line_start + 1 + source_line_offset,
-                    });
-                    source_lines[line_start..=line_end].join("\n")
-                }
-            },
+            }
 
             Directive::Tree {
                 kind,
@@ -1860,74 +1862,6 @@ fn dependency_parse_keys(
 // ─────────────────────────────────────────────────────────
 // URI resolution + figure lint validation
 // ─────────────────────────────────────────────────────────
-
-fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
-    let (clean_uri, query) = compile_source::split_md_query(uri);
-    let parsed = mdpath::parse(&clean_uri)
-        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
-    let element = mdpath::resolve(&parsed, root)
-        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    let content = if query.is_empty() {
-        element.content
-    } else {
-        compile_source::apply_md_query(&element.content, &query)?
-    };
-    Ok((content, element.file))
-}
-
-/// Tier 2 cached version of `resolve_uri`.
-/// Checks `.proof/cache/resolve/` before calling mdpath. On hit the figure file
-/// is not re-read or re-parsed; on miss the result is stored for future runs.
-fn resolve_uri_cached(
-    uri: &str,
-    root: &Path,
-    path_index: &mut crate::cache::PathIndex,
-) -> Result<(String, PathBuf)> {
-    let (clean_uri, query) = compile_source::split_md_query(uri);
-    let parsed = mdpath::parse(&clean_uri)
-        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
-
-    let target_file = root.join(&parsed.path);
-    if !target_file.exists() {
-        return resolve_uri(uri, root);
-    }
-    let target_content = match std::fs::read_to_string(&target_file) {
-        Ok(c) => c,
-        Err(_) => return resolve_uri(uri, root),
-    };
-    if let Some(cached) = crate::cache::try_resolve_cache_hit(
-        root,
-        &target_file,
-        &target_content,
-        &clean_uri,
-        path_index,
-    ) {
-        let final_content = if query.is_empty() {
-            cached
-        } else {
-            compile_source::apply_md_query(&cached, &query)?
-        };
-        return Ok((final_content, target_file));
-    }
-    let element = mdpath::resolve(&parsed, root)
-        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
-    // Cache the *raw* mdpath content (independent of query params) so multiple
-    // queries against the same source share a single cache entry.
-    crate::cache::store_resolve_cache(
-        root,
-        &target_file,
-        &target_content,
-        &clean_uri,
-        &element.content,
-        path_index,
-    );
-    let final_content = if query.is_empty() {
-        element.content
-    } else {
-        compile_source::apply_md_query(&element.content, &query)?
-    };
-    Ok((final_content, element.file))
-}
 
 /// Validate figure content with the proof linter before embedding.
 /// Emits COMPILE-007 warnings for each lint error found in the figure.
@@ -3501,7 +3435,7 @@ fn render_one_directive_no_chrome(
                 }
             }
         }
-        Directive::Include { uri, .. } => match resolve_uri(uri, root) {
+        Directive::Include { uri, .. } => match compile_source::resolve_uri(uri, root) {
             Ok((content, fig_file)) => {
                 lint_figure(uri, &content, &fig_file, abs_line + 1, runner, violations);
                 validate_davinci(uri, &content, config, abs_line, violations);

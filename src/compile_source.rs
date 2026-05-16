@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(crate) fn resolve_source_for_compile(src: &str, root: &Path) -> Result<String> {
     let (clean_src, query) = split_md_query(src);
@@ -37,6 +37,69 @@ pub(crate) fn resolve_source_for_compile(src: &str, root: &Path) -> Result<Strin
         return Ok(raw);
     }
     apply_md_query(&raw, &query)
+}
+
+pub(crate) fn resolve_uri(uri: &str, root: &Path) -> Result<(String, PathBuf)> {
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+    let element = mdpath::resolve(&parsed, root)
+        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+    let content = if query.is_empty() {
+        element.content
+    } else {
+        apply_md_query(&element.content, &query)?
+    };
+    Ok((content, element.file))
+}
+
+pub(crate) fn resolve_uri_cached(
+    uri: &str,
+    root: &Path,
+    path_index: &mut crate::cache::PathIndex,
+) -> Result<(String, PathBuf)> {
+    let (clean_uri, query) = split_md_query(uri);
+    let parsed = mdpath::parse(&clean_uri)
+        .map_err(|e| anyhow::anyhow!("invalid md:// URI {:?}: {}", uri, e))?;
+
+    let target_file = root.join(&parsed.path);
+    if !target_file.exists() {
+        return resolve_uri(uri, root);
+    }
+    let target_content = match std::fs::read_to_string(&target_file) {
+        Ok(c) => c,
+        Err(_) => return resolve_uri(uri, root),
+    };
+    if let Some(cached) = crate::cache::try_resolve_cache_hit(
+        root,
+        &target_file,
+        &target_content,
+        &clean_uri,
+        path_index,
+    ) {
+        let final_content = if query.is_empty() {
+            cached
+        } else {
+            apply_md_query(&cached, &query)?
+        };
+        return Ok((final_content, target_file));
+    }
+    let element = mdpath::resolve(&parsed, root)
+        .map_err(|e| anyhow::anyhow!("cannot resolve {:?}: {}", uri, e))?;
+    crate::cache::store_resolve_cache(
+        root,
+        &target_file,
+        &target_content,
+        &clean_uri,
+        &element.content,
+        path_index,
+    );
+    let final_content = if query.is_empty() {
+        element.content
+    } else {
+        apply_md_query(&element.content, &query)?
+    };
+    Ok((final_content, element.file))
 }
 
 pub(crate) fn split_md_query(src: &str) -> (String, Vec<(String, String)>) {
