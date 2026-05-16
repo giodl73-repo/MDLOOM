@@ -1,7 +1,7 @@
 use crate::symbol::shape::{render_shape, ShapeAttrs};
 
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_output;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 
 pub(crate) struct SymbolRenderError {
     pub(crate) code: &'static str,

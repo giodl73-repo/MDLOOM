@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::compile::{CompileResult, CompileViolation, ViolationSeverity};
+use crate::compile_types::{CompileResult, CompileViolation, ViolationSeverity};
 use crate::slide::bullets::has_reveal_markers;
 use crate::slide::layout::{render_slide_pages, render_slide_with_warnings_in_deck};
 use crate::slide::parser::parse_slide_doc;

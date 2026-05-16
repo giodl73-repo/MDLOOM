@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::compile_cache;
 use crate::compile_chart;
@@ -14,44 +14,11 @@ use crate::compile_prose;
 use crate::compile_symbol;
 use crate::compile_toc;
 use crate::compile_tree;
+pub use crate::compile_types::{CompileResult, CompileViolation, ViolationSeverity};
 use crate::config::GlintConfig;
 #[cfg(test)]
 use crate::element::{ElementAlign, ElementKind};
 use crate::runner::Runner;
-
-// ─────────────────────────────────────────────────────────
-// Public result types
-// ─────────────────────────────────────────────────────────
-
-pub struct CompileResult {
-    pub output_path: PathBuf,
-    pub directives_resolved: usize,
-    pub violations: Vec<CompileViolation>,
-    pub from_cache: bool,
-    pub written: bool,
-    /// Files resolved during compilation (for watch-mode dependency tracking)
-    pub resolved_files: Vec<PathBuf>,
-}
-
-pub struct CompileViolation {
-    pub code: &'static str,
-    pub severity: ViolationSeverity,
-    pub uri: String,
-    pub figure_id: Option<String>,
-    pub invariant: String,
-    pub message: String,
-    pub source_line: usize,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum ViolationSeverity {
-    Error,
-    Warning,
-}
-
-// ─────────────────────────────────────────────────────────
-// Directive parser facade
-// ─────────────────────────────────────────────────────────
 
 #[cfg(test)]
 use crate::compile_directive::ElementAttrs;
@@ -503,6 +470,7 @@ pub fn compile_file(
 mod tests {
     use super::*;
     use crate::compile_output::{apply_replacements, split_frontmatter};
+    use std::path::PathBuf;
 
     // ── parse_directives ──────────────────────────────────
 

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::compile::{CompileViolation, ViolationSeverity};
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 use crate::config::{GlintConfig, ProtectionTier};
 use crate::davinci::evaluate_invariant;
 use crate::diagnostic::Severity;

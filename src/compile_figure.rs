@@ -1,11 +1,11 @@
 use std::path::Path;
 
 use crate::cache::PathIndex;
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::LayoutAttrs;
 use crate::compile_format;
 use crate::compile_output;
 use crate::compile_source;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 use crate::config::GlintConfig;
 use crate::layout::{self, extract_content_lines};
 use crate::runner::Runner;

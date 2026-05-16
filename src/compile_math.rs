@@ -1,6 +1,6 @@
 use crate::math::{render_display_math, MathAlign, MathDiag};
 
-use crate::compile::{CompileViolation, ViolationSeverity};
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 
 pub(crate) struct RenderedMath {
     pub(crate) block: String,

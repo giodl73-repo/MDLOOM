@@ -1,9 +1,9 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::Directive;
 use crate::compile_output;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 use crate::crop_side_info;
 
 #[derive(Clone, Copy)]

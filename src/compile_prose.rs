@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_output;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 
 /// Render a `proof:xref` directive as a formatted cross-reference.
 ///

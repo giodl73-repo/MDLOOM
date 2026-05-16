@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_output;
 use crate::compile_source;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 
 fn build_numbered_label(headings: &[(usize, String)], min_level: usize) -> String {
     let (target_level, _) = headings.last().unwrap();

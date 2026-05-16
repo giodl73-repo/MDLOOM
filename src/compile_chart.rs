@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use crate::chart::{ChartAttrs, ChartData, ChartPoint};
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_output;
 use crate::compile_source::resolve_source_for_compile;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn compile_chart(

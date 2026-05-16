@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use crate::cache::{self, PathIndex};
-use crate::compile::CompileResult;
 use crate::compile_output;
+use crate::compile_types::CompileResult;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn restore_compile_cache(

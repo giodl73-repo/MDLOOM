@@ -1,10 +1,10 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::TreeAttrs;
 use crate::compile_output;
 use crate::compile_source;
+use crate::compile_types::{CompileViolation, ViolationSeverity};
 use crate::tree::dirtree::{generate as dirtree_generate, DirtreeOptions};
 use crate::tree::schema::{
     generate_decision, generate_dependency, generate_org, generate_outline, generate_taxonomy,

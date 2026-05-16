@@ -50,6 +50,7 @@ Focused modules own behavior families:
 |--------|-----------|
 | `compile_directive` | Directive spans, typed `Directive`, attribute parsing, collection |
 | `compile_source` | `md://` resolution, query transforms, include/table source helpers |
+| `compile_types` | Public compile result, violation, and severity types |
 | `compile_output` | Source reconstruction, frontmatter splitting, output path derivation, atomic writes |
 | `compile_cache` | Tier 3 compile cache restore/store orchestration |
 | `compile_format` | Compiled traceability wrappers |
