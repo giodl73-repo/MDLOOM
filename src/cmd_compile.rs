@@ -58,6 +58,7 @@ enum CompileTarget {
     Site,
     Pdf,
     Docx,
+    Pptx,
 }
 
 impl CompileTarget {
@@ -70,6 +71,7 @@ impl CompileTarget {
             CompileTarget::Site => "site",
             CompileTarget::Pdf => "pdf",
             CompileTarget::Docx => "docx",
+            CompileTarget::Pptx => "pptx",
         }
     }
 }
@@ -465,6 +467,9 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
         CompileTarget::Docx => {
             output.set_extension("docx");
         }
+        CompileTarget::Pptx => {
+            output.set_extension("pptx");
+        }
     }
     Some(output)
 }
@@ -486,6 +491,7 @@ fn compile_target_file(
         CompileTarget::Site => compile_html_file(source_path, output_path, root, config),
         CompileTarget::Pdf => compile_pdf_file(source_path, output_path, root, config),
         CompileTarget::Docx => compile_docx_file(source_path, output_path, root, config),
+        CompileTarget::Pptx => compile_pptx_file(source_path, output_path, root, config),
     }
 }
 
@@ -700,6 +706,85 @@ fn compile_docx_file(
     if result.written {
         let tmp = output_path.with_extension("proof_tmp");
         std::fs::write(&tmp, docx)?;
+        std::fs::rename(&tmp, output_path)?;
+    }
+    result.output_path = output_path.to_path_buf();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    Ok(result)
+}
+
+fn compile_pptx_file(
+    source_path: &Path,
+    output_path: &Path,
+    root: &Path,
+    config: &proof_lib::GlintConfig,
+) -> Result<proof_lib::compile::CompileResult> {
+    if !source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.ends_with(".slides.source.md"))
+        .unwrap_or(false)
+    {
+        return Ok(proof_lib::compile::CompileResult {
+            output_path: output_path.to_path_buf(),
+            directives_resolved: 0,
+            violations: vec![proof_lib::compile::CompileViolation {
+                code: "PPTX-001",
+                severity: ViolationSeverity::Error,
+                uri: String::new(),
+                figure_id: None,
+                invariant: String::new(),
+                message: "pptx target requires an explicit .slides.source.md source".to_string(),
+                source_line: 1,
+            }],
+            from_cache: false,
+            written: false,
+            resolved_files: Vec::new(),
+        });
+    }
+
+    let temp_dir = unique_temp_dir()?;
+    let slides_markdown_path = temp_dir.join("compiled.slides.md");
+    let mut result = compile_file(source_path, &slides_markdown_path, root, config)?;
+    if result
+        .violations
+        .iter()
+        .any(|v| v.severity == ViolationSeverity::Error)
+    {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        result.output_path = output_path.to_path_buf();
+        return Ok(result);
+    }
+
+    let source = std::fs::read_to_string(source_path)?;
+    let title = source_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("proof deck");
+    let pptx = match proof_lib::publish::slides_source_to_pptx_document(&source, title) {
+        Ok(pptx) => pptx,
+        Err(errors) => {
+            result.violations.extend(errors.into_iter().map(|message| {
+                proof_lib::compile::CompileViolation {
+                    code: "PPTX-002",
+                    severity: ViolationSeverity::Error,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message,
+                    source_line: 1,
+                }
+            }));
+            result.output_path = output_path.to_path_buf();
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            return Ok(result);
+        }
+    };
+    let current = std::fs::read(output_path).unwrap_or_default();
+    result.written = current != pptx;
+    if result.written {
+        let tmp = output_path.with_extension("proof_tmp");
+        std::fs::write(&tmp, pptx)?;
         std::fs::rename(&tmp, output_path)?;
     }
     result.output_path = output_path.to_path_buf();

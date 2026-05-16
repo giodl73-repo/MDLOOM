@@ -9,6 +9,7 @@ use std::{
 use zip::{write::FileOptions, ZipWriter};
 
 use crate::frontmatter::SourceFrontmatter;
+use crate::slide::{parse_slide_doc, Slide, SlideLayout};
 
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
     let title = pebble::document_title(markdown, title);
@@ -208,6 +209,105 @@ pub fn markdown_to_docx_document(markdown: &str, fallback_title: &str) -> Vec<u8
         .into_inner()
 }
 
+pub fn slides_source_to_pptx_document(
+    source: &str,
+    fallback_title: &str,
+) -> Result<Vec<u8>, Vec<String>> {
+    let doc = parse_slide_doc(source).map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>()
+    })?;
+    let title = doc
+        .meta
+        .title
+        .clone()
+        .or_else(|| doc.slides.iter().find_map(|slide| slide.title.clone()))
+        .unwrap_or_else(|| fallback_title.to_string());
+    let slides = doc.slides.iter().map(pptx_slide_model).collect::<Vec<_>>();
+
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    let mut parts = vec![
+        (
+            "[Content_Types].xml".to_string(),
+            pptx_content_types_xml(slides.len()),
+        ),
+        ("_rels/.rels".to_string(), pptx_root_relationships_xml()),
+        ("docProps/core.xml".to_string(), pptx_core_xml(&title)),
+        ("docProps/app.xml".to_string(), pptx_app_xml(slides.len())),
+        (
+            "ppt/presentation.xml".to_string(),
+            pptx_presentation_xml(slides.len()),
+        ),
+        (
+            "ppt/_rels/presentation.xml.rels".to_string(),
+            pptx_presentation_relationships_xml(slides.len()),
+        ),
+        (
+            "ppt/slideMasters/slideMaster1.xml".to_string(),
+            pptx_slide_master_xml(),
+        ),
+        (
+            "ppt/slideMasters/_rels/slideMaster1.xml.rels".to_string(),
+            pptx_slide_master_relationships_xml(),
+        ),
+        (
+            "ppt/slideLayouts/slideLayout1.xml".to_string(),
+            pptx_slide_layout_xml(),
+        ),
+        (
+            "ppt/slideLayouts/_rels/slideLayout1.xml.rels".to_string(),
+            pptx_slide_layout_relationships_xml(),
+        ),
+        (
+            "ppt/notesMasters/notesMaster1.xml".to_string(),
+            pptx_notes_master_xml(),
+        ),
+        (
+            "ppt/notesMasters/_rels/notesMaster1.xml.rels".to_string(),
+            pptx_notes_master_relationships_xml(),
+        ),
+        ("ppt/theme/theme1.xml".to_string(), pptx_theme_xml()),
+    ];
+
+    for (index, slide) in slides.iter().enumerate() {
+        let slide_number = index + 1;
+        parts.push((
+            format!("ppt/slides/slide{slide_number}.xml"),
+            pptx_slide_xml(slide),
+        ));
+        parts.push((
+            format!("ppt/slides/_rels/slide{slide_number}.xml.rels"),
+            pptx_slide_relationships_xml(slide_number),
+        ));
+        parts.push((
+            format!("ppt/notesSlides/notesSlide{slide_number}.xml"),
+            pptx_notes_slide_xml(slide),
+        ));
+        parts.push((
+            format!("ppt/notesSlides/_rels/notesSlide{slide_number}.xml.rels"),
+            pptx_notes_slide_relationships_xml(slide_number),
+        ));
+    }
+
+    for (path, content) in parts {
+        writer
+            .start_file(path, options)
+            .expect("writing PPTX package part cannot fail");
+        writer
+            .write_all(content.as_bytes())
+            .expect("writing PPTX package part cannot fail");
+    }
+
+    Ok(writer
+        .finish()
+        .expect("finalizing PPTX package cannot fail")
+        .into_inner())
+}
+
 pub fn write_static_site(site_root: &Path, mut pages: Vec<SitePage>) -> std::io::Result<()> {
     std::fs::create_dir_all(site_root)?;
     pages.sort_by(|left, right| left.href.cmp(&right.href));
@@ -268,6 +368,86 @@ enum DocxBlock {
     Numbered { level: usize, text: String },
     Code(Vec<String>),
     Table(Vec<Vec<String>>),
+}
+
+#[derive(Debug, Clone)]
+struct PptxDeckSlide {
+    title: String,
+    subtitle: Option<String>,
+    body: Vec<PptxBlock>,
+    notes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+enum PptxBlock {
+    Paragraph(String),
+    Bullet { level: usize, text: String },
+    Numbered { level: usize, text: String },
+    Code(String),
+}
+
+fn pptx_slide_model(slide: &Slide) -> PptxDeckSlide {
+    let title = slide
+        .title
+        .clone()
+        .or_else(|| match slide.layout {
+            SlideLayout::Title | SlideLayout::Section => Some(format!("Slide {}", slide.index)),
+            _ => None,
+        })
+        .unwrap_or_else(|| format!("Slide {}", slide.index));
+    PptxDeckSlide {
+        title,
+        subtitle: slide.subtitle.clone(),
+        body: pptx_body_blocks(&slide.body_content),
+        notes: slide
+            .notes_content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(inline_markdown_text)
+            .collect(),
+    }
+}
+
+fn pptx_body_blocks(markdown: &str) -> Vec<PptxBlock> {
+    let mut blocks = Vec::new();
+    let mut lines = markdown.lines().peekable();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "proof:bullets" {
+            continue;
+        }
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            let fence = if trimmed.starts_with("~~~") {
+                "~~~"
+            } else {
+                "```"
+            };
+            for code_line in lines.by_ref() {
+                if code_line.trim_start().starts_with(fence) {
+                    break;
+                }
+                blocks.push(PptxBlock::Code(code_line.to_string()));
+            }
+            continue;
+        }
+        if let Some((level, text)) = markdown_bullet(line) {
+            blocks.push(PptxBlock::Bullet {
+                level: level.min(3),
+                text: inline_markdown_text(text),
+            });
+            continue;
+        }
+        if let Some((level, text)) = markdown_numbered(line) {
+            blocks.push(PptxBlock::Numbered {
+                level: level.min(3),
+                text: inline_markdown_text(text),
+            });
+            continue;
+        }
+        blocks.push(PptxBlock::Paragraph(inline_markdown_text(trimmed)));
+    }
+    blocks
 }
 
 fn markdown_to_docx_blocks(markdown: &str) -> Vec<DocxBlock> {
@@ -515,6 +695,313 @@ fn docx_numbering_xml() -> String {
         r#"<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>"#,
         r#"<w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num>"#,
         "</w:numbering>"
+    )
+    .to_string()
+}
+
+fn pptx_content_types_xml(slide_count: usize) -> String {
+    let mut overrides = String::new();
+    for index in 1..=slide_count {
+        let _ = write!(
+            overrides,
+            r#"<Override PartName="/ppt/slides/slide{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>"#
+        );
+        let _ = write!(
+            overrides,
+            r#"<Override PartName="/ppt/notesSlides/notesSlide{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>"#
+        );
+    }
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#,
+            r#"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#,
+            r#"<Default Extension="xml" ContentType="application/xml"/>"#,
+            r#"<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>"#,
+            r#"<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>"#,
+            r#"<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>"#,
+            r#"<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>"#,
+            r#"<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>"#,
+            r#"<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>"#,
+            r#"<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>"#,
+            "{}",
+            "</Types>"
+        ),
+        overrides
+    )
+}
+
+fn pptx_root_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>"#,
+        r#"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn pptx_core_xml(title: &str) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">"#,
+            "<dc:title>{}</dc:title><dc:creator>PROOF</dc:creator></cp:coreProperties>"
+        ),
+        escape_xml(title)
+    )
+}
+
+fn pptx_app_xml(slide_count: usize) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">"#,
+            "<Application>PROOF</Application><Slides>{}</Slides></Properties>"
+        ),
+        slide_count
+    )
+}
+
+fn pptx_presentation_xml(slide_count: usize) -> String {
+    let slide_ids = (1..=slide_count)
+        .map(|index| format!(r#"<p:sldId id="{}" r:id="rId{}"/>"#, 255 + index, index))
+        .collect::<String>();
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#,
+            "<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rId{}\"/></p:sldMasterIdLst>",
+            "<p:sldIdLst>{}</p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\" type=\"screen16x9\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/></p:presentation>"
+        ),
+        slide_count + 1,
+        slide_ids
+    )
+}
+
+fn pptx_presentation_relationships_xml(slide_count: usize) -> String {
+    let mut rels = String::new();
+    for index in 1..=slide_count {
+        let _ = write!(
+            rels,
+            r#"<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{index}.xml"/>"#
+        );
+    }
+    let master_id = slide_count + 1;
+    let notes_master_id = slide_count + 2;
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+            "{}",
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>"#,
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/>"#,
+            "</Relationships>"
+        ),
+        rels, master_id, notes_master_id
+    )
+}
+
+fn pptx_slide_xml(slide: &PptxDeckSlide) -> String {
+    let mut shape_id = 2u32;
+    let title = pptx_text_shape(
+        shape_id,
+        "Title",
+        685800,
+        457200,
+        10972800,
+        914400,
+        &[PptxBlock::Paragraph(slide.title.clone())],
+    );
+    shape_id += 1;
+    let mut blocks = Vec::new();
+    if let Some(subtitle) = &slide.subtitle {
+        blocks.push(PptxBlock::Paragraph(subtitle.clone()));
+    }
+    blocks.extend(slide.body.clone());
+    let body = pptx_text_shape(
+        shape_id, "Content", 914400, 1600200, 10363200, 4572000, &blocks,
+    );
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#,
+            "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>",
+            "{}{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"
+        ),
+        title, body
+    )
+}
+
+fn pptx_text_shape(
+    id: u32,
+    name: &str,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    blocks: &[PptxBlock],
+) -> String {
+    let paragraphs = if blocks.is_empty() {
+        pptx_paragraph(&PptxBlock::Paragraph(String::new()))
+    } else {
+        blocks.iter().map(pptx_paragraph).collect::<String>()
+    };
+    format!(
+        concat!(
+            r#"<p:sp><p:nvSpPr><p:cNvPr id="{}" name="{}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>"#,
+            r#"<p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>"#,
+            r#"<p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>{}</p:txBody></p:sp>"#
+        ),
+        id,
+        escape_xml(name),
+        x,
+        y,
+        cx,
+        cy,
+        paragraphs
+    )
+}
+
+fn pptx_paragraph(block: &PptxBlock) -> String {
+    match block {
+        PptxBlock::Paragraph(text) => format!(
+            r#"<a:p><a:r><a:rPr lang="en-US" sz="2400"/><a:t>{}</a:t></a:r></a:p>"#,
+            escape_xml(text)
+        ),
+        PptxBlock::Bullet { level, text } => format!(
+            r#"<a:p><a:pPr lvl="{}" marL="{}" indent="-228600"><a:buChar char="&#8226;"/></a:pPr><a:r><a:rPr lang="en-US" sz="2200"/><a:t>{}</a:t></a:r></a:p>"#,
+            level,
+            342900 * (level + 1),
+            escape_xml(text)
+        ),
+        PptxBlock::Numbered { level, text } => format!(
+            r#"<a:p><a:pPr lvl="{}" marL="{}" indent="-228600"><a:buAutoNum type="arabicPeriod"/></a:pPr><a:r><a:rPr lang="en-US" sz="2200"/><a:t>{}</a:t></a:r></a:p>"#,
+            level,
+            342900 * (level + 1),
+            escape_xml(text)
+        ),
+        PptxBlock::Code(text) => format!(
+            r#"<a:p><a:r><a:rPr lang="en-US" sz="1800"><a:latin typeface="Consolas"/></a:rPr><a:t>{}</a:t></a:r></a:p>"#,
+            escape_xml(text)
+        ),
+    }
+}
+
+fn pptx_slide_relationships_xml(slide_number: usize) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+            r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#,
+            r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide{}.xml"/>"#,
+            "</Relationships>"
+        ),
+        slide_number
+    )
+}
+
+fn pptx_notes_slide_xml(slide: &PptxDeckSlide) -> String {
+    let notes = if slide.notes.is_empty() {
+        vec![PptxBlock::Paragraph(String::new())]
+    } else {
+        slide
+            .notes
+            .iter()
+            .map(|note| PptxBlock::Paragraph(note.clone()))
+            .collect::<Vec<_>>()
+    };
+    let text = notes.iter().map(pptx_paragraph).collect::<String>();
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#,
+            "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>",
+            "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Notes Placeholder\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>{}</p:txBody></p:sp>",
+            "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>"
+        ),
+        text
+    )
+}
+
+fn pptx_notes_slide_relationships_xml(slide_number: usize) -> String {
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+            r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide{}.xml"/>"#,
+            r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/>"#,
+            "</Relationships>"
+        ),
+        slide_number
+    )
+}
+
+fn pptx_slide_master_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#,
+        "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:sldLayoutIdLst><p:sldLayoutId id=\"2147483649\" r:id=\"rId1\"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>"
+    )
+    .to_string()
+}
+
+fn pptx_slide_master_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#,
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn pptx_slide_layout_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="titleAndTx">"#,
+        "<p:cSld name=\"Title and Content\"><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sldLayout>"
+    )
+    .to_string()
+}
+
+fn pptx_slide_layout_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn pptx_notes_master_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<p:notesMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">"#,
+        "<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:notesMaster>"
+    )
+    .to_string()
+}
+
+fn pptx_notes_master_relationships_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>"#,
+        "</Relationships>"
+    )
+    .to_string()
+}
+
+fn pptx_theme_xml() -> String {
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="PROOF">"#,
+        "<a:themeElements><a:clrScheme name=\"PROOF\"><a:dk1><a:srgbClr val=\"000000\"/></a:dk1><a:lt1><a:srgbClr val=\"FFFFFF\"/></a:lt1><a:dk2><a:srgbClr val=\"1F2937\"/></a:dk2><a:lt2><a:srgbClr val=\"F9FAFB\"/></a:lt2><a:accent1><a:srgbClr val=\"2563EB\"/></a:accent1><a:accent2><a:srgbClr val=\"16A34A\"/></a:accent2><a:accent3><a:srgbClr val=\"DC2626\"/></a:accent3><a:accent4><a:srgbClr val=\"9333EA\"/></a:accent4><a:accent5><a:srgbClr val=\"EA580C\"/></a:accent5><a:accent6><a:srgbClr val=\"0891B2\"/></a:accent6><a:hlink><a:srgbClr val=\"2563EB\"/></a:hlink><a:folHlink><a:srgbClr val=\"7C3AED\"/></a:folHlink></a:clrScheme><a:fontScheme name=\"PROOF\"><a:majorFont><a:latin typeface=\"Aptos Display\"/></a:majorFont><a:minorFont><a:latin typeface=\"Aptos\"/></a:minorFont></a:fontScheme><a:fmtScheme name=\"PROOF\"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>"
     )
     .to_string()
 }
@@ -1017,5 +1504,63 @@ mod tests {
         assert_eq!(manifest["pages"][1]["href"], "beta.html");
         assert!(index.contains("<a href=\"alpha.html\">Alpha &lt;One&gt;</a>"));
         assert!(index.contains("<a href=\"beta.html\">Beta &amp; Co</a>"));
+    }
+
+    #[test]
+    fn pptx_ooxml_package_contains_native_bullets_and_notes() {
+        let pptx = slides_source_to_pptx_document(
+            "```proof:slide layout=title title=\"Deck\" subtitle=\"Native slides\"\n```\n---\n```proof:slide layout=title-content title=\"Plan\"\nproof:bullets\n- First\n  - Nested\n1. Numbered\n~~~text\nlet x = 1;\n~~~\n~~~proof:notes\nPresenter note.\n~~~\n```",
+            "fallback",
+        )
+        .unwrap();
+        let mut archive = zip::ZipArchive::new(Cursor::new(pptx)).expect("valid PPTX ZIP archive");
+
+        for part in [
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "ppt/presentation.xml",
+            "ppt/slides/slide1.xml",
+            "ppt/slides/slide2.xml",
+            "ppt/slides/_rels/slide2.xml.rels",
+            "ppt/notesSlides/notesSlide2.xml",
+            "ppt/notesSlides/_rels/notesSlide2.xml.rels",
+            "ppt/slideMasters/slideMaster1.xml",
+            "ppt/slideLayouts/slideLayout1.xml",
+            "ppt/theme/theme1.xml",
+        ] {
+            assert!(archive.by_name(part).is_ok(), "missing PPTX part {part}");
+        }
+
+        let mut slide = String::new();
+        std::io::Read::read_to_string(
+            &mut archive.by_name("ppt/slides/slide2.xml").unwrap(),
+            &mut slide,
+        )
+        .unwrap();
+        assert!(slide.contains("<a:t>Plan</a:t>"), "got:\n{}", slide);
+        assert!(
+            slide.contains(r#"<a:buChar char="&#8226;"/>"#),
+            "got:\n{}",
+            slide
+        );
+        assert!(
+            slide.contains(r#"<a:buAutoNum type="arabicPeriod"/>"#),
+            "got:\n{}",
+            slide
+        );
+        assert!(
+            slide.contains(r#"<a:latin typeface="Consolas"/>"#),
+            "got:\n{}",
+            slide
+        );
+        assert!(slide.contains("let x = 1;"), "got:\n{}", slide);
+
+        let mut notes = String::new();
+        std::io::Read::read_to_string(
+            &mut archive.by_name("ppt/notesSlides/notesSlide2.xml").unwrap(),
+            &mut notes,
+        )
+        .unwrap();
+        assert!(notes.contains("Presenter note."), "got:\n{}", notes);
     }
 }

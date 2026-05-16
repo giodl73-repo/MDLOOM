@@ -61,6 +61,9 @@ proof compile src/guides/math.source.md --target pdf -o docs/guides/math.pdf
 # Publish one source file as an editable Word document
 proof compile src/guides/math.source.md --target docx -o docs/guides/math.docx
 
+# Publish an explicit slide source as an editable PowerPoint deck
+proof compile src/decks/status.slides.source.md --target pptx -o decks/status.pptx
+
 # Watch for changes and recompile on save
 proof compile --watch            # reads [[compile]] targets from proof.toml
 
@@ -105,6 +108,12 @@ engine layout equivalence.
 resolved Markdown. It supports headings, paragraphs, native bullets/numbering,
 tables, fenced code text, links, and basic metadata without requiring Microsoft
 Word during CI.
+
+`--target pptx` writes a native editable PowerPoint OOXML deck from explicit
+`.slides.source.md` inputs. It supports title/content slides, native
+bullets/numbering, editable monospace code text, and speaker notes from
+`proof:notes`; arbitrary prose sources are rejected so deck generation stays
+intentional.
 
 ---
 

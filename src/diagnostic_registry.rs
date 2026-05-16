@@ -424,6 +424,18 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCode] = &[
         description: "Slide bullet nesting exceeds the configured maximum depth.",
     },
     DiagnosticCode {
+        code: "PPTX-001",
+        default_severity: Severity::Error,
+        family: "pptx",
+        description: "PPTX target requires an explicit .slides.source.md source.",
+    },
+    DiagnosticCode {
+        code: "PPTX-002",
+        default_severity: Severity::Error,
+        family: "pptx",
+        description: "PPTX source could not be parsed into a native slide deck.",
+    },
+    DiagnosticCode {
         code: "SYMBOL-001",
         default_severity: Severity::Warning,
         family: "symbol",

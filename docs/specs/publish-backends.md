@@ -16,16 +16,15 @@ semantics.
 | `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `proof-site.json` page manifest from a source tree. |
 | `pdf` | supported | Portable human-readable artifact. | Renders the resolved HTML publish output into a deterministic PDF with basic text and metadata. |
 | `docx` | supported | Editable Word-processing document. | Emits a native OOXML package with editable headings, paragraphs, lists, tables, code text, links, and metadata. |
+| `pptx` | supported | Editable PowerPoint deck. | Emits a native OOXML package from explicit `.slides.source.md` inputs with editable slide text, native bullets/numbering, code text, notes, relationships, and manifest records. |
 
-`html`, `pebble`, `json-report`, `site`, `pdf`, and `docx` are fully supported
-within those scopes. They are not claims of hosting/deployment, PDF layout
-fidelity, full Word styling, or slide deck generation.
+`html`, `pebble`, `json-report`, `site`, `pdf`, `docx`, and `pptx` are fully
+supported within those scopes. They are not claims of hosting/deployment, PDF
+layout fidelity, full Word styling, or rich PowerPoint production.
 
 ## Planned targets
 
-| Target | Primary user | Backend role | First useful claim |
-|---|---|---|---|
-| `pptx` | Presentations/executive updates | Slide deck artifact. | Convert explicit slide-oriented source into a basic deck with title/content slides, speaker notes metadata where available, and stable manifest records. |
+No additional publish targets are planned in this wave.
 
 LaTeX is intentionally deferred. It remains attractive for academic/technical
 publishing, but it adds a separate typesetting contract and should not block the
@@ -33,7 +32,9 @@ publish backends above.
 
 ## Backend invariants
 
-- Every backend starts from the same resolved compile output used by `md`.
+- Markdown-family backends start from the same resolved compile output used by
+  `md`; `pptx` starts from the explicit slide source model after the slide
+  compiler validates that `.slides.source.md` input.
 - Source-only frontmatter stays source-only unless a backend explicitly maps safe
   metadata fields into its output.
 - `.proof/artifacts.json` records target, source, output path, status,
@@ -77,15 +78,14 @@ templates, and corporate styles belong in later pulses.
 
 ### PPTX
 
-PPTX must be a native Office Open XML deck backend, not a screenshot, image
-export, or HTML-in-slide wrapper. PowerPoint is hard because slides are structured
-presentation objects: placeholders, text runs, bullet levels, notes, dimensions,
+PPTX is a native Office Open XML deck backend, not a screenshot, image export, or
+HTML-in-slide wrapper. PowerPoint is hard because slides are structured
+presentation objects: text boxes, text runs, bullet levels, notes, dimensions,
 themes, relationships, and content types all have to line up for the file to be
 editable and reliable.
 
-PROOF already has slide source concepts, but a deck backend should require either
-`.slides.source.md` or clear slide sections rather than guessing a deck from
-arbitrary prose. First support should focus on a small native model:
+The backend requires `.slides.source.md` so PROOF does not guess a deck from
+arbitrary prose. First support focuses on a small native model:
 
 - title slides and title/content slides;
 - real PowerPoint text boxes/placeholders, not rasterized text;
@@ -96,7 +96,7 @@ arbitrary prose. First support should focus on a small native model:
 - ZIP/XML validation that inspects `ppt/slides/slide*.xml`,
   `ppt/notesSlides/notesSlide*.xml`, relationships, and content types.
 
-PPTX should have staged fidelity gates before being called supported:
+PPTX has staged fidelity gates:
 
 1. **Package gate**: the `.pptx` opens as a valid OOXML package with expected
    parts and relationships.

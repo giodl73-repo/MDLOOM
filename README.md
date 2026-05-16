@@ -125,6 +125,7 @@ proof compile file.source.md --target json-report -o out.proof-report.json
 proof compile src/guides/ --target site --output-dir site/
 proof compile file.source.md --target pdf -o out.pdf
 proof compile file.source.md --target docx -o out.docx
+proof compile deck.slides.source.md --target pptx -o deck.pptx
 ```
 
 Markdown is the default compile target. `--target html` resolves the same source
@@ -163,10 +164,10 @@ does not claim browser/print-engine pixel equivalence.
 Markdown, including headings, paragraphs, native list numbering, tables, fenced
 code text, links, and basic document metadata.
 
-Planned publish backends include native PPTX decks. See
-[`docs/specs/publish-backends.md`](docs/specs/publish-backends.md) for target
-contracts and sequencing. PPTX is planned as editable native PowerPoint slides
-with real bullets/notes, not screenshots or HTML embedded in slides.
+`--target pptx` writes an editable native PowerPoint OOXML deck from explicit
+`.slides.source.md` inputs. It emits real text boxes, native bullets/numbering,
+monospace code text, speaker notes, relationships, and manifest records; it does
+not rasterize slides or embed HTML.
 
 `.source.md` files may start with source-only frontmatter for corpus tagging.
 The block is stripped from normal compiled output and surfaced by status/stats:

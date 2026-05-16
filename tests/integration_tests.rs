@@ -2227,6 +2227,81 @@ fn binary_compile_target_docx_writes_docx() {
 }
 
 #[test]
+fn binary_compile_target_pptx_writes_deck() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("deck.slides.source.md");
+    let output_path = dir.path().join("deck.pptx");
+    std::fs::write(
+        &source,
+        "```proof:slide layout=title title=\"Deck\" subtitle=\"Native slides\"\n```\n---\n```proof:slide layout=title-content title=\"Plan\"\nproof:bullets\n- First\n  - Nested\n1. Numbered\n~~~text\nlet x = 1;\n~~~\n~~~proof:notes\nPresenter note.\n~~~\n```\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("compile")
+        .arg(&source)
+        .arg("--root")
+        .arg(dir.path())
+        .arg("--target")
+        .arg("pptx")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof compile");
+
+    assert!(
+        output.status.success(),
+        "proof compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let pptx = std::fs::File::open(&output_path).expect("pptx output");
+    let mut archive = zip::ZipArchive::new(pptx).expect("valid pptx zip");
+    assert!(archive.by_name("[Content_Types].xml").is_ok());
+    assert!(archive.by_name("ppt/presentation.xml").is_ok());
+    assert!(archive.by_name("ppt/slides/slide1.xml").is_ok());
+    assert!(archive.by_name("ppt/slides/slide2.xml").is_ok());
+    assert!(archive.by_name("ppt/notesSlides/notesSlide2.xml").is_ok());
+
+    let mut slide = String::new();
+    std::io::Read::read_to_string(
+        &mut archive.by_name("ppt/slides/slide2.xml").unwrap(),
+        &mut slide,
+    )
+    .unwrap();
+    assert!(slide.contains("<a:t>Plan</a:t>"), "got:\n{}", slide);
+    assert!(
+        slide.contains(r#"<a:buChar char="&#8226;"/>"#),
+        "got:\n{}",
+        slide
+    );
+    assert!(
+        slide.contains(r#"<a:buAutoNum type="arabicPeriod"/>"#),
+        "got:\n{}",
+        slide
+    );
+    assert!(slide.contains("let x = 1;"), "got:\n{}", slide);
+
+    let mut notes = String::new();
+    std::io::Read::read_to_string(
+        &mut archive.by_name("ppt/notesSlides/notesSlide2.xml").unwrap(),
+        &mut notes,
+    )
+    .unwrap();
+    assert!(notes.contains("Presenter note."), "got:\n{}", notes);
+
+    let manifest_path = dir.path().join(".proof").join("artifacts.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["artifacts"][0]["target"], "pptx");
+}
+
+#[test]
 fn publish_backends_consume_resolved_compile_output() {
     use proof_lib::compile::compile_file;
     use proof_lib::frontmatter::SourceFrontmatter;

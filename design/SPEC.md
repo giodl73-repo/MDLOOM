@@ -696,6 +696,7 @@ Markdown-style names:
 | Element | `ELEMENT-001` through `ELEMENT-005` | Element directive data, source, and row-width errors |
 | Math | `MATH-001`, `MATH-003`, `MATH-004`, `MATH-006` | Math rendering, clipping, tokenization/syntax |
 | Slide | `SLIDE-001`, `SLIDE-002`, `SLIDE-006`, `SLIDE-007` | Slide bullet limits, layout ratio, range, depth |
+| PPTX | `PPTX-001`, `PPTX-002` | PPTX source boundary and native deck parsing |
 | Symbol | `SYMBOL-001`, `SYMBOL-003` | Symbol and shape lookup failures |
 | DaVinci | `fig_invariant_violated` | Pinned figure invariant failure |
 | Corpus ops | `unused_figure` | Markdown figure file has no source-document reference |
@@ -823,7 +824,7 @@ COMPILE OPTIONS
         --progress                Show a running compiled/total count
         --output-dir <DIR>        Write compiled files under DIR
         --root <DIR>              Root directory for md:// URI resolution
-        --target <TARGET>         md (default) | html | pebble | json-report | site | pdf | docx
+        --target <TARGET>         md (default) | html | pebble | json-report | site | pdf | docx | pptx
         --tag <TAG>               Only compile source files with this tag
         --op <OP>                 Only compile source files with this operation tag
         --content-tag <TAG>       Only compile source files with this content tag
@@ -865,10 +866,14 @@ COMPILE OPTIONS
   comments, corporate templates, and full Word style customization are out of
   scope for the first backend.
 
-  Planned publish targets include PPTX. PPTX must be a native editable Office
-  Open XML deck with real slide text, bullets, and notes rather than screenshots
-  or HTML embedded in slides. LaTeX is deferred until after these publish
-  backends.
+  `pptx` writes a native editable Office Open XML PowerPoint deck from explicit
+  `.slides.source.md` inputs. It preserves the slide-source boundary, emits real
+  text boxes with native bullets/numbering, monospace code text, notes slide
+  parts for `proof:notes`, and package relationships/content types inspectable
+  in CI. It does not infer decks from arbitrary prose, rasterize slides, embed
+  HTML, or implement animations, rich themes, charts, media, or brand templates.
+
+  LaTeX is deferred until after these publish backends.
 
   Non-watch compile runs write `.proof/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each

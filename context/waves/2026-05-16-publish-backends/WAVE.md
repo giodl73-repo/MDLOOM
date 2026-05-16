@@ -42,7 +42,7 @@ ranking, or LaTeX in this wave.
 | 04 | PDF backend | done | Rendered existing HTML publish output to deterministic PDF artifacts with manifest integration. |
 | 05 | DOCX backend | done | Added native editable OOXML Word documents with package/XML inspection and manifest integration. |
 | 05a | Backend coverage hardening | done | Added L0 DOCX/static-site helper tests and an L1 resolved-output publish helper contract. |
-| 06 | PPTX backend | todo | Emit native editable PowerPoint decks from explicit slide-oriented sources, with package/XML, bullet, notes, and STAGE fidelity gates. |
+| 06 | PPTX backend | done | Added native editable PowerPoint OOXML decks from `.slides.source.md` with bullets, code text, notes, package/XML tests, and manifest integration. |
 
 ## Validation gates
 

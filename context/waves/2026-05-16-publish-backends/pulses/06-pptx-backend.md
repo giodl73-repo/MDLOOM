@@ -2,7 +2,7 @@
 wave: publish-backends
 pulse: 06
 date: 2026-05-16
-status: todo
+status: done
 depends_on: ["publish-backends/pulse-05"]
 governing_roles: ["COMPOSE", "STAGE", "SCHEMA", "OFFICE", "BENCH"]
 ---
@@ -44,20 +44,20 @@ guessing decks from arbitrary prose or rasterizing slide content.
 
 ## Deliverables checklist
 
-- [ ] Add `pptx` target dispatch and output derivation.
-- [ ] Require explicit slide-oriented source boundaries.
-- [ ] Emit title/content slides with native editable text placeholders or text
+- [x] Add `pptx` target dispatch and output derivation.
+- [x] Require explicit slide-oriented source boundaries.
+- [x] Emit title/content slides with native editable text placeholders or text
       boxes, not images.
-- [ ] Emit native bullets and numbered lists with bounded nesting.
-- [ ] Emit fenced code as monospace editable text runs.
-- [ ] Emit speaker notes parts when source notes are available.
-- [ ] Add OOXML package tests that inspect slide XML, notes XML, relationships,
+- [x] Emit native bullets and numbered lists with bounded nesting.
+- [x] Emit fenced code as monospace editable text runs.
+- [x] Emit speaker notes parts when source notes are available.
+- [x] Add OOXML package tests that inspect slide XML, notes XML, relationships,
       and `[Content_Types].xml`.
-- [ ] Add OFFICE review evidence for native package validity and editability.
-- [ ] Add STAGE-oriented fixture coverage for bullet density and title/body
+- [x] Add OFFICE review evidence for native package validity and editability.
+- [x] Add STAGE-oriented fixture coverage for bullet density and title/body
       hierarchy.
-- [ ] Preserve diagnostics and manifest behavior.
-- [ ] Update README/SPEC/spec docs.
+- [x] Preserve diagnostics and manifest behavior.
+- [x] Update README/SPEC/spec docs.
 
 ## Validation gates
 
@@ -80,4 +80,24 @@ guessing decks from arbitrary prose or rasterizing slide content.
 
 ## Evidence
 
-- Pending.
+- Added `proof compile --target pptx` with `.pptx` output derivation and a
+  `.slides.source.md` boundary guard so arbitrary prose is not treated as a deck.
+- Generated native editable OOXML parts for presentation, slides, slide
+  relationships, notes slides, notes relationships, masters, layouts, theme,
+  core/app properties, and `[Content_Types].xml`.
+- OFFICE review: output is a ZIP/XML package with expected presentation, slide,
+  notes, layout, master, theme, relationship, and content-type parts; slide text,
+  bullets, numbered lists, code, and notes are native XML text, not screenshots,
+  SVG-only images, or embedded HTML frames.
+- STAGE review: first-scope source contract stays explicit and defaults to
+  title/content hierarchy with bounded bullet levels; richer layout, themes,
+  charts, media, animations, and brand templates remain non-goals.
+- Validation:
+  - `cargo fmt --check`
+  - `cargo test binary_compile_target_pptx_writes_deck`
+  - `cargo test pptx_ooxml_package_contains_native_bullets_and_notes`
+  - `cargo test --test integration_tests`
+  - `proof compile <fixture>.slides.source.md --target pptx -o <out>.pptx`
+  - `cargo test`
+  - `cargo build`
+  - `git diff --check`
