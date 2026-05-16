@@ -1,5 +1,5 @@
 use crate::cmd_context::GlobalOptions;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use colored::Colorize;
 use proof_lib::frontmatter::FrontmatterTagCounts;
 use proof_lib::lint::load_config_for_path;
@@ -42,7 +42,22 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
     if args.crop {
         return run_crop_status(args, globals);
     }
+    reject_crop_only_options(&args)?;
     run(args, globals.config())
+}
+
+fn reject_crop_only_options(args: &Args) -> Result<()> {
+    if args.view.is_some()
+        || args.strict
+        || !args.strict_on.is_empty()
+        || !args.extensions.is_empty()
+        || !args.exclude_dirs.is_empty()
+        || args.crop_format != "markdown"
+        || args.crop_bin != PathBuf::from("crop")
+    {
+        bail!("proof status CROP options require --crop");
+    }
+    Ok(())
 }
 
 fn run_crop_status(args: Args, globals: &GlobalOptions) -> Result<()> {
@@ -296,5 +311,23 @@ mod tests {
                 "markdown".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn local_status_rejects_crop_only_options() {
+        let err = reject_crop_only_options(&Args {
+            dir: PathBuf::from("."),
+            crop: false,
+            crop_bin: PathBuf::from("crop"),
+            view: Some(PathBuf::from("ready.json")),
+            strict: false,
+            strict_on: vec![],
+            crop_format: "markdown".to_string(),
+            extensions: vec![],
+            exclude_dirs: vec![],
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("require --crop"));
     }
 }
