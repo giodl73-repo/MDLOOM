@@ -25,7 +25,7 @@ pub(crate) struct Args {
     #[arg(long)]
     strict: bool,
     /// Limit --strict to selected CROP issue classes
-    #[arg(long = "strict-on")]
+    #[arg(long = "strict-on", value_parser = ["broken-links", "orphan-pages", "duplicate-anchors"])]
     strict_on: Vec<String>,
     /// CROP status output format with --crop: markdown or json
     #[arg(long = "crop-format", value_parser = ["markdown", "json"])]

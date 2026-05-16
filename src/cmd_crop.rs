@@ -79,7 +79,7 @@ struct StatusArgs {
     #[arg(long)]
     strict: bool,
     /// Limit --strict to selected issue classes: broken-links, orphan-pages, duplicate-anchors
-    #[arg(long = "strict-on")]
+    #[arg(long = "strict-on", value_parser = ["broken-links", "orphan-pages", "duplicate-anchors"])]
     strict_on: Vec<String>,
     /// Output format: markdown or json
     #[arg(long, value_parser = ["markdown", "json"])]
