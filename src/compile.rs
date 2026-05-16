@@ -202,60 +202,19 @@ pub fn compile_file(
                 inline_body,
                 attrs,
                 ..
-            } => {
-                let mut tree_warnings = Vec::new();
-                match compile_tree::generate_tree_block(
-                    kind,
-                    source.as_deref(),
-                    inline_body,
-                    attrs,
-                    root,
-                    line_start + source_line_offset,
-                    &mut tree_warnings,
-                ) {
-                    Ok(block) => {
-                        resolved_count += 1;
-                        for warning in tree_warnings {
-                            violations.push(CompileViolation {
-                                code: warning.code,
-                                severity: ViolationSeverity::Warning,
-                                uri: String::new(),
-                                figure_id: None,
-                                invariant: String::new(),
-                                message: warning.message,
-                                source_line: warning.source_line,
-                            });
-                        }
-                        block
-                    }
-                    Err(e) => {
-                        // stub=true: WIP directive — downgrade error to warning, keep source block
-                        let severity = if attrs.stub {
-                            ViolationSeverity::Warning
-                        } else {
-                            ViolationSeverity::Error
-                        };
-                        violations.push(CompileViolation {
-                            code: "COMPILE-002",
-                            severity,
-                            uri: source.clone().unwrap_or_default(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!(
-                                "tree generation failed: {}{}",
-                                e,
-                                if attrs.stub {
-                                    " (stub — skipped)"
-                                } else {
-                                    ""
-                                }
-                            ),
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                        compile_output::source_fallback(&source_lines, line_start, line_end)
-                    }
-                }
-            }
+            } => compile_tree::compile_tree(
+                kind,
+                source.as_ref(),
+                inline_body,
+                attrs,
+                root,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+                &mut resolved_count,
+            ),
 
             Directive::Element {
                 kind,

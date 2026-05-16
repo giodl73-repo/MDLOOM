@@ -1,7 +1,9 @@
 use anyhow::Result;
 use std::path::Path;
 
+use crate::compile::{CompileViolation, ViolationSeverity};
 use crate::compile_directive::TreeAttrs;
+use crate::compile_output;
 use crate::compile_source;
 use crate::tree::dirtree::{generate as dirtree_generate, DirtreeOptions};
 use crate::tree::schema::{
@@ -110,6 +112,73 @@ pub(crate) fn generate_tree_block(
         "<!-- proof:compiled from=\"proof:tree kind={}\" uri=\"{}\" -->\n```{}\n{}\n```\n<!-- /proof:compiled -->",
         kind, uris, kind, body
     ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compile_tree(
+    kind: &str,
+    source: Option<&String>,
+    inline_body: &[String],
+    attrs: &TreeAttrs,
+    root: &Path,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+    resolved_count: &mut usize,
+) -> String {
+    let mut tree_warnings = Vec::new();
+    match generate_tree_block(
+        kind,
+        source.map(|s| s.as_str()),
+        inline_body,
+        attrs,
+        root,
+        line_start + source_line_offset,
+        &mut tree_warnings,
+    ) {
+        Ok(block) => {
+            *resolved_count += 1;
+            for warning in tree_warnings {
+                violations.push(CompileViolation {
+                    code: warning.code,
+                    severity: ViolationSeverity::Warning,
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: warning.message,
+                    source_line: warning.source_line,
+                });
+            }
+            block
+        }
+        Err(e) => {
+            let severity = if attrs.stub {
+                ViolationSeverity::Warning
+            } else {
+                ViolationSeverity::Error
+            };
+            violations.push(CompileViolation {
+                code: "COMPILE-002",
+                severity,
+                uri: source.cloned().unwrap_or_default(),
+                figure_id: None,
+                invariant: String::new(),
+                message: format!(
+                    "tree generation failed: {}{}",
+                    e,
+                    if attrs.stub {
+                        " (stub — skipped)"
+                    } else {
+                        ""
+                    }
+                ),
+                source_line: line_start + 1 + source_line_offset,
+            });
+            compile_output::source_fallback(source_lines, line_start, line_end)
+        }
+    }
 }
 
 pub(crate) fn render_inline_tree(content: &str, indent_width: usize) -> Result<String> {
