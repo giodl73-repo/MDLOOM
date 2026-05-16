@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::compile_crop::{self, SideInfoKind};
 use crate::compile_directive;
+use crate::compile_symbol;
 use crate::config::GlintConfig;
 use crate::davinci::evaluate_invariant;
 use crate::diagnostic::Severity;
@@ -1403,47 +1404,42 @@ pub fn compile_file(
                 size,
                 align: _,
                 ..
-            } => {
-                let lib = crate::symbol::SymbolLibrary::new();
-                match crate::symbol::resolve(name, &lib) {
-                    Some(sym) => {
-                        resolved_count += 1;
-                        let rendered = crate::symbol::render_symbol_block(&sym, *size);
-                        format!(
-                            "<!-- proof:compiled from=\"proof:symbol\" name=\"{}\" size=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-                            name, size, rendered
-                        )
-                    }
-                    None => {
-                        let hint = crate::symbol::suggest_symbol(name, &lib)
-                            .map(|s| format!(" — did you mean '{}'?", s))
-                            .unwrap_or_default();
-                        violations.push(CompileViolation {
-                            code: "SYMBOL-001",
-                            severity: ViolationSeverity::Warning,
-                            uri: String::new(),
-                            figure_id: None,
-                            invariant: String::new(),
-                            message: format!("Unknown symbol '{}'{}", name, hint),
-                            source_line: line_start + 1 + source_line_offset,
-                        });
-                        source_lines[line_start..=line_end].join("\n")
-                    }
-                }
-            }
-
-            Directive::Shape { attrs, .. } => match crate::symbol::shape::render_shape(attrs) {
+            } => match compile_symbol::render_symbol_compiled(name, *size) {
                 Ok(rendered) => {
                     resolved_count += 1;
-                    format!(
-                            "<!-- proof:compiled from=\"proof:shape\" name=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
-                            attrs.name, rendered
-                        )
+                    rendered
                 }
                 Err(e) => {
                     violations.push(CompileViolation {
                         code: e.code,
-                        severity: ViolationSeverity::Error,
+                        severity: if e.is_warning {
+                            ViolationSeverity::Warning
+                        } else {
+                            ViolationSeverity::Error
+                        },
+                        uri: String::new(),
+                        figure_id: None,
+                        invariant: String::new(),
+                        message: e.message,
+                        source_line: line_start + 1 + source_line_offset,
+                    });
+                    source_lines[line_start..=line_end].join("\n")
+                }
+            },
+
+            Directive::Shape { attrs, .. } => match compile_symbol::render_shape_compiled(attrs) {
+                Ok(rendered) => {
+                    resolved_count += 1;
+                    rendered
+                }
+                Err(e) => {
+                    violations.push(CompileViolation {
+                        code: e.code,
+                        severity: if e.is_warning {
+                            ViolationSeverity::Warning
+                        } else {
+                            ViolationSeverity::Error
+                        },
                         uri: String::new(),
                         figure_id: None,
                         invariant: String::new(),
@@ -3901,31 +3897,7 @@ fn render_one_directive_no_chrome(
 ) -> String {
     let line_start = directive.line_start();
     match directive {
-        Directive::Symbol { name, size, .. } => {
-            let lib = crate::symbol::SymbolLibrary::new();
-            match crate::symbol::resolve(name, &lib) {
-                Some(sym) => {
-                    *resolved_count += 1;
-                    crate::symbol::render_symbol_block(&sym, *size)
-                }
-                None => {
-                    let hint = crate::symbol::suggest_symbol(name, &lib)
-                        .map(|s| format!(" — did you mean '{}'?", s))
-                        .unwrap_or_default();
-                    violations.push(CompileViolation {
-                        code: "SYMBOL-001",
-                        severity: ViolationSeverity::Warning,
-                        uri: String::new(),
-                        figure_id: None,
-                        invariant: String::new(),
-                        message: format!("Unknown symbol '{}'{}", name, hint),
-                        source_line: abs_line + 1,
-                    });
-                    String::new()
-                }
-            }
-        }
-        Directive::Shape { attrs, .. } => match crate::symbol::shape::render_shape(attrs) {
+        Directive::Symbol { name, size, .. } => match compile_symbol::render_symbol(name, *size) {
             Ok(rendered) => {
                 *resolved_count += 1;
                 rendered
@@ -3933,7 +3905,33 @@ fn render_one_directive_no_chrome(
             Err(e) => {
                 violations.push(CompileViolation {
                     code: e.code,
-                    severity: ViolationSeverity::Error,
+                    severity: if e.is_warning {
+                        ViolationSeverity::Warning
+                    } else {
+                        ViolationSeverity::Error
+                    },
+                    uri: String::new(),
+                    figure_id: None,
+                    invariant: String::new(),
+                    message: e.message,
+                    source_line: abs_line + 1,
+                });
+                String::new()
+            }
+        },
+        Directive::Shape { attrs, .. } => match compile_symbol::render_shape_inline(attrs) {
+            Ok(rendered) => {
+                *resolved_count += 1;
+                rendered
+            }
+            Err(e) => {
+                violations.push(CompileViolation {
+                    code: e.code,
+                    severity: if e.is_warning {
+                        ViolationSeverity::Warning
+                    } else {
+                        ViolationSeverity::Error
+                    },
                     uri: String::new(),
                     figure_id: None,
                     invariant: String::new(),

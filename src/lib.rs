@@ -14,6 +14,7 @@ pub mod compile_directive;
 pub mod compile_prose;
 #[allow(dead_code)]
 pub mod compile_source;
+pub(crate) mod compile_symbol;
 #[allow(dead_code)]
 pub mod compile_toc;
 #[allow(dead_code)]
