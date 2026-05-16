@@ -421,7 +421,11 @@ pub fn compile_file(
 
     // Rebuild source with replacements applied, preserving trailing newline
     let had_trailing_newline = source_body.ends_with('\n');
-    let mut output_text = compile_output::apply_replacements(&source_lines, &replacements);
+    let mut output_text = if replacements.is_empty() {
+        source_body.to_string()
+    } else {
+        compile_output::apply_replacements(&source_lines, &replacements)
+    };
     if had_trailing_newline && !output_text.ends_with('\n') {
         output_text.push('\n');
     }

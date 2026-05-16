@@ -1653,6 +1653,54 @@ fn binary_backfill_literal_generates_source_and_report() {
 }
 
 #[test]
+fn binary_backfill_literal_roundtrips_frontmatter_with_crlf() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let source_dir = dir.path().join("generated");
+    let report_path = dir.path().join("backfill-report.json");
+    std::fs::write(
+        dir.path().join("guide.md"),
+        "---\r\ntitle: Demo\r\nsource_custody: partial\r\n---\r\n\r\n# Guide\r\n\r\nBody.\r\n",
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("backfill")
+        .arg(dir.path().join("guide.md"))
+        .arg("--output-source")
+        .arg(&source_dir)
+        .arg("--report")
+        .arg(&report_path)
+        .arg("--literal-first")
+        .arg("--check-roundtrip")
+        .output()
+        .expect("failed to run proof backfill");
+
+    assert!(
+        output.status.success(),
+        "proof backfill failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let generated_text =
+        std::fs::read_to_string(source_dir.join("guide.source.md")).expect("generated source");
+    assert!(
+        generated_text.contains("source_custody: partial"),
+        "got:\n{}",
+        generated_text
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).unwrap()).unwrap();
+    assert_eq!(report["summary"]["roundtrip_passed"], 1);
+    assert_eq!(report["files"][0]["roundtrip"]["diff_summary"], "identical");
+}
+
+#[test]
 fn binary_backfill_report_classifies_candidate_blocks() {
     let bin = debug_bin();
     if !bin.exists() {

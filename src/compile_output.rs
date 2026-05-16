@@ -52,25 +52,29 @@ pub(crate) fn source_fallback(
 /// Frontmatter is the block between the opening `---` on line 0 and the next `---`.
 /// If no frontmatter is present, returns ("", source, 0).
 pub(crate) fn split_frontmatter(source: &str) -> (String, &str, usize) {
-    let lines: Vec<&str> = source.lines().collect();
-    if lines.first().map(|l| l.trim()) != Some("---") {
+    let mut lines = source.split_inclusive('\n');
+    let Some(first) = lines.next() else {
+        return (String::new(), source, 0);
+    };
+    if first.trim_end_matches(['\r', '\n']).trim() != "---" {
         return (String::new(), source, 0);
     }
 
-    let close_idx = match lines.iter().skip(1).position(|l| l.trim() == "---") {
-        Some(i) => i + 1,
-        None => return (String::new(), source, 0),
-    };
+    let mut fm_lines: Vec<String> = Vec::new();
+    let mut byte_offset = first.len();
+    let mut body_offset_lines = 1usize;
 
-    let fm = lines[1..close_idx].join("\n");
-    let mut byte_offset = 0usize;
-    for line in &lines[..=close_idx] {
-        byte_offset += line.len() + 1;
+    for line in lines {
+        byte_offset += line.len();
+        body_offset_lines += 1;
+        if line.trim_end_matches(['\r', '\n']).trim() == "---" {
+            let body = &source[byte_offset.min(source.len())..];
+            return (fm_lines.join("\n"), body, body_offset_lines);
+        }
+        fm_lines.push(line.trim_end_matches(['\r', '\n']).to_string());
     }
-    let byte_offset = byte_offset.min(source.len());
-    let body = &source[byte_offset..];
-    let body_offset_lines = close_idx + 1;
-    (fm, body, body_offset_lines)
+
+    (String::new(), source, 0)
 }
 
 /// Derive output path from source path.
@@ -157,6 +161,15 @@ mod tests {
         let (fm, body, offset) = split_frontmatter(src);
         assert_eq!(fm, "title: Demo");
         assert_eq!(body, "# Body\n");
+        assert_eq!(offset, 3);
+    }
+
+    #[test]
+    fn split_frontmatter_preserves_crlf_body_offset() {
+        let src = "---\r\ntitle: Demo\r\n---\r\n# Body\r\n\r\nText\r\n";
+        let (fm, body, offset) = split_frontmatter(src);
+        assert_eq!(fm, "title: Demo");
+        assert_eq!(body, "# Body\r\n\r\nText\r\n");
         assert_eq!(offset, 3);
     }
 
