@@ -172,6 +172,14 @@ enum Directive {
         line_start: usize,
         line_end: usize,
     },
+    /// proof:headings — render headings for a source from CROP side-info.
+    Headings {
+        source_doc: String,
+        source: Option<String>,
+        format: String,
+        line_start: usize,
+        line_end: usize,
+    },
     /// proof:chart — full bar or line chart (distinct from sparkline elements).
     Chart {
         attrs: crate::chart::ChartAttrs,
@@ -330,6 +338,7 @@ impl Directive {
             Directive::Xref { line_start, .. } => *line_start,
             Directive::Blockquote { line_start, .. } => *line_start,
             Directive::Backlinks { line_start, .. } => *line_start,
+            Directive::Headings { line_start, .. } => *line_start,
             Directive::Chart { line_start, .. } => *line_start,
         }
     }
@@ -349,6 +358,7 @@ impl Directive {
             Directive::Xref { line_end, .. } => *line_end,
             Directive::Blockquote { line_end, .. } => *line_end,
             Directive::Backlinks { line_end, .. } => *line_end,
+            Directive::Headings { line_end, .. } => *line_end,
             Directive::Chart { line_end, .. } => *line_end,
         }
     }
@@ -873,6 +883,38 @@ fn collect_directives(source: &str) -> Vec<Directive> {
                         line_end,
                     });
                 }
+                "headings" => {
+                    let info_after = info_after_backticks
+                        .strip_prefix("proof:headings")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    let source_doc = extract_attr_value(&info_after, "source")
+                        .or_else(|| extract_attr_value(&info_after, "target"))
+                        .or_else(|| extract_attr_value(&info_after, "uri"))
+                        .or_else(|| {
+                            body.iter().find_map(|l| {
+                                let t = l.trim();
+                                if !t.is_empty() {
+                                    Some(t.to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .unwrap_or_default();
+                    let source = extract_attr_value(&info_after, "side-info")
+                        .or_else(|| extract_attr_value(&info_after, "side_info"));
+                    let format = extract_attr_value(&info_after, "format")
+                        .unwrap_or_else(|| "list".to_string());
+                    directives.push(Directive::Headings {
+                        source_doc,
+                        source,
+                        format,
+                        line_start,
+                        line_end,
+                    });
+                }
                 "chart" => {
                     let info_after = info_after_backticks
                         .strip_prefix("proof:chart")
@@ -999,6 +1041,8 @@ fn proof_directive_kind(line: &str) -> Option<&'static str> {
         Some("blockquote")
     } else if rest.starts_with("backlinks") {
         Some("backlinks")
+    } else if rest.starts_with("headings") {
+        Some("headings")
     } else if rest.starts_with("chart") {
         Some("chart")
     } else if rest.starts_with("numbered-list") {
@@ -1559,6 +1603,38 @@ pub fn compile_file(
                     }
                 }
             }
+            Directive::Headings {
+                source_doc,
+                source,
+                format,
+                ..
+            } => {
+                let report_path = source
+                    .as_deref()
+                    .map(|p| root.join(p))
+                    .unwrap_or_else(|| root.join(".proof").join("side-info").join("headings.json"));
+                match crop_side_info::render_headings(source_doc, &report_path, format) {
+                    Ok(rendered) => {
+                        resolved_count += 1;
+                        format!(
+                            "<!-- proof:compiled from=\"proof:headings\" source=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+                            source_doc, rendered
+                        )
+                    }
+                    Err(e) => {
+                        violations.push(CompileViolation {
+                            code: "COMPILE-002",
+                            severity: ViolationSeverity::Error,
+                            uri: source_doc.clone(),
+                            figure_id: None,
+                            invariant: String::new(),
+                            message: format!("headings error: {}", e),
+                            source_line: line_start + 1 + source_line_offset,
+                        });
+                        source_fallback(&source_lines, line_start, line_end)
+                    }
+                }
+            }
 
             Directive::Chart {
                 attrs,
@@ -1690,13 +1766,19 @@ pub fn compile_file(
 fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for directive in directives {
-        let Directive::Backlinks { source, .. } = directive else {
-            continue;
+        let path = match directive {
+            Directive::Backlinks { source, .. } => source
+                .as_deref()
+                .map(|p| root.join(p))
+                .unwrap_or_else(|| root.join(".proof").join("side-info").join("backlinks.json")),
+            Directive::Headings { source, .. } => source
+                .as_deref()
+                .map(|p| root.join(p))
+                .unwrap_or_else(|| root.join(".proof").join("side-info").join("headings.json")),
+            _ => {
+                continue;
+            }
         };
-        let path = source
-            .as_deref()
-            .map(|p| root.join(p))
-            .unwrap_or_else(|| root.join(".proof").join("side-info").join("backlinks.json"));
         if !paths.contains(&path) {
             paths.push(path);
         }
