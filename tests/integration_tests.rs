@@ -2715,6 +2715,44 @@ fn binary_index_delegates_to_crop_index() {
 }
 
 #[test]
+fn binary_index_uses_global_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let args_file = dir.path().join("crop-args.txt");
+    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let output_path = dir.path().join("GLOBAL_INDEX.md");
+
+    let output = std::process::Command::new(&bin)
+        .arg("-o")
+        .arg(&output_path)
+        .arg("index")
+        .arg("--crop-bin")
+        .arg(&crop_bin)
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .expect("failed to run proof index");
+
+    assert!(
+        output.status.success(),
+        "proof index failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    assert!(args.contains("--output"), "got: {}", args);
+    assert!(
+        args.contains(&output_path.display().to_string()),
+        "got: {}",
+        args
+    );
+}
+
+#[test]
 fn binary_toc_delegates_to_crop_index_with_toc_title() {
     let bin = debug_bin();
     if !bin.exists() {

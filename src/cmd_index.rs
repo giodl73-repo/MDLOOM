@@ -1,6 +1,8 @@
 use anyhow::{bail, Result};
 use std::path::PathBuf;
 
+use crate::cmd_context::GlobalOptions;
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     /// CROP executable to invoke for corpus indexing
@@ -33,8 +35,16 @@ struct CorpusPageArgs {
     output: Option<PathBuf>,
 }
 
+pub(crate) fn run_index_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    run_index(apply_global_output(args, globals))
+}
+
 pub(crate) fn run_index(args: Args) -> Result<()> {
     run_crop_page("index", args)
+}
+
+pub(crate) fn run_toc_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    run_toc(apply_global_output(args, globals))
 }
 
 pub(crate) fn run_toc(mut args: Args) -> Result<()> {
@@ -44,8 +54,19 @@ pub(crate) fn run_toc(mut args: Args) -> Result<()> {
     run_crop_page("index", args)
 }
 
+pub(crate) fn run_catalog_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
+    run_catalog(apply_global_output(args, globals))
+}
+
 pub(crate) fn run_catalog(args: Args) -> Result<()> {
     run_crop_page("catalog", args)
+}
+
+fn apply_global_output(mut args: Args, globals: &GlobalOptions) -> Args {
+    if args.page.output.is_none() {
+        args.page.output = globals.output().clone();
+    }
+    args
 }
 
 fn run_crop_page(command: &str, args: Args) -> Result<()> {
@@ -94,6 +115,10 @@ fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn globals(output: Option<PathBuf>) -> GlobalOptions {
+        GlobalOptions::new(None, "text".to_string(), false, false, output)
+    }
 
     fn args(page: CorpusPageArgs) -> Args {
         Args {
@@ -153,6 +178,54 @@ mod tests {
         assert_eq!(
             crop_args,
             vec!["catalog", "--view", "ready.json", "--output", "CATALOG.md"]
+        );
+    }
+
+    #[test]
+    fn global_output_is_used_when_page_output_missing() {
+        let crop_args = build_crop_page_args(
+            "index",
+            apply_global_output(
+                args(CorpusPageArgs {
+                    root: Some(PathBuf::from("docs")),
+                    view: None,
+                    title: None,
+                    extensions: vec![],
+                    exclude_dirs: vec![],
+                    output: None,
+                }),
+                &globals(Some(PathBuf::from("GLOBAL.md"))),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            crop_args,
+            vec!["index", "--root", "docs", "--output", "GLOBAL.md"]
+        );
+    }
+
+    #[test]
+    fn page_output_overrides_global_output() {
+        let crop_args = build_crop_page_args(
+            "catalog",
+            apply_global_output(
+                args(CorpusPageArgs {
+                    root: None,
+                    view: Some(PathBuf::from("ready.json")),
+                    title: None,
+                    extensions: vec![],
+                    exclude_dirs: vec![],
+                    output: Some(PathBuf::from("LOCAL.md")),
+                }),
+                &globals(Some(PathBuf::from("GLOBAL.md"))),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            crop_args,
+            vec!["catalog", "--view", "ready.json", "--output", "LOCAL.md"]
         );
     }
 

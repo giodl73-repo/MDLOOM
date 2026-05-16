@@ -54,9 +54,9 @@ impl DispatchContext {
             Some(Command::Status(args)) => cmd_status::run_with_globals(args, &globals),
             Some(Command::Config(args)) => cmd_config::run_with_globals(args, &globals),
             Some(Command::Crop(args)) => cmd_crop::run_with_globals(args, &globals),
-            Some(Command::Index(args)) => cmd_index::run_index(args),
-            Some(Command::Toc(args)) => cmd_index::run_toc(args),
-            Some(Command::Catalog(args)) => cmd_index::run_catalog(args),
+            Some(Command::Index(args)) => cmd_index::run_index_with_globals(args, &globals),
+            Some(Command::Toc(args)) => cmd_index::run_toc_with_globals(args, &globals),
+            Some(Command::Catalog(args)) => cmd_index::run_catalog_with_globals(args, &globals),
             Some(Command::Stats(args)) => cmd_stats::run_with_globals(args, &globals),
             Some(Command::Tree(args)) => cmd_tree::run(args),
             Some(Command::SpecGenerate(args)) => {
