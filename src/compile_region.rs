@@ -12,6 +12,29 @@ use crate::config::GlintConfig;
 use crate::layout::extract_content_lines;
 use crate::runner::Runner;
 
+pub(crate) fn compile_invalid_region(
+    name: &str,
+    line_start: usize,
+    line_end: usize,
+    source_line_offset: usize,
+    source_lines: &[&str],
+    violations: &mut Vec<CompileViolation>,
+) -> String {
+    violations.push(CompileViolation {
+        code: "COMPILE-002",
+        severity: ViolationSeverity::Error,
+        uri: String::new(),
+        figure_id: None,
+        invariant: String::new(),
+        message: format!(
+            "proof:region {:?} is only valid in .dashboard.source.md files",
+            name
+        ),
+        source_line: line_start + 1 + source_line_offset,
+    });
+    crate::compile_output::source_fallback(source_lines, line_start, line_end)
+}
+
 /// Render the body of a proof:region directive: literal lines kept verbatim,
 /// directive lines dispatched through per-directive renderers with no-chrome
 /// implied so the canvas paste sees raw glyphs only.

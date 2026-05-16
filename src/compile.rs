@@ -285,25 +285,14 @@ pub fn compile_file(
                 &mut resolved_count,
             ),
 
-            Directive::Region { name, .. } => {
-                // proof:region is only valid inside a .dashboard.source.md file —
-                // and dashboard files are routed through compile_dashboard_file before
-                // this loop is ever reached. Reaching this branch means the directive
-                // appeared in a non-dashboard file.
-                violations.push(CompileViolation {
-                    code: "COMPILE-002",
-                    severity: ViolationSeverity::Error,
-                    uri: String::new(),
-                    figure_id: None,
-                    invariant: String::new(),
-                    message: format!(
-                        "proof:region {:?} is only valid in .dashboard.source.md files",
-                        name
-                    ),
-                    source_line: line_start + 1 + source_line_offset,
-                });
-                source_lines[line_start..=line_end].join("\n")
-            }
+            Directive::Region { name, .. } => crate::compile_region::compile_invalid_region(
+                name,
+                line_start,
+                line_end,
+                source_line_offset,
+                &source_lines,
+                &mut violations,
+            ),
 
             Directive::Math {
                 expr,
