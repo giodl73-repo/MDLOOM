@@ -2959,7 +2959,8 @@ fn binary_crop_run_view_rejects_unknown_prefix_cache() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("must be generic"), "got: {}", stderr);
+    assert!(stderr.contains("invalid value"), "got: {}", stderr);
+    assert!(stderr.contains("generic"), "got: {}", stderr);
     assert!(!args_file.exists(), "CROP should not be invoked");
 }
 

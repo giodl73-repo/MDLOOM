@@ -146,10 +146,10 @@ proof crop run-view --file .crop/views/ready-guides.json --query "refresh guide 
 
 `proof crop run-view` delegates to CROP's `view --file` surface and forwards
 one-off `--query`, `--extension`, `--exclude-dir`, and `--prefix-cache` values.
-`--prefix-cache` currently accepts CROP's `generic` profile. The command also
-honors global `-o/--output` when local `--output` is omitted. View packs are
-JSON-only, so non-JSON global formats such as `-f markdown` are rejected before
-CROP is invoked.
+`--prefix-cache` currently accepts CROP's `generic` profile and rejects unknown
+profiles at argument parsing. The command also honors global `-o/--output` when
+local `--output` is omitted. View packs are JSON-only, so non-JSON global
+formats such as `-f markdown` are rejected before CROP is invoked.
 
 Generate first-class authoring pages from the same view:
 

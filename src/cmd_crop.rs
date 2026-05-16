@@ -204,7 +204,7 @@ struct RunViewArgs {
     #[arg(long = "exclude-dir")]
     exclude_dirs: Vec<String>,
     /// Emit prefix-cache-aware JSON for the view pack, e.g. generic
-    #[arg(long = "prefix-cache")]
+    #[arg(long = "prefix-cache", value_parser = ["generic"])]
     prefix_cache: Option<String>,
     /// Optional JSON output path. Defaults to CROP stdout
     #[arg(long)]
