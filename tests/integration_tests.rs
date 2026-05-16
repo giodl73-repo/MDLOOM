@@ -2021,6 +2021,55 @@ fn binary_crop_backlink_list_renders_target_snippet() {
 }
 
 #[test]
+fn binary_crop_backlink_list_writes_table_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("backlinks.json");
+    let output_path = dir.path().join("snippets").join("BACKLINKS.md");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "pages": [
+    {
+      "source": "README.md",
+      "inbound_links": [
+        { "source": "docs/guide.md", "target": "README.md#overview" }
+      ]
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("backlink-list")
+        .arg("--target")
+        .arg("README.md")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--format")
+        .arg("table")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop backlink-list --output");
+
+    assert!(
+        output.status.success(),
+        "proof crop backlink-list --output failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = std::fs::read_to_string(&output_path).unwrap();
+    assert!(rendered.contains("| Source | Target |"));
+    assert!(rendered.contains("| [guide.md](docs/guide.md) | `README.md#overview` |"));
+}
+
+#[test]
 fn binary_crop_heading_list_renders_source_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
@@ -2060,6 +2109,51 @@ fn binary_crop_heading_list_renders_source_snippet() {
     assert!(stdout.contains("- [Overview](md://README.md#overview)"));
     assert!(stdout.contains("  - [Install](md://README.md#install)"));
     assert!(!stdout.contains("Guide"));
+}
+
+#[test]
+fn binary_crop_heading_list_writes_count_output() {
+    let bin = debug_bin();
+    if !bin.exists() {
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let side_info = dir.path().join("headings.json");
+    let output_path = dir.path().join("snippets").join("OUTLINE_COUNT.md");
+    std::fs::write(
+        &side_info,
+        r#"{
+  "headings": [
+    { "source": "README.md", "level": 1, "text": "Overview", "md_uri": "md://README.md#overview" },
+    { "source": "README.md", "level": 2, "text": "Install", "md_uri": "md://README.md#install" },
+    { "source": "README.md", "level": 2, "text": "Usage", "md_uri": "md://README.md#usage" }
+  ]
+}"#,
+    )
+    .unwrap();
+
+    let output = std::process::Command::new(&bin)
+        .arg("crop")
+        .arg("heading-list")
+        .arg("--source")
+        .arg("README.md")
+        .arg("--side-info")
+        .arg(&side_info)
+        .arg("--format")
+        .arg("count")
+        .arg("--output")
+        .arg(&output_path)
+        .output()
+        .expect("failed to run proof crop heading-list --output");
+
+    assert!(
+        output.status.success(),
+        "proof crop heading-list --output failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = std::fs::read_to_string(&output_path).unwrap();
+    assert_eq!(rendered, "3");
 }
 
 #[test]
