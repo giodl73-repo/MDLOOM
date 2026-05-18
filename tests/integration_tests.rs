@@ -6506,6 +6506,34 @@ fn table_link_column_passes_linked_cells() {
 }
 
 #[test]
+fn source_document_inline_table_is_flagged() {
+    use proof_lib::config::MarkdownTableConfig;
+    let content = "# Source\n\n| Source | Policy |\n| --- | --- |\n| OCW | derived |\n";
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig::default(),
+    };
+    let diags = check.check(Path::new("custody.source.md"), content);
+    assert!(
+        diags.iter().any(|d| d.code == "source_inline_table"),
+        "inline tables in .source.md should be flagged"
+    );
+}
+
+#[test]
+fn regular_markdown_inline_table_is_not_source_flagged() {
+    use proof_lib::config::MarkdownTableConfig;
+    let content = "# Source\n\n| Source | Policy |\n| --- | --- |\n| OCW | derived |\n";
+    let check = MarkdownTableCheck {
+        config: MarkdownTableConfig::default(),
+    };
+    let diags = check.check(Path::new("custody.md"), content);
+    assert!(
+        !diags.iter().any(|d| d.code == "source_inline_table"),
+        "regular markdown tables should keep normal table lint behavior"
+    );
+}
+
+#[test]
 fn broken_link_detected_when_file_missing() {
     use proof_lib::config::{MarkdownTableConfig, TableSchema};
     let dir = tempfile::tempdir().unwrap();

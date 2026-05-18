@@ -74,6 +74,7 @@ proof validates:
 - **ASCII art** — box widths, column separator alignment, connector continuity, flowchart geometry
 - **Markdown structure** — H1 count, required headings, heading order, file length, H2 allowlists
 - **Tables** — column count, required columns, required row keys, allowed values, separator dashes
+- **Source tables** — inline pipe tables in `.source.md` files are flagged so durable row data can move to sidecar JSON/CSV or generated PROOF tables
 - **Links** — prose `[text](path.md)` links exist on disk
 - **Source documents** — broken `md://` references and missing heading paths caught before compile
 - **DaVinci figures** — structural invariants verified on every `proof check --daVinci`

@@ -672,6 +672,7 @@ indentation, duplicate entries, slash policy, and path verification.
 | `md_broken_link` | warning | A configured table link target does not exist |
 | `md_table_empty_header` | warning | A table header cell is empty, except an intentional blank top-left row-label corner in comparison matrices |
 | `md_table_too_wide` | warning | A table exceeds configured maximum columns |
+| `source_inline_table` | warning | A `.source.md` file contains an inline pipe table; durable row data should live in sidecar JSON/CSV or generated PROOF tables |
 | `md_missing_table` | warning | A required table is absent |
 
 ### `source_links` — Source Document Links

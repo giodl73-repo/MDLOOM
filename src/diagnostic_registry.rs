@@ -394,6 +394,13 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCode] = &[
         description: "GFM pipe table exceeds the configured maximum columns.",
     },
     DiagnosticCode {
+        code: "source_inline_table",
+        default_severity: Severity::Warning,
+        family: "markdown_table",
+        description:
+            "A .source.md file contains an inline pipe table instead of normalized sidecar data.",
+    },
+    DiagnosticCode {
         code: "md_unexpected_section",
         default_severity: Severity::Warning,
         family: "markdown",

@@ -174,6 +174,11 @@ pub struct MarkdownTableConfig {
     /// are still flagged (those are genuine missing-column errors).
     #[serde(default)]
     pub ignore_extra_body_cols: bool,
+    /// Warn when `.source.md` files contain inline pipe tables.
+    /// Source documents should keep durable row data in sidecar JSON/CSV or
+    /// generated proof tables so PEBBLE/CROP can cite normalized evidence.
+    #[serde(default = "bool_true")]
+    pub flag_inline_source_tables: bool,
 }
 
 impl Default for MarkdownTableConfig {
@@ -188,6 +193,7 @@ impl Default for MarkdownTableConfig {
             check_empty_headers: true,
             max_columns: 0,
             ignore_extra_body_cols: false,
+            flag_inline_source_tables: true,
         }
     }
 }

@@ -37,6 +37,24 @@ impl Check for MarkdownTableCheck {
         let tables = parse_tables(&lines, &in_code);
         let mut diags = Vec::new();
 
+        if self.config.flag_inline_source_tables && is_source_document(path) {
+            for table in &tables {
+                diags.push(
+                    Diagnostic::warning(
+                        path.to_path_buf(),
+                        table.line,
+                        1,
+                        "source_inline_table",
+                        "inline pipe table in .source.md; move durable row data to a sidecar table and reference it from PROOF",
+                    )
+                    .with_note(
+                        "source documents may render tables, but canonical data should live in JSON/CSV/sidecar tables for proof, pebble, and crop pipelines",
+                    )
+                    .with_group(format!("source-table-l{}", table.line)),
+                );
+            }
+        }
+
         // Structural validation for all tables
         for table in &tables {
             diags.extend(validate_structure(path, table, &self.config));
@@ -200,6 +218,12 @@ fn is_table_row(line: &str) -> bool {
     trimmed.starts_with('|')
         && trimmed.ends_with('|')
         && trimmed.chars().filter(|&c| c == '|').count() >= 2
+}
+
+fn is_source_document(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".source.md"))
 }
 
 /// True if this row looks like a GFM separator row — used for DETECTION only.
