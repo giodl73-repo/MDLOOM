@@ -59,7 +59,7 @@ retrieval schema.
 ### Static site
 
 The site backend builds on HTML. It owns page layout, navigation index files and
-site manifests. It does not own CROP graph cuts, search ranking, hosting,
+site manifests. It does not own MDCROP graph cuts, search ranking, hosting,
 deployment, authentication, or browser pixel equivalence.
 
 ### PDF

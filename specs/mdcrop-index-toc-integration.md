@@ -1,41 +1,41 @@
-# CROP Index and TOC Integration for MDLOOM
+# MDCROP Index and TOC Integration for MDLOOM
 
 ## Goal
 
-Make MDLOOM depend on CROP for corpus index and TOC primitives while MDLOOM keeps
+Make MDLOOM depend on MDCROP for corpus index and TOC primitives while MDLOOM keeps
 ownership of Markdown, HTML, ASCII-art, and source-to-output compilation.
 
 ## Motivation
 
 MDLOOM already generates Markdown from `.source.md`, now also HTML, and validates
-links, tables, ASCII figures, directives, and source references. CROP has the
+links, tables, ASCII figures, directives, and source references. MDCROP has the
 right local corpus view layer: filtered roots, named views, inspection, extension
 profiles, source samples, and Markdown index generation. MDLOOM should reuse that
 library surface instead of rebuilding corpus discovery and source-table logic.
 
 ## Dependency
 
-Add a dependency on `crop-core`.
+Add a dependency on `mdcrop-core`.
 
 Local development:
 
 ```toml
-crop-core = { path = "../CROP/crates/crop-core" }
+mdcrop-core = { path = "../MDCROP/crates/mdcrop-core" }
 ```
 
 Published/Git dependency once stable:
 
 ```toml
-crop-core = { git = "https://github.com/giodl73-repo/CROP.git", package = "crop-core", branch = "main" }
+mdcrop-core = { git = "https://github.com/giodl73-repo/MDCROP.git", package = "mdcrop-core", branch = "main" }
 ```
 
-## CROP APIs to consume
+## MDCROP APIs to consume
 
-- `markdown_index(root, title, options) -> Result<String, CropError>`
-- `markdown_index_for_view_json(json, base_dir) -> Result<String, CropError>`
-- `markdown_index_report(root, title, options) -> Result<MarkdownIndex, CropError>`
-- `inspect_view_json(json, base_dir) -> Result<CropViewInspect, CropError>`
-- `inspect_view_store(store) -> Result<CropViewStoreInspect, CropError>`
+- `markdown_index(root, title, options) -> Result<String, MdcropError>`
+- `markdown_index_for_view_json(json, base_dir) -> Result<String, MdcropError>`
+- `markdown_index_report(root, title, options) -> Result<MarkdownIndex, MdcropError>`
+- `inspect_view_json(json, base_dir) -> Result<MdcropViewInspect, MdcropError>`
+- `inspect_view_store(store) -> Result<MdcropViewStoreInspect, MdcropError>`
 - `IngestOptions { include_extensions, exclude_dirs }`
 
 ## MDLOOM commands
@@ -50,8 +50,8 @@ mdloom inspect-views --dir .mdloom\views --strict
 ```
 
 `mdloom index` should render a README-style source table. `mdloom toc` can start as
-an alias or narrower rendering of the same CROP `MarkdownIndex` report, then
-later grow heading-depth options. `mdloom inspect-views` should surface CROP view
+an alias or narrower rendering of the same MDCROP `MarkdownIndex` report, then
+later grow heading-depth options. `mdloom inspect-views` should surface MDCROP view
 inspection for CI before MDLOOM compiles or publishes a large corpus.
 
 ## MDLOOM directives
@@ -64,7 +64,7 @@ mdloom:toc root="docs/guides" extensions="md" depth=2
 mdloom:view-index file=".mdloom/views/docs.json"
 ```
 
-The directive renderer should call CROP APIs and insert Markdown tables into the
+The directive renderer should call MDCROP APIs and insert Markdown tables into the
 compiled `.md` and `.html` outputs.
 
 ## Output contract
@@ -87,11 +87,11 @@ Also include:
 - Do not overwrite existing `README.md`, `INDEX.md`, or `TOC.md` unless the user
   passes `--output` explicitly.
 - Honor MDLOOM's existing include/exclude configuration where possible, translating
-  it into CROP `IngestOptions`.
+  it into MDCROP `IngestOptions`.
 - Keep generated artifacts deterministic for stable diffs.
 - For HTML output, MDLOOM should render the Markdown table through its existing
-  HTML target rather than asking CROP to emit HTML.
-- Treat CROP errors as MDLOOM diagnostics with file/path context.
+  HTML target rather than asking MDCROP to emit HTML.
+- Treat MDCROP errors as MDLOOM diagnostics with file/path context.
 
 ## Validation
 

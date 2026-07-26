@@ -142,7 +142,7 @@ select without entering the compile or render graph.
 `--target mdport` writes a compact `mdport.v1` JSON document for agents,
 retrieval, and transfer. Mdports preserve stable section IDs, heading paths,
 line numbers, resolved Markdown text, source path, and resolved dependency refs.
-CROP can support the same schema for corpus slices, so a CROP view pack and a
+MDCROP can support the same schema for corpus slices, so a MDCROP view pack and a
 MDLOOM compiled source can exchange small, provenance-bearing context chunks.
 
 `--target json-report` writes `mdloom.publish.json_report.v1`: a stable
@@ -546,7 +546,7 @@ mdloom compile --watch
 | [Compile](docs/guides/07-compile.md) | Full directive reference |
 | [Lint](docs/guides/08-lint.md) | Check rules and mdloom.toml |
 | [Crates](docs/guides/09-crates.md) | mdloom-canvas and mdloom-math APIs |
-| [CROP](docs/guides/12-crop.md) | Corpus-intelligence adapter |
+| [MDCROP](docs/guides/12-mdcrop.md) | Corpus-intelligence adapter |
 
 ---
 

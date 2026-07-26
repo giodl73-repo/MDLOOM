@@ -5,9 +5,9 @@ use crate::cmd_context::GlobalOptions;
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// CROP executable to invoke for corpus indexing
-    #[arg(long, global = true, default_value = "crop")]
-    crop_bin: PathBuf,
+    /// MDCROP executable to invoke for corpus indexing
+    #[arg(long, global = true, default_value = "mdcrop")]
+    mdcrop_bin: PathBuf,
 
     #[command(flatten)]
     page: CorpusPageArgs,
@@ -18,10 +18,10 @@ struct CorpusPageArgs {
     /// Root directory or file to index/catalog
     #[arg(long)]
     root: Option<PathBuf>,
-    /// crop.view.v1 recipe to index/catalog
+    /// mdcrop.view.v1 recipe to index/catalog
     #[arg(long)]
     view: Option<PathBuf>,
-    /// Page title. Defaults to CROP's root/view-derived title
+    /// Page title. Defaults to MDCROP's root/view-derived title
     #[arg(long)]
     title: Option<String>,
     /// Restrict files to one or more extensions, e.g. --extension md
@@ -41,7 +41,7 @@ pub(crate) fn run_index_with_globals(args: Args, globals: &GlobalOptions) -> Res
 }
 
 pub(crate) fn run_index(args: Args) -> Result<()> {
-    run_crop_page("index", args)
+    run_mdcrop_page("index", args)
 }
 
 pub(crate) fn run_toc_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
@@ -53,7 +53,7 @@ pub(crate) fn run_toc(mut args: Args) -> Result<()> {
     if args.page.title.is_none() {
         args.page.title = Some("Table of Contents".to_string());
     }
-    run_crop_page("index", args)
+    run_mdcrop_page("index", args)
 }
 
 pub(crate) fn run_catalog_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
@@ -62,7 +62,7 @@ pub(crate) fn run_catalog_with_globals(args: Args, globals: &GlobalOptions) -> R
 }
 
 pub(crate) fn run_catalog(args: Args) -> Result<()> {
-    run_crop_page("catalog", args)
+    run_mdcrop_page("catalog", args)
 }
 
 fn apply_global_output(mut args: Args, globals: &GlobalOptions) -> Args {
@@ -83,12 +83,12 @@ fn reject_non_markdown_global_format(command: &str, globals: &GlobalOptions) -> 
     }
 }
 
-fn run_crop_page(command: &str, args: Args) -> Result<()> {
-    let crop_bin = args.crop_bin.clone();
-    crate::cmd_crop::run_crop(crop_bin, build_crop_page_args(command, args)?)
+fn run_mdcrop_page(command: &str, args: Args) -> Result<()> {
+    let mdcrop_bin = args.mdcrop_bin.clone();
+    crate::cmd_mdcrop::run_mdcrop(mdcrop_bin, build_mdcrop_page_args(command, args)?)
 }
 
-fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
+fn build_mdcrop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
     let page = args.page;
     if page.root.is_some() && page.view.is_some() {
         bail!(
@@ -100,33 +100,33 @@ fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
         bail!("mdloom {} requires --root or --view", command);
     }
 
-    let mut crop_args = vec![command.to_string()];
+    let mut mdcrop_args = vec![command.to_string()];
     if let Some(root) = page.root {
-        crop_args.push("--root".to_string());
-        crop_args.push(root.display().to_string());
+        mdcrop_args.push("--root".to_string());
+        mdcrop_args.push(root.display().to_string());
     }
     if let Some(view) = page.view {
-        crop_args.push("--view".to_string());
-        crop_args.push(view.display().to_string());
+        mdcrop_args.push("--view".to_string());
+        mdcrop_args.push(view.display().to_string());
     }
     if let Some(title) = page.title {
-        crop_args.push("--title".to_string());
-        crop_args.push(title);
+        mdcrop_args.push("--title".to_string());
+        mdcrop_args.push(title);
     }
     for extension in page.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
+        mdcrop_args.push("--extension".to_string());
+        mdcrop_args.push(extension);
     }
     for exclude_dir in page.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
+        mdcrop_args.push("--exclude-dir".to_string());
+        mdcrop_args.push(exclude_dir);
     }
     if let Some(output) = page.output {
-        crop_args.push("--output".to_string());
-        crop_args.push(output.display().to_string());
+        mdcrop_args.push("--output".to_string());
+        mdcrop_args.push(output.display().to_string());
     }
 
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
 #[cfg(test)]
@@ -143,14 +143,14 @@ mod tests {
 
     fn args(page: CorpusPageArgs) -> Args {
         Args {
-            crop_bin: PathBuf::from("crop"),
+            mdcrop_bin: PathBuf::from("mdcrop"),
             page,
         }
     }
 
     #[test]
-    fn index_args_map_to_crop_index() {
-        let crop_args = build_crop_page_args(
+    fn index_args_map_to_mdcrop_index() {
+        let mdcrop_args = build_mdcrop_page_args(
             "index",
             args(CorpusPageArgs {
                 root: Some(PathBuf::from("docs")),
@@ -164,7 +164,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            crop_args,
+            mdcrop_args,
             vec![
                 "index",
                 "--root",
@@ -182,8 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn catalog_args_map_to_crop_catalog_view() {
-        let crop_args = build_crop_page_args(
+    fn catalog_args_map_to_mdcrop_catalog_view() {
+        let mdcrop_args = build_mdcrop_page_args(
             "catalog",
             args(CorpusPageArgs {
                 root: None,
@@ -197,14 +197,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            crop_args,
+            mdcrop_args,
             vec!["catalog", "--view", "ready.json", "--output", "CATALOG.md"]
         );
     }
 
     #[test]
     fn global_output_is_used_when_page_output_missing() {
-        let crop_args = build_crop_page_args(
+        let mdcrop_args = build_mdcrop_page_args(
             "index",
             apply_global_output(
                 args(CorpusPageArgs {
@@ -221,14 +221,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            crop_args,
+            mdcrop_args,
             vec!["index", "--root", "docs", "--output", "GLOBAL.md"]
         );
     }
 
     #[test]
     fn page_output_overrides_global_output() {
-        let crop_args = build_crop_page_args(
+        let mdcrop_args = build_mdcrop_page_args(
             "catalog",
             apply_global_output(
                 args(CorpusPageArgs {
@@ -245,7 +245,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            crop_args,
+            mdcrop_args,
             vec!["catalog", "--view", "ready.json", "--output", "LOCAL.md"]
         );
     }
@@ -272,17 +272,17 @@ mod tests {
             toc_args.page.title = Some("Table of Contents".to_string());
         }
 
-        let crop_args = build_crop_page_args("index", toc_args).unwrap();
+        let mdcrop_args = build_mdcrop_page_args("index", toc_args).unwrap();
 
         assert_eq!(
-            crop_args,
+            mdcrop_args,
             vec!["index", "--root", "docs", "--title", "Table of Contents"]
         );
     }
 
     #[test]
     fn index_rejects_root_and_view() {
-        let err = build_crop_page_args(
+        let err = build_mdcrop_page_args(
             "index",
             args(CorpusPageArgs {
                 root: Some(PathBuf::from("docs")),
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn index_requires_root_or_view() {
-        let err = build_crop_page_args(
+        let err = build_mdcrop_page_args(
             "index",
             args(CorpusPageArgs {
                 root: None,

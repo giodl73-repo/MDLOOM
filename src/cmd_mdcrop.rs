@@ -1,58 +1,58 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
-use mdloom_lib::crop_side_info;
 use mdloom_lib::lint::load_config_for_path as load_config;
+use mdloom_lib::mdcrop_side_info;
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
-const DEFAULT_VIEW_OUTPUT: &str = ".crop\\views\\mdloom-view.json";
-const DEFAULT_VIEW_DIR: &str = ".crop\\views";
+const DEFAULT_VIEW_OUTPUT: &str = ".mdcrop\\views\\mdloom-view.json";
+const DEFAULT_VIEW_DIR: &str = ".mdcrop\\views";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// CROP executable to invoke
-    #[arg(long, global = true, default_value = "crop")]
-    crop_bin: PathBuf,
+    /// MDCROP executable to invoke
+    #[arg(long, global = true, default_value = "mdcrop")]
+    mdcrop_bin: PathBuf,
 
     #[command(subcommand)]
-    command: CropCommand,
+    command: MdcropCommand,
 }
 
 #[derive(Subcommand)]
-enum CropCommand {
-    /// Generate a CROP corpus status page for a root or named view
+enum MdcropCommand {
+    /// Generate a MDCROP corpus status page for a root or named view
     Status(StatusArgs),
-    /// List CROP view recipes in a view store
+    /// List MDCROP view recipes in a view store
     ListViews(ListViewsArgs),
-    /// Validate one CROP view recipe or every recipe in a view store
+    /// Validate one MDCROP view recipe or every recipe in a view store
     InspectViews(InspectViewsArgs),
-    /// Inspect CROP views and sync compiler side-info in one preflight step
+    /// Inspect MDCROP views and sync compiler side-info in one preflight step
     Prepare(PrepareArgs),
-    /// Write a crop.view.v1 recipe from MDLOOM root/config/tag settings
+    /// Write a mdcrop.view.v1 recipe from MDLOOM root/config/tag settings
     View(ViewArgs),
-    /// Run a persisted crop.view.v1 recipe as a JSON context pack
+    /// Run a persisted mdcrop.view.v1 recipe as a JSON context pack
     RunView(RunViewArgs),
     /// Generate local link side-info
     Links(SideInfoArgs),
-    /// Render local link audit rows from CROP link side-info
+    /// Render local link audit rows from MDCROP link side-info
     LinkList(LinkListArgs),
     /// Generate backlink and orphan side-info
     Backlinks(SideInfoArgs),
-    /// Render inbound links for one target from CROP backlinks side-info
+    /// Render inbound links for one target from MDCROP backlinks side-info
     BacklinkList(BacklinkListArgs),
     /// Generate frontmatter inventory side-info
     Frontmatter(SideInfoArgs),
-    /// Render source metadata rows from CROP frontmatter side-info
+    /// Render source metadata rows from MDCROP frontmatter side-info
     FrontmatterList(FrontmatterListArgs),
     /// Generate heading inventory side-info
     Headings(SideInfoArgs),
-    /// Render headings for one source from CROP heading side-info
+    /// Render headings for one source from MDCROP heading side-info
     HeadingList(HeadingListArgs),
-    /// Report MDLOOM generated artifact manifest health through CROP
+    /// Report MDLOOM generated artifact manifest health through MDCROP
     Artifacts(ArtifactsArgs),
     /// Generate side-info JSON files under .mdloom\side-info for MDLOOM compiler use
     Sync(SyncArgs),
@@ -63,7 +63,7 @@ struct StatusArgs {
     /// Documentation/source root to scan
     #[arg(long)]
     root: Option<PathBuf>,
-    /// crop.view.v1 recipe to scan
+    /// mdcrop.view.v1 recipe to scan
     #[arg(long)]
     view: Option<PathBuf>,
     /// Status page title
@@ -75,7 +75,7 @@ struct StatusArgs {
     /// Exclude directories by basename while scanning docs
     #[arg(long = "exclude-dir")]
     exclude_dirs: Vec<String>,
-    /// Relay CROP strict mode: render first, then fail on corpus issues
+    /// Relay MDCROP strict mode: render first, then fail on corpus issues
     #[arg(long)]
     strict: bool,
     /// Limit --strict to selected issue classes: broken-links, orphan-pages, duplicate-anchors
@@ -84,12 +84,12 @@ struct StatusArgs {
     /// Output format: markdown or json
     #[arg(long, value_parser = ["markdown", "json"])]
     format: Option<String>,
-    /// Optional output path. Defaults to CROP stdout
+    /// Optional output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
 
-pub(crate) struct CropStatusRequest {
+pub(crate) struct MdcropStatusRequest {
     pub(crate) root: Option<PathBuf>,
     pub(crate) view: Option<PathBuf>,
     pub(crate) title: Option<String>,
@@ -103,21 +103,21 @@ pub(crate) struct CropStatusRequest {
 
 #[derive(clap::Args)]
 struct ListViewsArgs {
-    /// View store directory to list. Defaults to .crop\views
+    /// View store directory to list. Defaults to .mdcrop\views
     #[arg(long, default_value = DEFAULT_VIEW_DIR)]
     dir: PathBuf,
-    /// Optional JSON output path. Defaults to CROP stdout
+    /// Optional JSON output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
 struct InspectViewsArgs {
-    /// Single crop.view.v1 recipe to inspect
+    /// Single mdcrop.view.v1 recipe to inspect
     #[arg(long)]
     file: Option<PathBuf>,
-    /// View store directory. Defaults to .crop\views
-    #[arg(long, default_value = ".crop\\views")]
+    /// View store directory. Defaults to .mdcrop\views
+    #[arg(long, default_value = ".mdcrop\\views")]
     dir: PathBuf,
     /// Exit non-zero when any view recipe fails inspection
     #[arg(long)]
@@ -131,7 +131,7 @@ struct InspectViewsArgs {
     /// Exclude directories by basename while inspecting one view
     #[arg(long = "exclude-dir")]
     exclude_dirs: Vec<String>,
-    /// Optional JSON output path. Defaults to CROP stdout
+    /// Optional JSON output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -141,8 +141,8 @@ struct PrepareArgs {
     /// View store directory to inspect before syncing side-info
     #[arg(long = "dir", default_value = DEFAULT_VIEW_DIR)]
     dir: PathBuf,
-    /// crop.view.v1 recipe to sync into .mdloom\side-info
-    #[arg(long, default_value = ".crop\\views\\mdloom-guides.json")]
+    /// mdcrop.view.v1 recipe to sync into .mdloom\side-info
+    #[arg(long, default_value = ".mdcrop\\views\\mdloom-guides.json")]
     view: PathBuf,
     /// Directory where links/backlinks/frontmatter/headings JSON files are written
     #[arg(long, default_value = ".mdloom\\side-info")]
@@ -151,22 +151,22 @@ struct PrepareArgs {
 
 #[derive(clap::Args)]
 struct ViewArgs {
-    /// Documentation/source root for the CROP view
+    /// Documentation/source root for the MDCROP view
     #[arg(long, default_value = ".")]
     root: PathBuf,
-    /// Output crop.view.v1 recipe path
+    /// Output mdcrop.view.v1 recipe path
     #[arg(long)]
     output: Option<PathBuf>,
     /// View name
     #[arg(long, default_value = "mdloom-view")]
     name: String,
-    /// Context-crop task prompt for crop view --file
+    /// Context-mdcrop task prompt for mdcrop view --file
     #[arg(long)]
     task: Option<String>,
-    /// Context-crop token budget
+    /// Context-mdcrop token budget
     #[arg(long, default_value_t = 12000)]
     token_budget: usize,
-    /// Seed unit index for crop expansion
+    /// Seed unit index for mdcrop expansion
     #[arg(long, default_value_t = 0)]
     seed: usize,
     /// Restrict view files to one or more extensions, e.g. --extension md
@@ -184,14 +184,14 @@ struct ViewArgs {
     /// Add a frontmatter content_tags predicate (repeatable)
     #[arg(long = "content-tag")]
     content_tags: Vec<String>,
-    /// Add a raw crop.view.v1 frontmatter_query clause, e.g. status eq 'ready'
+    /// Add a raw mdcrop.view.v1 frontmatter_query clause, e.g. status eq 'ready'
     #[arg(long = "frontmatter-query")]
     frontmatter_query: Option<String>,
 }
 
 #[derive(clap::Args)]
 struct RunViewArgs {
-    /// crop.view.v1 recipe to run
+    /// mdcrop.view.v1 recipe to run
     #[arg(long)]
     file: PathBuf,
     /// Override the view task for a one-off searchable run
@@ -206,7 +206,7 @@ struct RunViewArgs {
     /// Emit prefix-cache-aware JSON for the view pack, e.g. generic
     #[arg(long = "prefix-cache", value_parser = ["generic"])]
     prefix_cache: Option<String>,
-    /// Optional JSON output path. Defaults to CROP stdout
+    /// Optional JSON output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -216,7 +216,7 @@ struct SideInfoArgs {
     /// Root directory or file to analyze
     #[arg(long)]
     root: Option<PathBuf>,
-    /// crop.view.v1 recipe to analyze
+    /// mdcrop.view.v1 recipe to analyze
     #[arg(long)]
     view: Option<PathBuf>,
     /// Restrict analyzed files to one or more extensions, e.g. --extension md
@@ -225,7 +225,7 @@ struct SideInfoArgs {
     /// Exclude directories by basename while analyzing
     #[arg(long = "exclude-dir")]
     exclude_dirs: Vec<String>,
-    /// Optional output path. Defaults to CROP stdout
+    /// Optional output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -235,7 +235,7 @@ struct BacklinkListArgs {
     /// Target source/page to render inbound links for
     #[arg(long)]
     target: String,
-    /// CROP backlinks JSON report to consume
+    /// MDCROP backlinks JSON report to consume
     #[arg(
         long = "side-info",
         default_value = ".mdloom\\side-info\\backlinks.json"
@@ -251,7 +251,7 @@ struct BacklinkListArgs {
 
 #[derive(clap::Args)]
 struct LinkListArgs {
-    /// CROP links JSON report to consume
+    /// MDCROP links JSON report to consume
     #[arg(long = "side-info", default_value = ".mdloom\\side-info\\links.json")]
     side_info: PathBuf,
     /// Optional source/page to render outbound links for
@@ -273,7 +273,7 @@ struct HeadingListArgs {
     /// Source/page to render headings for
     #[arg(long)]
     source: String,
-    /// CROP headings JSON report to consume
+    /// MDCROP headings JSON report to consume
     #[arg(
         long = "side-info",
         default_value = ".mdloom\\side-info\\headings.json"
@@ -289,7 +289,7 @@ struct HeadingListArgs {
 
 #[derive(clap::Args)]
 struct FrontmatterListArgs {
-    /// CROP frontmatter JSON report to consume
+    /// MDCROP frontmatter JSON report to consume
     #[arg(
         long = "side-info",
         default_value = ".mdloom\\side-info\\frontmatter.json"
@@ -314,13 +314,13 @@ struct FrontmatterListArgs {
 
 #[derive(clap::Args)]
 struct ArtifactsArgs {
-    /// MDLOOM repository root. CROP reads .mdloom\artifacts.json under this root
+    /// MDLOOM repository root. MDCROP reads .mdloom\artifacts.json under this root
     #[arg(long)]
     root: Option<PathBuf>,
     /// Explicit MDLOOM artifact manifest path
     #[arg(long)]
     manifest: Option<PathBuf>,
-    /// Optional output path. Defaults to CROP stdout
+    /// Optional output path. Defaults to MDCROP stdout
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -330,7 +330,7 @@ struct SyncArgs {
     /// Root directory or file to analyze
     #[arg(long)]
     root: Option<PathBuf>,
-    /// crop.view.v1 recipe to analyze
+    /// mdcrop.view.v1 recipe to analyze
     #[arg(long)]
     view: Option<PathBuf>,
     /// Directory where links/backlinks/frontmatter/headings JSON files are written
@@ -346,42 +346,46 @@ struct SyncArgs {
 
 pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()> {
     match args.command {
-        CropCommand::Status(status) => run_status(args.crop_bin, status, globals),
-        CropCommand::ListViews(list) => run_list_views(args.crop_bin, list, globals),
-        CropCommand::InspectViews(inspect) => run_inspect_views(args.crop_bin, inspect, globals),
-        CropCommand::Prepare(prepare) => run_prepare(args.crop_bin, prepare, globals),
-        CropCommand::View(view) => run_view(view, globals),
-        CropCommand::RunView(run_view) => run_run_view(args.crop_bin, run_view, globals),
-        CropCommand::Links(side_info) => run_side_info(args.crop_bin, "links", side_info, globals),
-        CropCommand::LinkList(link_list) => run_link_list(link_list, globals),
-        CropCommand::Backlinks(side_info) => {
-            run_side_info(args.crop_bin, "backlinks", side_info, globals)
+        MdcropCommand::Status(status) => run_status(args.mdcrop_bin, status, globals),
+        MdcropCommand::ListViews(list) => run_list_views(args.mdcrop_bin, list, globals),
+        MdcropCommand::InspectViews(inspect) => {
+            run_inspect_views(args.mdcrop_bin, inspect, globals)
         }
-        CropCommand::BacklinkList(backlink_list) => run_backlink_list(backlink_list, globals),
-        CropCommand::Frontmatter(side_info) => {
-            run_side_info(args.crop_bin, "frontmatter", side_info, globals)
+        MdcropCommand::Prepare(prepare) => run_prepare(args.mdcrop_bin, prepare, globals),
+        MdcropCommand::View(view) => run_view(view, globals),
+        MdcropCommand::RunView(run_view) => run_run_view(args.mdcrop_bin, run_view, globals),
+        MdcropCommand::Links(side_info) => {
+            run_side_info(args.mdcrop_bin, "links", side_info, globals)
         }
-        CropCommand::FrontmatterList(frontmatter_list) => {
+        MdcropCommand::LinkList(link_list) => run_link_list(link_list, globals),
+        MdcropCommand::Backlinks(side_info) => {
+            run_side_info(args.mdcrop_bin, "backlinks", side_info, globals)
+        }
+        MdcropCommand::BacklinkList(backlink_list) => run_backlink_list(backlink_list, globals),
+        MdcropCommand::Frontmatter(side_info) => {
+            run_side_info(args.mdcrop_bin, "frontmatter", side_info, globals)
+        }
+        MdcropCommand::FrontmatterList(frontmatter_list) => {
             run_frontmatter_list(frontmatter_list, globals)
         }
-        CropCommand::Headings(side_info) => {
-            run_side_info(args.crop_bin, "headings", side_info, globals)
+        MdcropCommand::Headings(side_info) => {
+            run_side_info(args.mdcrop_bin, "headings", side_info, globals)
         }
-        CropCommand::HeadingList(heading_list) => run_heading_list(heading_list, globals),
-        CropCommand::Artifacts(artifacts) => run_artifacts(args.crop_bin, artifacts, globals),
-        CropCommand::Sync(sync) => run_sync(args.crop_bin, sync, globals),
+        MdcropCommand::HeadingList(heading_list) => run_heading_list(heading_list, globals),
+        MdcropCommand::Artifacts(artifacts) => run_artifacts(args.mdcrop_bin, artifacts, globals),
+        MdcropCommand::Sync(sync) => run_sync(args.mdcrop_bin, sync, globals),
     }
 }
 
-fn run_status(crop_bin: PathBuf, mut args: StatusArgs, globals: &GlobalOptions) -> Result<()> {
+fn run_status(mdcrop_bin: PathBuf, mut args: StatusArgs, globals: &GlobalOptions) -> Result<()> {
     apply_global_output(&mut args.output, globals);
     normalize_global_text_format(&mut args.format, globals);
     apply_global_report_format(&mut args.format, globals);
-    run_crop(crop_bin, build_status_args(args)?)
+    run_mdcrop(mdcrop_bin, build_status_args(args)?)
 }
 
 fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
-    build_status_request_args(CropStatusRequest {
+    build_status_request_args(MdcropStatusRequest {
         root: args.root,
         view: args.view,
         title: args.title,
@@ -394,81 +398,81 @@ fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
     })
 }
 
-pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<String>> {
+pub(crate) fn build_status_request_args(args: MdcropStatusRequest) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
-        bail!("mdloom crop status accepts either --root or --view, not both");
+        bail!("mdloom mdcrop status accepts either --root or --view, not both");
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("mdloom crop status requires --root or --view");
+        bail!("mdloom mdcrop status requires --root or --view");
     }
     if !args.strict && !args.strict_on.is_empty() {
-        bail!("mdloom crop status --strict-on requires --strict");
+        bail!("mdloom mdcrop status --strict-on requires --strict");
     }
     for strict_on in &args.strict_on {
         validate_status_strict_policy(strict_on)?;
     }
 
-    let mut crop_args = vec!["status".to_string()];
+    let mut mdcrop_args = vec!["status".to_string()];
     if let Some(root) = args.root {
-        crop_args.push("--root".to_string());
-        crop_args.push(root.display().to_string());
+        mdcrop_args.push("--root".to_string());
+        mdcrop_args.push(root.display().to_string());
     }
     if let Some(view) = args.view {
-        crop_args.push("--view".to_string());
-        crop_args.push(view.display().to_string());
+        mdcrop_args.push("--view".to_string());
+        mdcrop_args.push(view.display().to_string());
     }
     if let Some(title) = args.title {
-        crop_args.push("--title".to_string());
-        crop_args.push(title);
+        mdcrop_args.push("--title".to_string());
+        mdcrop_args.push(title);
     }
     for extension in args.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
+        mdcrop_args.push("--extension".to_string());
+        mdcrop_args.push(extension);
     }
     for exclude_dir in args.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
+        mdcrop_args.push("--exclude-dir".to_string());
+        mdcrop_args.push(exclude_dir);
     }
     if args.strict {
-        crop_args.push("--strict".to_string());
+        mdcrop_args.push("--strict".to_string());
     }
     for strict_on in args.strict_on {
-        crop_args.push("--strict-on".to_string());
-        crop_args.push(strict_on);
+        mdcrop_args.push("--strict-on".to_string());
+        mdcrop_args.push(strict_on);
     }
-    crop_args.push("--format".to_string());
-    crop_args.push(crop_report_format_value(&args.format)?);
+    mdcrop_args.push("--format".to_string());
+    mdcrop_args.push(mdcrop_report_format_value(&args.format)?);
     if let Some(output) = args.output {
-        crop_args.push("--output".to_string());
-        crop_args.push(output.display().to_string());
+        mdcrop_args.push("--output".to_string());
+        mdcrop_args.push(output.display().to_string());
     }
 
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
 fn validate_status_strict_policy(policy: &str) -> Result<()> {
     match policy {
         "broken-links" | "orphan-pages" | "duplicate-anchors" => Ok(()),
         other => bail!(
-            "mdloom crop status --strict-on must be broken-links, orphan-pages, or duplicate-anchors, got {:?}",
+            "mdloom mdcrop status --strict-on must be broken-links, orphan-pages, or duplicate-anchors, got {:?}",
             other
         ),
     }
 }
 
 fn run_list_views(
-    crop_bin: PathBuf,
+    mdcrop_bin: PathBuf,
     mut args: ListViewsArgs,
     globals: &GlobalOptions,
 ) -> Result<()> {
     reject_non_json_artifact_global_format("list-views", globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
-    let crop_args = build_list_views_args(args);
+    let mdcrop_args = build_list_views_args(args);
     if let Some(output) = output {
-        run_crop_to_output(crop_bin, crop_args, output)
+        run_mdcrop_to_output(mdcrop_bin, mdcrop_args, output)
     } else {
-        run_crop(crop_bin, crop_args)
+        run_mdcrop(mdcrop_bin, mdcrop_args)
     }
 }
 
@@ -482,66 +486,66 @@ fn build_list_views_args(args: ListViewsArgs) -> Vec<String> {
 }
 
 fn run_inspect_views(
-    crop_bin: PathBuf,
+    mdcrop_bin: PathBuf,
     mut args: InspectViewsArgs,
     globals: &GlobalOptions,
 ) -> Result<()> {
     reject_non_json_inspect_format(globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
-    let crop_args = build_inspect_views_args(args)?;
+    let mdcrop_args = build_inspect_views_args(args)?;
     if let Some(output) = output {
-        run_crop_to_output(crop_bin, crop_args, output)
+        run_mdcrop_to_output(mdcrop_bin, mdcrop_args, output)
     } else {
-        run_crop(crop_bin, crop_args)
+        run_mdcrop(mdcrop_bin, mdcrop_args)
     }
 }
 
 fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
     if args.file.is_some() && args.strict {
-        bail!("mdloom crop inspect-views --strict requires store inspection with --dir");
+        bail!("mdloom mdcrop inspect-views --strict requires store inspection with --dir");
     }
     if args.file.is_some() && args.dir != Path::new(DEFAULT_VIEW_DIR) {
-        bail!("mdloom crop inspect-views accepts either --file or --dir, not both");
+        bail!("mdloom mdcrop inspect-views accepts either --file or --dir, not both");
     }
     if args.file.is_none()
         && (args.query.is_some() || !args.extensions.is_empty() || !args.exclude_dirs.is_empty())
     {
-        bail!("mdloom crop inspect-views --query, --extension, and --exclude-dir require --file");
+        bail!("mdloom mdcrop inspect-views --query, --extension, and --exclude-dir require --file");
     }
 
-    let mut crop_args = vec!["view".to_string(), "--inspect".to_string()];
+    let mut mdcrop_args = vec!["view".to_string(), "--inspect".to_string()];
     if let Some(file) = args.file {
-        crop_args.push("--file".to_string());
-        crop_args.push(file.display().to_string());
+        mdcrop_args.push("--file".to_string());
+        mdcrop_args.push(file.display().to_string());
     } else {
-        crop_args.push("--dir".to_string());
-        crop_args.push(args.dir.display().to_string());
+        mdcrop_args.push("--dir".to_string());
+        mdcrop_args.push(args.dir.display().to_string());
     }
     if args.strict {
-        crop_args.push("--strict".to_string());
+        mdcrop_args.push("--strict".to_string());
     }
     if let Some(query) = args.query {
-        crop_args.push("--query".to_string());
-        crop_args.push(query);
+        mdcrop_args.push("--query".to_string());
+        mdcrop_args.push(query);
     }
     for extension in args.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
+        mdcrop_args.push("--extension".to_string());
+        mdcrop_args.push(extension);
     }
     for exclude_dir in args.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
+        mdcrop_args.push("--exclude-dir".to_string());
+        mdcrop_args.push(exclude_dir);
     }
 
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
 fn reject_non_json_inspect_format(globals: &GlobalOptions) -> Result<()> {
     match globals.format() {
         "text" | "json" => Ok(()),
         other => bail!(
-            "mdloom crop inspect-views emits JSON; use text/json output format, got {:?}",
+            "mdloom mdcrop inspect-views emits JSON; use text/json output format, got {:?}",
             other
         ),
     }
@@ -551,7 +555,7 @@ fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions
     match globals.format() {
         "text" | "json" => Ok(()),
         other => bail!(
-            "mdloom crop {} writes JSON artifacts; use text/json output format, got {:?}",
+            "mdloom mdcrop {} writes JSON artifacts; use text/json output format, got {:?}",
             command,
             other
         ),
@@ -561,19 +565,19 @@ fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions
 fn reject_global_output_for_output_dir(command: &str, globals: &GlobalOptions) -> Result<()> {
     if globals.output().is_some() {
         bail!(
-            "mdloom crop {} writes multiple artifacts; use --output-dir instead of global -o/--output",
+            "mdloom mdcrop {} writes multiple artifacts; use --output-dir instead of global -o/--output",
             command
         );
     }
     Ok(())
 }
 
-fn run_prepare(crop_bin: PathBuf, args: PrepareArgs, globals: &GlobalOptions) -> Result<()> {
+fn run_prepare(mdcrop_bin: PathBuf, args: PrepareArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_json_artifact_global_format("prepare", globals)?;
     reject_global_output_for_output_dir("prepare", globals)?;
     let command_args = build_prepare_args(args)?;
-    for crop_args in command_args {
-        run_crop(crop_bin.clone(), crop_args)?;
+    for mdcrop_args in command_args {
+        run_mdcrop(mdcrop_bin.clone(), mdcrop_args)?;
     }
     Ok(())
 }
@@ -591,7 +595,7 @@ fn build_prepare_args(args: PrepareArgs) -> Result<Vec<Vec<String>>> {
     })?];
     commands.push(build_inspect_views_args(InspectViewsArgs {
         file: Some(view.clone()),
-        dir: PathBuf::from(".crop\\views"),
+        dir: PathBuf::from(".mdcrop\\views"),
         strict: false,
         query: None,
         extensions: Vec::new(),
@@ -623,7 +627,7 @@ fn run_view(args: ViewArgs, globals: &GlobalOptions) -> Result<()> {
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
-struct CropViewRecipe {
+struct MdcropViewRecipe {
     schema_version: &'static str,
     name: String,
     root: String,
@@ -637,7 +641,7 @@ struct CropViewRecipe {
     frontmatter_query: Option<String>,
 }
 
-fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<CropViewRecipe> {
+fn build_view_recipe(args: &ViewArgs, globals: &GlobalOptions) -> Result<MdcropViewRecipe> {
     let output = view_output_path(args, globals);
     build_view_recipe_for_output(args, globals, &output)
 }
@@ -646,7 +650,7 @@ fn build_view_recipe_for_output(
     args: &ViewArgs,
     globals: &GlobalOptions,
     output: &Path,
-) -> Result<CropViewRecipe> {
+) -> Result<MdcropViewRecipe> {
     let config = load_config(&args.root, globals.config())?;
     let include_extensions = if args.extensions.is_empty() {
         extensions_from_include_patterns(&config.files.include)
@@ -659,8 +663,8 @@ fn build_view_recipe_for_output(
         dedupe_strings(&args.exclude_dirs)
     };
 
-    Ok(CropViewRecipe {
-        schema_version: "crop.view.v1",
+    Ok(MdcropViewRecipe {
+        schema_version: "mdcrop.view.v1",
         name: args.name.clone(),
         root: view_root_for_output(&args.root, output)?,
         task: args
@@ -682,49 +686,49 @@ fn view_output_path(args: &ViewArgs, globals: &GlobalOptions) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_VIEW_OUTPUT))
 }
 
-fn run_run_view(crop_bin: PathBuf, mut args: RunViewArgs, globals: &GlobalOptions) -> Result<()> {
+fn run_run_view(mdcrop_bin: PathBuf, mut args: RunViewArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_json_artifact_global_format("run-view", globals)?;
     apply_global_output(&mut args.output, globals);
     let output = args.output.clone();
-    let crop_args = build_run_view_args(args)?;
+    let mdcrop_args = build_run_view_args(args)?;
     if let Some(output) = output {
-        run_crop_to_output(crop_bin, crop_args, output)
+        run_mdcrop_to_output(mdcrop_bin, mdcrop_args, output)
     } else {
-        run_crop(crop_bin, crop_args)
+        run_mdcrop(mdcrop_bin, mdcrop_args)
     }
 }
 
 fn build_run_view_args(args: RunViewArgs) -> Result<Vec<String>> {
-    let mut crop_args = vec![
+    let mut mdcrop_args = vec![
         "view".to_string(),
         "--file".to_string(),
         args.file.display().to_string(),
     ];
     if let Some(query) = args.query {
-        crop_args.push("--query".to_string());
-        crop_args.push(query);
+        mdcrop_args.push("--query".to_string());
+        mdcrop_args.push(query);
     }
     for extension in args.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
+        mdcrop_args.push("--extension".to_string());
+        mdcrop_args.push(extension);
     }
     for exclude_dir in args.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
+        mdcrop_args.push("--exclude-dir".to_string());
+        mdcrop_args.push(exclude_dir);
     }
     if let Some(prefix_cache) = args.prefix_cache {
         validate_prefix_cache(&prefix_cache)?;
-        crop_args.push("--prefix-cache".to_string());
-        crop_args.push(prefix_cache);
+        mdcrop_args.push("--prefix-cache".to_string());
+        mdcrop_args.push(prefix_cache);
     }
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
 fn validate_prefix_cache(prefix_cache: &str) -> Result<()> {
     match prefix_cache {
         "generic" => Ok(()),
         other => bail!(
-            "mdloom crop run-view --prefix-cache must be generic, got {:?}",
+            "mdloom mdcrop run-view --prefix-cache must be generic, got {:?}",
             other
         ),
     }
@@ -824,7 +828,7 @@ fn build_frontmatter_query(args: &ViewArgs) -> Result<Option<String>> {
 fn frontmatter_clause(field: &str, value: &str) -> Result<String> {
     if value.contains('\'') {
         bail!(
-            "frontmatter query value {:?} contains a single quote, which crop.view.v1 cannot encode safely",
+            "frontmatter query value {:?} contains a single quote, which mdcrop.view.v1 cannot encode safely",
             value
         );
     }
@@ -916,18 +920,18 @@ fn dedupe_strings(values: &[String]) -> Vec<String> {
 }
 
 fn run_side_info(
-    crop_bin: PathBuf,
+    mdcrop_bin: PathBuf,
     command: &str,
     args: SideInfoArgs,
     globals: &GlobalOptions,
 ) -> Result<()> {
-    run_crop(crop_bin, build_side_info_args(command, args, globals)?)
+    run_mdcrop(mdcrop_bin, build_side_info_args(command, args, globals)?)
 }
 
 fn run_backlink_list(mut args: BacklinkListArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_markdown_snippet_global_format("backlink-list", globals)?;
     apply_global_output(&mut args.output, globals);
-    let rendered = crop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
+    let rendered = mdcrop_side_info::render_backlinks(&args.target, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
@@ -935,11 +939,11 @@ fn run_link_list(mut args: LinkListArgs, globals: &GlobalOptions) -> Result<()> 
     reject_non_markdown_snippet_global_format("link-list", globals)?;
     apply_global_output(&mut args.output, globals);
     let status = link_status_filter(&args.status)?;
-    let filter = crop_side_info::LinkFilter {
+    let filter = mdcrop_side_info::LinkFilter {
         source: args.source,
         status,
     };
-    let rendered = crop_side_info::render_links(&args.side_info, &filter, &args.format)?;
+    let rendered = mdcrop_side_info::render_links(&args.side_info, &filter, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
@@ -954,26 +958,26 @@ fn link_status_filter(status: &str) -> Result<Option<String>> {
 fn run_heading_list(mut args: HeadingListArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_markdown_snippet_global_format("heading-list", globals)?;
     apply_global_output(&mut args.output, globals);
-    let rendered = crop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
+    let rendered = mdcrop_side_info::render_headings(&args.source, &args.side_info, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
 fn run_frontmatter_list(mut args: FrontmatterListArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_markdown_snippet_global_format("frontmatter-list", globals)?;
     apply_global_output(&mut args.output, globals);
-    let filter = crop_side_info::FrontmatterFilter {
+    let filter = mdcrop_side_info::FrontmatterFilter {
         field: args.field,
         value: args.value,
         op: parse_frontmatter_match(&args.op)?,
     };
-    let rendered = crop_side_info::render_frontmatter(&args.side_info, &filter, &args.format)?;
+    let rendered = mdcrop_side_info::render_frontmatter(&args.side_info, &filter, &args.format)?;
     write_snippet(rendered, args.output)
 }
 
-fn parse_frontmatter_match(op: &str) -> Result<crop_side_info::FrontmatterMatch> {
+fn parse_frontmatter_match(op: &str) -> Result<mdcrop_side_info::FrontmatterMatch> {
     match op {
-        "has" => Ok(crop_side_info::FrontmatterMatch::Has),
-        "eq" => Ok(crop_side_info::FrontmatterMatch::Eq),
+        "has" => Ok(mdcrop_side_info::FrontmatterMatch::Has),
+        "eq" => Ok(mdcrop_side_info::FrontmatterMatch::Eq),
         _ => bail!("frontmatter match op must be 'has' or 'eq'"),
     }
 }
@@ -996,7 +1000,7 @@ fn reject_non_markdown_snippet_global_format(command: &str, globals: &GlobalOpti
     match globals.format() {
         "text" | "markdown" | "list" | "table" | "count" => Ok(()),
         other => bail!(
-            "mdloom crop {} renders Markdown snippets; use text/markdown global output format or list/table/count snippet format, got {:?}",
+            "mdloom mdcrop {} renders Markdown snippets; use text/markdown global output format or list/table/count snippet format, got {:?}",
             command,
             other
         ),
@@ -1028,90 +1032,90 @@ fn build_side_info_args(
 ) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
         bail!(
-            "mdloom crop {} accepts either --root or --view, not both",
+            "mdloom mdcrop {} accepts either --root or --view, not both",
             command
         );
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("mdloom crop {} requires --root or --view", command);
+        bail!("mdloom mdcrop {} requires --root or --view", command);
     }
 
-    let mut crop_args = vec![command.to_string()];
+    let mut mdcrop_args = vec![command.to_string()];
     if let Some(root) = args.root {
-        crop_args.push("--root".to_string());
-        crop_args.push(root.display().to_string());
+        mdcrop_args.push("--root".to_string());
+        mdcrop_args.push(root.display().to_string());
     }
     if let Some(view) = args.view {
-        crop_args.push("--view".to_string());
-        crop_args.push(view.display().to_string());
+        mdcrop_args.push("--view".to_string());
+        mdcrop_args.push(view.display().to_string());
     }
     for extension in args.extensions {
-        crop_args.push("--extension".to_string());
-        crop_args.push(extension);
+        mdcrop_args.push("--extension".to_string());
+        mdcrop_args.push(extension);
     }
     for exclude_dir in args.exclude_dirs {
-        crop_args.push("--exclude-dir".to_string());
-        crop_args.push(exclude_dir);
+        mdcrop_args.push("--exclude-dir".to_string());
+        mdcrop_args.push(exclude_dir);
     }
-    crop_args.push("--format".to_string());
-    crop_args.push(crop_report_format(globals)?);
+    mdcrop_args.push("--format".to_string());
+    mdcrop_args.push(mdcrop_report_format(globals)?);
     let output = args.output.or_else(|| globals.output().clone());
     if let Some(output) = output {
-        crop_args.push("--output".to_string());
-        crop_args.push(output.display().to_string());
+        mdcrop_args.push("--output".to_string());
+        mdcrop_args.push(output.display().to_string());
     }
 
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
-fn run_artifacts(crop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions) -> Result<()> {
-    run_crop(crop_bin, build_artifacts_args(args, globals)?)
+fn run_artifacts(mdcrop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions) -> Result<()> {
+    run_mdcrop(mdcrop_bin, build_artifacts_args(args, globals)?)
 }
 
 fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<Vec<String>> {
     if args.root.is_some() && args.manifest.is_some() {
-        bail!("mdloom crop artifacts accepts either --root or --manifest, not both");
+        bail!("mdloom mdcrop artifacts accepts either --root or --manifest, not both");
     }
     if args.root.is_none() && args.manifest.is_none() {
-        bail!("mdloom crop artifacts requires --root or --manifest");
+        bail!("mdloom mdcrop artifacts requires --root or --manifest");
     }
 
-    let mut crop_args = vec!["artifacts".to_string()];
+    let mut mdcrop_args = vec!["artifacts".to_string()];
     if let Some(root) = args.root {
-        crop_args.push("--root".to_string());
-        crop_args.push(root.display().to_string());
+        mdcrop_args.push("--root".to_string());
+        mdcrop_args.push(root.display().to_string());
     }
     if let Some(manifest) = args.manifest {
-        crop_args.push("--manifest".to_string());
-        crop_args.push(manifest.display().to_string());
+        mdcrop_args.push("--manifest".to_string());
+        mdcrop_args.push(manifest.display().to_string());
     }
-    crop_args.push("--format".to_string());
-    crop_args.push(crop_report_format(globals)?);
+    mdcrop_args.push("--format".to_string());
+    mdcrop_args.push(mdcrop_report_format(globals)?);
     let output = args.output.or_else(|| globals.output().clone());
     if let Some(output) = output {
-        crop_args.push("--output".to_string());
-        crop_args.push(output.display().to_string());
+        mdcrop_args.push("--output".to_string());
+        mdcrop_args.push(output.display().to_string());
     }
 
-    Ok(crop_args)
+    Ok(mdcrop_args)
 }
 
-fn run_sync(crop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Result<()> {
+fn run_sync(mdcrop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Result<()> {
     reject_non_json_artifact_global_format("sync", globals)?;
     reject_global_output_for_output_dir("sync", globals)?;
     let command_args = build_sync_args(args)?;
-    for crop_args in command_args {
-        run_crop(crop_bin.clone(), crop_args)?;
+    for mdcrop_args in command_args {
+        run_mdcrop(mdcrop_bin.clone(), mdcrop_args)?;
     }
     Ok(())
 }
 
 fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
     if args.root.is_some() && args.view.is_some() {
-        bail!("mdloom crop sync accepts either --root or --view, not both");
+        bail!("mdloom mdcrop sync accepts either --root or --view, not both");
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("mdloom crop sync requires --root or --view");
+        bail!("mdloom mdcrop sync requires --root or --view");
     }
 
     std::fs::create_dir_all(&args.output_dir)
@@ -1119,62 +1123,62 @@ fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
 
     let mut all = Vec::new();
     for command in ["links", "backlinks", "frontmatter", "headings"] {
-        let mut crop_args = vec![command.to_string()];
+        let mut mdcrop_args = vec![command.to_string()];
         if let Some(root) = &args.root {
-            crop_args.push("--root".to_string());
-            crop_args.push(root.display().to_string());
+            mdcrop_args.push("--root".to_string());
+            mdcrop_args.push(root.display().to_string());
         }
         if let Some(view) = &args.view {
-            crop_args.push("--view".to_string());
-            crop_args.push(view.display().to_string());
+            mdcrop_args.push("--view".to_string());
+            mdcrop_args.push(view.display().to_string());
         }
         for extension in &args.extensions {
-            crop_args.push("--extension".to_string());
-            crop_args.push(extension.clone());
+            mdcrop_args.push("--extension".to_string());
+            mdcrop_args.push(extension.clone());
         }
         for exclude_dir in &args.exclude_dirs {
-            crop_args.push("--exclude-dir".to_string());
-            crop_args.push(exclude_dir.clone());
+            mdcrop_args.push("--exclude-dir".to_string());
+            mdcrop_args.push(exclude_dir.clone());
         }
-        crop_args.push("--format".to_string());
-        crop_args.push("json".to_string());
-        crop_args.push("--output".to_string());
-        crop_args.push(
+        mdcrop_args.push("--format".to_string());
+        mdcrop_args.push("json".to_string());
+        mdcrop_args.push("--output".to_string());
+        mdcrop_args.push(
             args.output_dir
                 .join(format!("{}.json", command))
                 .display()
                 .to_string(),
         );
-        all.push(crop_args);
+        all.push(mdcrop_args);
     }
     Ok(all)
 }
 
-fn crop_report_format(globals: &GlobalOptions) -> Result<String> {
-    crop_report_format_value(match globals.format() {
+fn mdcrop_report_format(globals: &GlobalOptions) -> Result<String> {
+    mdcrop_report_format_value(match globals.format() {
         "text" => "json",
         other => other,
     })
 }
 
-fn crop_report_format_value(format: &str) -> Result<String> {
+fn mdcrop_report_format_value(format: &str) -> Result<String> {
     match format {
         "json" | "markdown" => Ok(format.to_string()),
         other => bail!(
-            "mdloom crop report format must be json or markdown, got {:?}",
+            "mdloom mdcrop report format must be json or markdown, got {:?}",
             other
         ),
     }
 }
 
-pub(crate) fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
-    let status = Command::new(&crop_bin)
+pub(crate) fn run_mdcrop(mdcrop_bin: PathBuf, args: Vec<String>) -> Result<()> {
+    let status = Command::new(&mdcrop_bin)
         .args(&args)
         .status()
         .with_context(|| {
             format!(
-                "failed to invoke CROP executable '{}'; install crop or pass --crop-bin",
-                crop_bin.display()
+                "failed to invoke MDCROP executable '{}'; install mdcrop or pass --mdcrop-bin",
+                mdcrop_bin.display()
             )
         })?;
 
@@ -1188,14 +1192,14 @@ pub(crate) fn run_crop(crop_bin: PathBuf, args: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-fn run_crop_to_output(crop_bin: PathBuf, args: Vec<String>, output: PathBuf) -> Result<()> {
-    let child_output = Command::new(&crop_bin)
+fn run_mdcrop_to_output(mdcrop_bin: PathBuf, args: Vec<String>, output: PathBuf) -> Result<()> {
+    let child_output = Command::new(&mdcrop_bin)
         .args(&args)
         .output()
         .with_context(|| {
             format!(
-                "failed to invoke CROP executable '{}'; install crop or pass --crop-bin",
-                crop_bin.display()
+                "failed to invoke MDCROP executable '{}'; install mdcrop or pass --mdcrop-bin",
+                mdcrop_bin.display()
             )
         })?;
 
@@ -1230,7 +1234,7 @@ mod tests {
     }
 
     #[test]
-    fn status_args_map_to_crop_status() {
+    fn status_args_map_to_mdcrop_status() {
         let args = build_status_args(StatusArgs {
             root: Some(PathBuf::from("docs")),
             view: None,
@@ -1273,7 +1277,7 @@ mod tests {
     fn status_args_can_request_json_contract() {
         let args = build_status_args(StatusArgs {
             root: None,
-            view: Some(PathBuf::from(".crop\\views\\ready.json")),
+            view: Some(PathBuf::from(".mdcrop\\views\\ready.json")),
             title: None,
             extensions: vec![],
             exclude_dirs: vec![],
@@ -1289,7 +1293,7 @@ mod tests {
             vec![
                 "status",
                 "--view",
-                ".crop\\views\\ready.json",
+                ".mdcrop\\views\\ready.json",
                 "--format",
                 "json",
                 "--output",
@@ -1482,20 +1486,20 @@ mod tests {
     }
 
     #[test]
-    fn list_views_args_map_to_crop_view_list() {
+    fn list_views_args_map_to_mdcrop_view_list() {
         let args = build_list_views_args(ListViewsArgs {
-            dir: PathBuf::from(".crop\\views"),
+            dir: PathBuf::from(".mdcrop\\views"),
             output: None,
         });
 
-        assert_eq!(args, vec!["view", "--list", "--dir", ".crop\\views"]);
+        assert_eq!(args, vec!["view", "--list", "--dir", ".mdcrop\\views"]);
     }
 
     #[test]
-    fn inspect_views_args_map_to_crop_view_inspect() {
+    fn inspect_views_args_map_to_mdcrop_view_inspect() {
         let args = build_inspect_views_args(InspectViewsArgs {
             file: None,
-            dir: PathBuf::from(".crop\\views"),
+            dir: PathBuf::from(".mdcrop\\views"),
             strict: true,
             query: None,
             extensions: Vec::new(),
@@ -1506,15 +1510,15 @@ mod tests {
 
         assert_eq!(
             args,
-            vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
+            vec!["view", "--inspect", "--dir", ".mdcrop\\views", "--strict"]
         );
     }
 
     #[test]
     fn inspect_views_args_can_inspect_single_view_file() {
         let args = build_inspect_views_args(InspectViewsArgs {
-            file: Some(PathBuf::from(".crop\\views\\ready.json")),
-            dir: PathBuf::from(".crop\\views"),
+            file: Some(PathBuf::from(".mdcrop\\views\\ready.json")),
+            dir: PathBuf::from(".mdcrop\\views"),
             strict: false,
             query: Some("refresh docs".to_string()),
             extensions: vec!["md".to_string()],
@@ -1529,7 +1533,7 @@ mod tests {
                 "view",
                 "--inspect",
                 "--file",
-                ".crop\\views\\ready.json",
+                ".mdcrop\\views\\ready.json",
                 "--query",
                 "refresh docs",
                 "--extension",
@@ -1544,7 +1548,7 @@ mod tests {
     fn inspect_views_rejects_store_filter_overrides() {
         let err = build_inspect_views_args(InspectViewsArgs {
             file: None,
-            dir: PathBuf::from(".crop\\views"),
+            dir: PathBuf::from(".mdcrop\\views"),
             strict: false,
             query: Some("refresh docs".to_string()),
             extensions: Vec::new(),
@@ -1559,8 +1563,8 @@ mod tests {
     #[test]
     fn inspect_views_rejects_strict_single_file() {
         let err = build_inspect_views_args(InspectViewsArgs {
-            file: Some(PathBuf::from(".crop\\views\\ready.json")),
-            dir: PathBuf::from(".crop\\views"),
+            file: Some(PathBuf::from(".mdcrop\\views\\ready.json")),
+            dir: PathBuf::from(".mdcrop\\views"),
             strict: true,
             query: None,
             extensions: Vec::new(),
@@ -1575,7 +1579,7 @@ mod tests {
     #[test]
     fn inspect_views_rejects_file_and_custom_dir() {
         let err = build_inspect_views_args(InspectViewsArgs {
-            file: Some(PathBuf::from(".crop\\views\\ready.json")),
+            file: Some(PathBuf::from(".mdcrop\\views\\ready.json")),
             dir: PathBuf::from("other\\views"),
             strict: false,
             query: None,
@@ -1624,8 +1628,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let output_dir = dir.path().join("side-info");
         let args = build_prepare_args(PrepareArgs {
-            dir: PathBuf::from(".crop\\views"),
-            view: PathBuf::from(".crop\\views\\mdloom-guides.json"),
+            dir: PathBuf::from(".mdcrop\\views"),
+            view: PathBuf::from(".mdcrop\\views\\mdloom-guides.json"),
             output_dir: output_dir.clone(),
         })
         .unwrap();
@@ -1633,7 +1637,7 @@ mod tests {
         assert_eq!(args.len(), 6);
         assert_eq!(
             args[0],
-            vec!["view", "--inspect", "--dir", ".crop\\views", "--strict"]
+            vec!["view", "--inspect", "--dir", ".mdcrop\\views", "--strict"]
         );
         assert_eq!(
             args[1],
@@ -1641,18 +1645,18 @@ mod tests {
                 "view",
                 "--inspect",
                 "--file",
-                ".crop\\views\\mdloom-guides.json"
+                ".mdcrop\\views\\mdloom-guides.json"
             ]
         );
         assert_eq!(args[2][0], "links");
         assert_eq!(args[3][0], "backlinks");
         assert_eq!(args[4][0], "frontmatter");
         assert_eq!(args[5][0], "headings");
-        for crop_args in &args[2..] {
-            assert!(crop_args.contains(&"--view".to_string()));
-            assert!(crop_args.contains(&".crop\\views\\mdloom-guides.json".to_string()));
-            assert!(crop_args.contains(&"--format".to_string()));
-            assert!(crop_args.contains(&"json".to_string()));
+        for mdcrop_args in &args[2..] {
+            assert!(mdcrop_args.contains(&"--view".to_string()));
+            assert!(mdcrop_args.contains(&".mdcrop\\views\\mdloom-guides.json".to_string()));
+            assert!(mdcrop_args.contains(&"--format".to_string()));
+            assert!(mdcrop_args.contains(&"json".to_string()));
         }
         assert!(args[3].contains(&output_dir.join("backlinks.json").display().to_string()));
     }
@@ -1689,7 +1693,7 @@ exclude = ["target/**", "node_modules/**"]
         )
         .unwrap();
 
-        assert_eq!(recipe.schema_version, "crop.view.v1");
+        assert_eq!(recipe.schema_version, "mdcrop.view.v1");
         assert_eq!(recipe.name, "ready-guides");
         assert_eq!(recipe.task, "ready-guides corpus");
         assert_eq!(recipe.token_budget, 8000);
@@ -1732,7 +1736,7 @@ exclude = ["target/**", "node_modules/**"]
     #[test]
     fn view_recipe_uses_global_output_for_relative_root() {
         let dir = tempfile::tempdir().unwrap();
-        let output = dir.path().join(".crop").join("views").join("ready.json");
+        let output = dir.path().join(".mdcrop").join("views").join("ready.json");
         let recipe = build_view_recipe(
             &ViewArgs {
                 root: dir.path().to_path_buf(),
@@ -1841,9 +1845,9 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
-    fn run_view_args_map_to_crop_view_file() {
+    fn run_view_args_map_to_mdcrop_view_file() {
         let args = build_run_view_args(RunViewArgs {
-            file: PathBuf::from(".crop\\views\\ready.json"),
+            file: PathBuf::from(".mdcrop\\views\\ready.json"),
             query: Some("refresh docs".to_string()),
             extensions: vec!["md".to_string()],
             exclude_dirs: vec!["target".to_string()],
@@ -1857,7 +1861,7 @@ exclude = ["target/**", "node_modules/**"]
             vec![
                 "view",
                 "--file",
-                ".crop\\views\\ready.json",
+                ".mdcrop\\views\\ready.json",
                 "--query",
                 "refresh docs",
                 "--extension",
@@ -1873,7 +1877,7 @@ exclude = ["target/**", "node_modules/**"]
     #[test]
     fn run_view_rejects_unknown_prefix_cache() {
         let err = build_run_view_args(RunViewArgs {
-            file: PathBuf::from(".crop\\views\\ready.json"),
+            file: PathBuf::from(".mdcrop\\views\\ready.json"),
             query: None,
             extensions: Vec::new(),
             exclude_dirs: Vec::new(),
@@ -2019,7 +2023,7 @@ exclude = ["target/**", "node_modules/**"]
     }
 
     #[test]
-    fn artifacts_args_map_to_crop_artifacts() {
+    fn artifacts_args_map_to_mdcrop_artifacts() {
         let args = build_artifacts_args(
             ArtifactsArgs {
                 root: None,
@@ -2133,15 +2137,15 @@ exclude = ["target/**", "node_modules/**"]
         assert_eq!(args[1][0], "backlinks");
         assert_eq!(args[2][0], "frontmatter");
         assert_eq!(args[3][0], "headings");
-        for crop_args in &args {
-            assert!(crop_args.contains(&"--view".to_string()));
-            assert!(crop_args.contains(&"ready.json".to_string()));
-            assert!(crop_args.contains(&"--format".to_string()));
-            assert!(crop_args.contains(&"json".to_string()));
-            assert!(crop_args.contains(&"--extension".to_string()));
-            assert!(crop_args.contains(&"md".to_string()));
-            assert!(crop_args.contains(&"--exclude-dir".to_string()));
-            assert!(crop_args.contains(&"target".to_string()));
+        for mdcrop_args in &args {
+            assert!(mdcrop_args.contains(&"--view".to_string()));
+            assert!(mdcrop_args.contains(&"ready.json".to_string()));
+            assert!(mdcrop_args.contains(&"--format".to_string()));
+            assert!(mdcrop_args.contains(&"json".to_string()));
+            assert!(mdcrop_args.contains(&"--extension".to_string()));
+            assert!(mdcrop_args.contains(&"md".to_string()));
+            assert!(mdcrop_args.contains(&"--exclude-dir".to_string()));
+            assert!(mdcrop_args.contains(&"target".to_string()));
         }
         assert!(args[1].contains(&output_dir.join("backlinks.json").display().to_string()));
     }

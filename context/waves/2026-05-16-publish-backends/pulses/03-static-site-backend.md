@@ -59,7 +59,7 @@ plus a site manifest.
 ## Non-goals
 
 - Do not deploy or host the site.
-- Do not add search ranking or CROP graph cuts.
+- Do not add search ranking or MDCROP graph cuts.
 - Do not claim browser pixel equivalence.
 - Do not make watch mode target-aware in this pulse.
 

@@ -85,14 +85,14 @@ fn toc_directive_generates_outline_in_output() {
 }
 
 #[test]
-fn backlinks_directive_renders_default_crop_side_info() {
+fn backlinks_directive_renders_default_mdcrop_side_info() {
     let dir = tempfile::tempdir().unwrap();
     let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("backlinks.json"),
         r#"{
-  "schema_version": "crop.markdown-backlinks.v1",
+  "schema_version": "mdcrop.markdown-backlinks.v1",
   "root": "docs",
   "source_count": 2,
   "pages": [
@@ -306,14 +306,14 @@ fn backlinks_side_info_changes_invalidate_compile_cache() {
 }
 
 #[test]
-fn headings_directive_renders_default_crop_side_info() {
+fn headings_directive_renders_default_mdcrop_side_info() {
     let dir = tempfile::tempdir().unwrap();
     let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("headings.json"),
         r#"{
-  "schema_version": "crop.markdown-headings.v1",
+  "schema_version": "mdcrop.markdown-headings.v1",
   "headings": [
     { "source": "guide.source.md", "level": 1, "text": "Guide", "md_uri": "md://guide.source.md#guide" },
     { "source": "guide.source.md", "level": 2, "text": "Install", "md_uri": "md://guide.source.md#install" },
@@ -426,14 +426,14 @@ fn headings_directive_tracks_side_info_and_invalidates_compile_cache() {
 }
 
 #[test]
-fn frontmatter_directive_renders_default_crop_side_info() {
+fn frontmatter_directive_renders_default_mdcrop_side_info() {
     let dir = tempfile::tempdir().unwrap();
     let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("frontmatter.json"),
         r#"{
-  "schema_version": "crop.markdown-frontmatter.v1",
+  "schema_version": "mdcrop.markdown-frontmatter.v1",
   "pages": [
     {
       "source": "guide.source.md",
@@ -573,14 +573,14 @@ fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
 }
 
 #[test]
-fn links_directive_renders_default_crop_side_info() {
+fn links_directive_renders_default_mdcrop_side_info() {
     let dir = tempfile::tempdir().unwrap();
     let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("links.json"),
         r#"{
-  "schema_version": "crop.markdown-link-audit.v1",
+  "schema_version": "mdcrop.markdown-link-audit.v1",
   "links": [
     { "source": "guide.source.md", "target": "reference.source.md#reference", "status": "ok", "resolved_source": "reference.source.md" },
     { "source": "guide.source.md", "target": "missing.source.md", "status": "broken", "error": "missing target" },

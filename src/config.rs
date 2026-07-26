@@ -176,7 +176,7 @@ pub struct MarkdownTableConfig {
     pub ignore_extra_body_cols: bool,
     /// Warn when `.source.md` files contain inline pipe tables.
     /// Source documents should keep durable row data in sidecar JSON/CSV or
-    /// generated mdloom tables so MDPORT/CROP can cite normalized evidence.
+    /// generated mdloom tables so MDPORT/MDCROP can cite normalized evidence.
     #[serde(default = "bool_true")]
     pub flag_inline_source_tables: bool,
 }

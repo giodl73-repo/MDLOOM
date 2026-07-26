@@ -101,8 +101,8 @@ pub(crate) enum Command {
     Depends(crate::cmd_depends::Args),
     /// Print the effective config for a path
     Config(crate::cmd_config::Args),
-    /// Delegate corpus-intelligence workflows to CROP
-    Crop(crate::cmd_crop::Args),
+    /// Delegate corpus-intelligence workflows to MDCROP
+    Mdcrop(crate::cmd_mdcrop::Args),
     /// Generate a corpus index page
     Index(crate::cmd_index::Args),
     /// Generate a corpus table-of-contents page

@@ -131,7 +131,7 @@ fn validate_snippet_format(format: &str) -> Result<()> {
     match format {
         "list" | "table" | "count" => Ok(()),
         other => anyhow::bail!(
-            "CROP side-info snippet format must be list, table, or count, got {:?}",
+            "MDCROP side-info snippet format must be list, table, or count, got {:?}",
             other
         ),
     }
@@ -144,7 +144,10 @@ fn render_backlinks_report(target: &str, report: &BacklinksReport, format: &str)
         .iter()
         .find(|page| normalize_backlink_target(&page.source) == target)
         .ok_or_else(|| {
-            anyhow::anyhow!("target {:?} not found in CROP backlinks side-info", target)
+            anyhow::anyhow!(
+                "target {:?} not found in MDCROP backlinks side-info",
+                target
+            )
         })?;
 
     if page.inbound_links.is_empty() {

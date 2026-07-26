@@ -83,7 +83,7 @@ target-aware watch manifests are modeled.
 documents optimized for agents, retrieval, and transfer rather than visual
 presentation. A mdport contains the source path, title, resolved dependency refs,
 and section chunks with stable IDs, heading paths, line numbers, and resolved
-Markdown text. The schema is intentionally CROP-friendly: CROP can emit the same
+Markdown text. The schema is intentionally MDCROP-friendly: MDCROP can emit the same
 shape for view packs or corpus slices, while MDLOOM emits it for compiled source
 documents.
 

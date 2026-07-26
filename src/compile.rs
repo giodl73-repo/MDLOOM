@@ -3,10 +3,10 @@ use std::path::Path;
 
 use crate::compile_cache;
 use crate::compile_chart;
-use crate::compile_crop;
 use crate::compile_directive;
 use crate::compile_figure;
 use crate::compile_math;
+use crate::compile_mdcrop;
 use crate::compile_output;
 use crate::compile_prose;
 use crate::compile_symbol;
@@ -64,9 +64,9 @@ pub fn compile_file(
     let directives = collect_directives(source_body);
 
     let mut path_index = crate::cache::load_path_index(root);
-    let resolved_files = compile_crop::side_info_dependencies(&directives, root);
+    let resolved_files = compile_mdcrop::side_info_dependencies(&directives, root);
     let dependency_parse_keys =
-        compile_crop::dependency_parse_keys(&resolved_files, &mut path_index);
+        compile_mdcrop::dependency_parse_keys(&resolved_files, &mut path_index);
 
     if let Some(result) = compile_cache::restore_compile_cache(
         root,
@@ -308,7 +308,7 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => compile_crop::compile_backlinks(
+            } => compile_mdcrop::compile_backlinks(
                 root,
                 source.as_ref(),
                 target,
@@ -326,7 +326,7 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => compile_crop::compile_links(
+            } => compile_mdcrop::compile_links(
                 root,
                 source.as_ref(),
                 source_doc,
@@ -344,7 +344,7 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => compile_crop::compile_headings(
+            } => compile_mdcrop::compile_headings(
                 root,
                 source.as_ref(),
                 source_doc,
@@ -363,7 +363,7 @@ pub fn compile_file(
                 source,
                 format,
                 ..
-            } => compile_crop::compile_frontmatter(
+            } => compile_mdcrop::compile_frontmatter(
                 root,
                 source.as_ref(),
                 field,

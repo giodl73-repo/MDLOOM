@@ -842,8 +842,8 @@ COMPILE OPTIONS
   transfer artifacts optimized for agents rather than human presentation. A
   mdport records source path, title, format, resolved dependency refs, and
   section chunks with stable IDs, heading paths, source line numbers, and resolved
-  Markdown text. CROP may emit the same schema for view/corpus slices so MDLOOM
-  and CROP can share provenance-bearing context packs. `--watch` currently
+  Markdown text. MDCROP may emit the same schema for view/corpus slices so MDLOOM
+  and MDCROP can share provenance-bearing context packs. `--watch` currently
   supports only `--target md`.
 
   `json-report` writes `mdloom.publish.json_report.v1`: a stable machine-readable

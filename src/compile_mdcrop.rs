@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::compile_directive::Directive;
 use crate::compile_output;
 use crate::compile_types::{CompileViolation, ViolationSeverity};
-use crate::crop_side_info;
+use crate::mdcrop_side_info;
 
 #[derive(Clone, Copy)]
 pub(crate) enum SideInfoKind {
@@ -75,13 +75,13 @@ pub(crate) fn frontmatter_filter(
     field: &Option<String>,
     value: &Option<String>,
     op: &str,
-) -> Result<crop_side_info::FrontmatterFilter> {
+) -> Result<mdcrop_side_info::FrontmatterFilter> {
     let op = match op {
-        "has" => crop_side_info::FrontmatterMatch::Has,
-        "eq" => crop_side_info::FrontmatterMatch::Eq,
+        "has" => mdcrop_side_info::FrontmatterMatch::Has,
+        "eq" => mdcrop_side_info::FrontmatterMatch::Eq,
         _ => bail!("frontmatter match op must be 'has' or 'eq'"),
     };
-    Ok(crop_side_info::FrontmatterFilter {
+    Ok(mdcrop_side_info::FrontmatterFilter {
         field: field.clone(),
         value: value.clone(),
         op,
@@ -91,13 +91,13 @@ pub(crate) fn frontmatter_filter(
 pub(crate) fn link_filter(
     source: &Option<String>,
     status: &str,
-) -> Result<crop_side_info::LinkFilter> {
+) -> Result<mdcrop_side_info::LinkFilter> {
     let status = match status {
         "all" => Some("all".to_string()),
         "ok" | "broken" => Some(status.to_string()),
         _ => bail!("link status must be 'all', 'ok', or 'broken'"),
     };
-    Ok(crop_side_info::LinkFilter {
+    Ok(mdcrop_side_info::LinkFilter {
         source: source.clone(),
         status,
     })
@@ -110,7 +110,7 @@ pub(crate) fn render_backlinks(
     format: &str,
 ) -> Result<String> {
     let report_path = side_info_path(root, side_info, SideInfoKind::Backlinks);
-    let rendered = crop_side_info::render_backlinks(target, &report_path, format)?;
+    let rendered = mdcrop_side_info::render_backlinks(target, &report_path, format)?;
     Ok(format!(
         "<!-- mdloom:compiled from=\"mdloom:backlinks\" target=\"{}\" -->\n{}\n<!-- /mdloom:compiled -->",
         target, rendered
@@ -126,7 +126,7 @@ pub(crate) fn render_links(
 ) -> Result<String> {
     let report_path = side_info_path(root, side_info, SideInfoKind::Links);
     let filter = link_filter(source_doc, status)?;
-    let rendered = crop_side_info::render_links(&report_path, &filter, format)?;
+    let rendered = mdcrop_side_info::render_links(&report_path, &filter, format)?;
     Ok(format!(
         "<!-- mdloom:compiled from=\"mdloom:links\" -->\n{}\n<!-- /mdloom:compiled -->",
         rendered
@@ -140,7 +140,7 @@ pub(crate) fn render_headings(
     format: &str,
 ) -> Result<String> {
     let report_path = side_info_path(root, side_info, SideInfoKind::Headings);
-    let rendered = crop_side_info::render_headings(source_doc, &report_path, format)?;
+    let rendered = mdcrop_side_info::render_headings(source_doc, &report_path, format)?;
     Ok(format!(
         "<!-- mdloom:compiled from=\"mdloom:headings\" source=\"{}\" -->\n{}\n<!-- /mdloom:compiled -->",
         source_doc, rendered
@@ -157,7 +157,7 @@ pub(crate) fn render_frontmatter(
 ) -> Result<String> {
     let report_path = side_info_path(root, side_info, SideInfoKind::Frontmatter);
     let filter = frontmatter_filter(field, value, op)?;
-    let rendered = crop_side_info::render_frontmatter(&report_path, &filter, format)?;
+    let rendered = mdcrop_side_info::render_frontmatter(&report_path, &filter, format)?;
     Ok(format!(
         "<!-- mdloom:compiled from=\"mdloom:frontmatter\" -->\n{}\n<!-- /mdloom:compiled -->",
         rendered
@@ -183,7 +183,7 @@ pub(crate) fn compile_backlinks(
             rendered
         }
         Err(e) => {
-            push_crop_error(
+            push_mdcrop_error(
                 "backlinks",
                 target.to_string(),
                 e,
@@ -222,7 +222,7 @@ pub(crate) fn compile_links(
             rendered
         }
         Err(e) => {
-            push_crop_error(
+            push_mdcrop_error(
                 "links",
                 source_doc.clone().unwrap_or_default(),
                 e,
@@ -254,7 +254,7 @@ pub(crate) fn compile_headings(
             rendered
         }
         Err(e) => {
-            push_crop_error(
+            push_mdcrop_error(
                 "headings",
                 source_doc.to_string(),
                 e,
@@ -295,7 +295,7 @@ pub(crate) fn compile_frontmatter(
             rendered
         }
         Err(e) => {
-            push_crop_error(
+            push_mdcrop_error(
                 "frontmatter",
                 field.clone().unwrap_or_default(),
                 e,
@@ -308,7 +308,7 @@ pub(crate) fn compile_frontmatter(
     }
 }
 
-fn push_crop_error(
+fn push_mdcrop_error(
     kind: &str,
     uri: String,
     error: anyhow::Error,
@@ -363,12 +363,12 @@ mod tests {
     }
 
     #[test]
-    fn validates_crop_side_info_filters() {
+    fn validates_mdcrop_side_info_filters() {
         assert!(matches!(
             frontmatter_filter(&Some("tags".to_string()), &Some("guide".to_string()), "has")
                 .unwrap()
                 .op,
-            crop_side_info::FrontmatterMatch::Has
+            mdcrop_side_info::FrontmatterMatch::Has
         ));
         assert!(frontmatter_filter(&None, &None, "approx").is_err());
 

@@ -26,7 +26,6 @@ pub mod compile;
 pub(crate) mod compile_cache;
 #[allow(dead_code)]
 pub mod compile_chart;
-pub(crate) mod compile_crop;
 pub(crate) mod compile_dashboard;
 #[allow(dead_code)]
 pub mod compile_directive;
@@ -34,6 +33,7 @@ pub(crate) mod compile_element;
 pub(crate) mod compile_figure;
 pub(crate) mod compile_format;
 pub(crate) mod compile_math;
+pub(crate) mod compile_mdcrop;
 pub(crate) mod compile_output;
 #[allow(dead_code)]
 pub mod compile_prose;
@@ -49,7 +49,6 @@ pub mod compile_tree;
 pub mod compile_types;
 pub(crate) mod compile_validation;
 pub mod config;
-pub mod crop_side_info;
 pub mod dashboard;
 pub mod davinci;
 pub mod depends;
@@ -63,6 +62,7 @@ pub mod frontmatter;
 pub mod layout;
 pub mod lint;
 pub mod math;
+pub mod mdcrop_side_info;
 mod mdport_output;
 pub mod publication;
 pub mod publish;

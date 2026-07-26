@@ -68,7 +68,7 @@ Focused modules own behavior families:
 | `compile_prose` | Prose-only xref and blockquote rendering, diagnostics, and fallbacks |
 | `compile_symbol` | Symbol and shape rendering, diagnostics, and fallbacks |
 | `compile_math` | Display/inline math rendering and diagnostics |
-| `compile_crop` | CROP side-info rendering, compile wrappers, and dependency cache keys |
+| `compile_mdcrop` | MDCROP side-info rendering, compile wrappers, and dependency cache keys |
 | `compile_slides` | `.slides.source.md` compile route |
 | `compile_dashboard` | `.dashboard.source.md` compile route |
 | `compile_region` | Dashboard region body/no-chrome rendering and invalid-region diagnostics |

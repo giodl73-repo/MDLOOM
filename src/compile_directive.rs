@@ -1432,7 +1432,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_crop_side_info_directives() {
+    fn parses_mdcrop_side_info_directives() {
         let source = r#"```mdloom:links source="README.md" status=broken format=count side-info="reports/links.json"
 ```
 

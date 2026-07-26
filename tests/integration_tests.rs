@@ -465,11 +465,11 @@ fn runner_lint_single_perfect_file() {
     );
 }
 
-fn write_fake_crop_bin(dir: &Path, args_file: &Path, exit_code: i32) -> PathBuf {
+fn write_fake_mdcrop_bin(dir: &Path, args_file: &Path, exit_code: i32) -> PathBuf {
     let bin = if cfg!(windows) {
-        dir.join("crop.cmd")
+        dir.join("mdcrop.cmd")
     } else {
-        dir.join("crop")
+        dir.join("mdcrop")
     };
     let script = if cfg!(windows) {
         format!(
@@ -495,10 +495,10 @@ fn write_fake_crop_bin(dir: &Path, args_file: &Path, exit_code: i32) -> PathBuf 
     bin
 }
 
-fn sibling_crop_manifest() -> Option<PathBuf> {
+fn sibling_mdcrop_manifest() -> Option<PathBuf> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace = manifest_dir.parent().unwrap_or(manifest_dir);
-    for name in ["crop", "CROP"] {
+    for name in ["mdcrop", "MDCROP"] {
         let manifest = workspace.join(name).join("Cargo.toml");
         if manifest.exists() {
             return Some(manifest);
@@ -507,29 +507,29 @@ fn sibling_crop_manifest() -> Option<PathBuf> {
     None
 }
 
-fn sibling_crop_fixture_root(crop_manifest: &Path) -> PathBuf {
-    crop_manifest
+fn sibling_mdcrop_fixture_root(mdcrop_manifest: &Path) -> PathBuf {
+    mdcrop_manifest
         .parent()
         .unwrap()
         .join("examples")
         .join("mdloom-fixture")
 }
 
-fn write_real_crop_bin(dir: &Path, crop_manifest: &Path) -> PathBuf {
+fn write_real_mdcrop_bin(dir: &Path, mdcrop_manifest: &Path) -> PathBuf {
     let bin = if cfg!(windows) {
-        dir.join("crop-real.cmd")
+        dir.join("mdcrop-real.cmd")
     } else {
-        dir.join("crop-real")
+        dir.join("mdcrop-real")
     };
     let script = if cfg!(windows) {
         format!(
             "@echo off\r\ncargo run --quiet --manifest-path \"{}\" -- %*\r\n",
-            crop_manifest.display()
+            mdcrop_manifest.display()
         )
     } else {
         format!(
             "#!/bin/sh\ncargo run --quiet --manifest-path '{}' -- \"$@\"\n",
-            crop_manifest.display()
+            mdcrop_manifest.display()
         )
     };
     std::fs::write(&bin, script).unwrap();
@@ -1444,44 +1444,44 @@ required_h2_all = ["Decision"]
 }
 
 #[test]
-fn binary_status_crop_delegates_to_crop_status() {
+fn binary_status_mdcrop_delegates_to_mdcrop_status() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_path = dir.path().join("STATUS.json");
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
         .arg("status")
-        .arg("--crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
-        .arg(".crop\\views\\ready.json")
-        .arg("--crop-format")
+        .arg(".mdcrop\\views\\ready.json")
+        .arg("--mdcrop-format")
         .arg("json")
         .arg("--strict")
         .arg("--strict-on")
         .arg("broken-links")
         .output()
-        .expect("failed to run mdloom status --crop");
+        .expect("failed to run mdloom status --mdcrop");
 
     assert!(
         output.status.success(),
-        "mdloom status --crop failed:\n{}",
+        "mdloom status --mdcrop failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("status"), "got: {}", args);
     assert!(
-        args.contains("--view .crop\\views\\ready.json"),
+        args.contains("--view .mdcrop\\views\\ready.json"),
         "got: {}",
         args
     );
@@ -1496,59 +1496,59 @@ fn binary_status_crop_delegates_to_crop_status() {
 }
 
 #[test]
-fn binary_status_crop_rejects_local_text_format() {
+fn binary_status_mdcrop_rejects_local_text_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("status")
-        .arg("--crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
-        .arg(".crop\\views\\ready.json")
-        .arg("--crop-format")
+        .arg(".mdcrop\\views\\ready.json")
+        .arg("--mdcrop-format")
         .arg("text")
         .output()
-        .expect("failed to run mdloom status --crop");
+        .expect("failed to run mdloom status --mdcrop");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("invalid value"), "got: {}", stderr);
     assert!(stderr.contains("markdown"), "got: {}", stderr);
     assert!(stderr.contains("json"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_status_crop_rejects_unknown_strict_policy() {
+fn binary_status_mdcrop_rejects_unknown_strict_policy() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("status")
-        .arg("--crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
-        .arg(".crop\\views\\ready.json")
+        .arg(".mdcrop\\views\\ready.json")
         .arg("--strict")
         .arg("--strict-on")
         .arg("stale-artifacts")
         .output()
-        .expect("failed to run mdloom status --crop");
+        .expect("failed to run mdloom status --mdcrop");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1556,30 +1556,30 @@ fn binary_status_crop_rejects_unknown_strict_policy() {
     assert!(stderr.contains("broken-links"), "got: {}", stderr);
     assert!(stderr.contains("orphan-pages"), "got: {}", stderr);
     assert!(stderr.contains("duplicate-anchors"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_status_crop_rejects_dir_with_view() {
+fn binary_status_mdcrop_rejects_dir_with_view() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("status")
         .arg("docs")
-        .arg("--crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
-        .arg(".crop\\views\\ready.json")
+        .arg(".mdcrop\\views\\ready.json")
         .output()
-        .expect("failed to run mdloom status --crop");
+        .expect("failed to run mdloom status --mdcrop");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1588,7 +1588,7 @@ fn binary_status_crop_rejects_dir_with_view() {
         "got: {}",
         stderr
     );
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
@@ -2529,21 +2529,21 @@ fn binary_compile_manifest_records_backlinks_side_info_dependency() {
 }
 
 #[test]
-fn binary_crop_status_delegates_to_crop_status() {
+fn binary_mdcrop_status_delegates_to_mdcrop_status() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_path = dir.path().join("STATUS.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
@@ -2563,15 +2563,15 @@ fn binary_crop_status_delegates_to_crop_status() {
         .arg("--exclude-dir")
         .arg("target")
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(
         output.status.success(),
-        "mdloom crop status failed:\n{}",
+        "mdloom mdcrop status failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("status"), "got: {}", args);
     assert!(args.contains("--root"), "got: {}", args);
     assert!(
@@ -2600,36 +2600,36 @@ fn binary_crop_status_delegates_to_crop_status() {
 }
 
 #[test]
-fn binary_crop_status_uses_global_output() {
+fn binary_mdcrop_status_uses_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_path = dir.path().join("GLOBAL_STATUS.md");
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(
         output.status.success(),
-        "mdloom crop status failed:\n{}",
+        "mdloom mdcrop status failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("--output"), "got: {}", args);
     assert!(
         args.contains(&output_path.display().to_string()),
@@ -2639,113 +2639,113 @@ fn binary_crop_status_uses_global_output() {
 }
 
 #[test]
-fn binary_crop_status_uses_global_format() {
+fn binary_mdcrop_status_uses_global_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("json")
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(
         output.status.success(),
-        "mdloom crop status failed:\n{}",
+        "mdloom mdcrop status failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("--format json"), "got: {}", args);
 }
 
 #[test]
-fn binary_crop_status_rejects_local_text_format() {
+fn binary_mdcrop_status_rejects_local_text_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
         .arg("--format")
         .arg("text")
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("invalid value"), "got: {}", stderr);
     assert!(stderr.contains("markdown"), "got: {}", stderr);
     assert!(stderr.contains("json"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_status_rejects_strict_on_without_strict() {
+fn binary_mdcrop_status_rejects_strict_on_without_strict() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
         .arg("--strict-on")
         .arg("broken-links")
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("requires --strict"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_status_rejects_unknown_strict_policy() {
+fn binary_mdcrop_status_rejects_unknown_strict_policy() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("status")
         .arg("--root")
         .arg(dir.path())
@@ -2753,44 +2753,44 @@ fn binary_crop_status_rejects_unknown_strict_policy() {
         .arg("--strict-on")
         .arg("stale-artifacts")
         .output()
-        .expect("failed to run mdloom crop status");
+        .expect("failed to run mdloom mdcrop status");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("broken-links"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_list_views_delegates_to_crop_view_list() {
+fn binary_mdcrop_list_views_delegates_to_mdcrop_view_list() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let views_dir = dir.path().join(".crop").join("views");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let views_dir = dir.path().join(".mdcrop").join("views");
     std::fs::create_dir_all(&views_dir).unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("list-views")
         .arg("--dir")
         .arg(&views_dir)
         .output()
-        .expect("failed to run mdloom crop list-views");
+        .expect("failed to run mdloom mdcrop list-views");
 
     assert!(
         output.status.success(),
-        "mdloom crop list-views failed:\n{}",
+        "mdloom mdcrop list-views failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("view"), "got: {}", args);
     assert!(args.contains("--list"), "got: {}", args);
     assert!(args.contains("--dir"), "got: {}", args);
@@ -2802,50 +2802,50 @@ fn binary_crop_list_views_delegates_to_crop_view_list() {
 }
 
 #[test]
-fn binary_crop_list_views_writes_global_output() {
+fn binary_mdcrop_list_views_writes_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = if cfg!(windows) {
-        dir.path().join("crop.cmd")
+    let mdcrop_bin = if cfg!(windows) {
+        dir.path().join("mdcrop.cmd")
     } else {
-        dir.path().join("crop")
+        dir.path().join("mdcrop")
     };
     let script = if cfg!(windows) {
         "@echo off\r\necho [{\"name\":\"ready\"}]\r\nexit /b 0\r\n".to_string()
     } else {
         "#!/bin/sh\nprintf '%s\\n' '[{\"name\":\"ready\"}]'\nexit 0\n".to_string()
     };
-    std::fs::write(&crop_bin, script).unwrap();
+    std::fs::write(&mdcrop_bin, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        let mut perms = std::fs::metadata(&mdcrop_bin).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&crop_bin, perms).unwrap();
+        std::fs::set_permissions(&mdcrop_bin, perms).unwrap();
     }
-    let views_dir = dir.path().join(".crop").join("views");
+    let views_dir = dir.path().join(".mdcrop").join("views");
     let output_path = dir.path().join("views.json");
     std::fs::create_dir_all(&views_dir).unwrap();
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("list-views")
         .arg("--dir")
         .arg(&views_dir)
         .output()
-        .expect("failed to run mdloom crop list-views");
+        .expect("failed to run mdloom mdcrop list-views");
 
     assert!(
         output.status.success(),
-        "mdloom crop list-views failed:\n{}",
+        "mdloom mdcrop list-views failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(output.stdout.is_empty());
@@ -2856,63 +2856,63 @@ fn binary_crop_list_views_writes_global_output() {
 }
 
 #[test]
-fn binary_crop_list_views_rejects_global_markdown_format() {
+fn binary_mdcrop_list_views_rejects_global_markdown_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("markdown")
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("list-views")
         .output()
-        .expect("failed to run mdloom crop list-views");
+        .expect("failed to run mdloom mdcrop list-views");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("writes JSON artifacts"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
+fn binary_mdcrop_inspect_views_delegates_to_mdcrop_view_inspect() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let views_dir = dir.path().join(".crop").join("views");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let views_dir = dir.path().join(".mdcrop").join("views");
     std::fs::create_dir_all(&views_dir).unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(&views_dir)
         .arg("--strict")
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert!(
         output.status.success(),
-        "mdloom crop inspect-views failed:\n{}",
+        "mdloom mdcrop inspect-views failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("view"), "got: {}", args);
     assert!(args.contains("--inspect"), "got: {}", args);
     assert!(args.contains("--dir"), "got: {}", args);
@@ -2925,36 +2925,36 @@ fn binary_crop_inspect_views_delegates_to_crop_view_inspect() {
 }
 
 #[test]
-fn binary_crop_inspect_views_can_inspect_single_file() {
+fn binary_mdcrop_inspect_views_can_inspect_single_file() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".mdcrop").join("views").join("ready.json");
     std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--file")
         .arg(&view_file)
         .output()
-        .expect("failed to run mdloom crop inspect-views --file");
+        .expect("failed to run mdloom mdcrop inspect-views --file");
 
     assert!(
         output.status.success(),
-        "mdloom crop inspect-views --file failed:\n{}",
+        "mdloom mdcrop inspect-views --file failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("view"), "got: {}", args);
     assert!(args.contains("--inspect"), "got: {}", args);
     assert!(args.contains("--file"), "got: {}", args);
@@ -2967,88 +2967,88 @@ fn binary_crop_inspect_views_can_inspect_single_file() {
 }
 
 #[test]
-fn binary_crop_inspect_views_rejects_strict_single_file() {
+fn binary_mdcrop_inspect_views_rejects_strict_single_file() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".mdcrop").join("views").join("ready.json");
     std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--file")
         .arg(&view_file)
         .arg("--strict")
         .output()
-        .expect("failed to run mdloom crop inspect-views --file");
+        .expect("failed to run mdloom mdcrop inspect-views --file");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("store inspection"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_inspect_views_rejects_file_with_dir() {
+fn binary_mdcrop_inspect_views_rejects_file_with_dir() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".mdcrop").join("views").join("ready.json");
     let other_dir = dir.path().join("other-views");
     std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
     std::fs::create_dir_all(&other_dir).unwrap();
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--file")
         .arg(&view_file)
         .arg("--dir")
         .arg(&other_dir)
         .output()
-        .expect("failed to run mdloom crop inspect-views --file");
+        .expect("failed to run mdloom mdcrop inspect-views --file");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("either --file or --dir"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_inspect_views_forwards_single_file_overrides() {
+fn binary_mdcrop_inspect_views_forwards_single_file_overrides() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let view_file = dir.path().join(".crop").join("views").join("ready.json");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let view_file = dir.path().join(".mdcrop").join("views").join("ready.json");
     std::fs::create_dir_all(view_file.parent().unwrap()).unwrap();
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--file")
         .arg(&view_file)
@@ -3059,15 +3059,15 @@ fn binary_crop_inspect_views_forwards_single_file_overrides() {
         .arg("--exclude-dir")
         .arg("target")
         .output()
-        .expect("failed to run mdloom crop inspect-views --file");
+        .expect("failed to run mdloom mdcrop inspect-views --file");
 
     assert!(
         output.status.success(),
-        "mdloom crop inspect-views --file failed:\n{}",
+        "mdloom mdcrop inspect-views --file failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("--file"), "got: {}", args);
     assert!(
         args.contains(&view_file.display().to_string()),
@@ -3081,45 +3081,45 @@ fn binary_crop_inspect_views_forwards_single_file_overrides() {
 }
 
 #[test]
-fn binary_crop_inspect_views_rejects_store_overrides() {
+fn binary_mdcrop_inspect_views_rejects_store_overrides() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--query")
         .arg("refresh docs")
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("require --file"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_inspect_views_writes_output() {
+fn binary_mdcrop_inspect_views_writes_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = if cfg!(windows) {
-        dir.path().join("crop.cmd")
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = if cfg!(windows) {
+        dir.path().join("mdcrop.cmd")
     } else {
-        dir.path().join("crop")
+        dir.path().join("mdcrop")
     };
     let script = if cfg!(windows) {
         format!(
@@ -3132,31 +3132,31 @@ fn binary_crop_inspect_views_writes_output() {
             args_file.display()
         )
     };
-    std::fs::write(&crop_bin, script).unwrap();
+    std::fs::write(&mdcrop_bin, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        let mut perms = std::fs::metadata(&mdcrop_bin).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&crop_bin, perms).unwrap();
+        std::fs::set_permissions(&mdcrop_bin, perms).unwrap();
     }
     let output_path = dir.path().join("inspect").join("views.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(dir.path())
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert!(
         output.status.success(),
-        "mdloom crop inspect-views failed:\n{}",
+        "mdloom mdcrop inspect-views failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(output.stdout.is_empty());
@@ -3164,58 +3164,58 @@ fn binary_crop_inspect_views_writes_output() {
         std::fs::read_to_string(&output_path).unwrap().trim(),
         "{\"ok\":true}"
     );
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("view --inspect"), "got: {}", args);
     assert!(
         !args.contains("--output"),
-        "CROP view has no output flag: {}",
+        "MDCROP view has no output flag: {}",
         args
     );
 }
 
 #[test]
-fn binary_crop_inspect_views_uses_global_output() {
+fn binary_mdcrop_inspect_views_uses_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = if cfg!(windows) {
-        dir.path().join("crop.cmd")
+    let mdcrop_bin = if cfg!(windows) {
+        dir.path().join("mdcrop.cmd")
     } else {
-        dir.path().join("crop")
+        dir.path().join("mdcrop")
     };
     let script = if cfg!(windows) {
         "@echo off\r\necho {\"global\":true}\r\nexit /b 0\r\n".to_string()
     } else {
         "#!/bin/sh\nprintf '%s\\n' '{\"global\":true}'\nexit 0\n".to_string()
     };
-    std::fs::write(&crop_bin, script).unwrap();
+    std::fs::write(&mdcrop_bin, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        let mut perms = std::fs::metadata(&mdcrop_bin).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&crop_bin, perms).unwrap();
+        std::fs::set_permissions(&mdcrop_bin, perms).unwrap();
     }
     let output_path = dir.path().join("global-inspect.json");
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert!(
         output.status.success(),
-        "mdloom crop inspect-views failed:\n{}",
+        "mdloom mdcrop inspect-views failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(output.stdout.is_empty());
@@ -3226,46 +3226,46 @@ fn binary_crop_inspect_views_uses_global_output() {
 }
 
 #[test]
-fn binary_crop_inspect_views_rejects_global_markdown_format() {
+fn binary_mdcrop_inspect_views_rejects_global_markdown_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("markdown")
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("emits JSON"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_inspect_views_writes_output_on_failure() {
+fn binary_mdcrop_inspect_views_writes_output_on_failure() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = if cfg!(windows) {
-        dir.path().join("crop.cmd")
+    let mdcrop_bin = if cfg!(windows) {
+        dir.path().join("mdcrop.cmd")
     } else {
-        dir.path().join("crop")
+        dir.path().join("mdcrop")
     };
     let script = if cfg!(windows) {
         "@echo off\r\necho {\"failed_count\":1}\r\necho strict failed 1>&2\r\nexit /b 7\r\n"
@@ -3274,20 +3274,20 @@ fn binary_crop_inspect_views_writes_output_on_failure() {
         "#!/bin/sh\nprintf '%s\\n' '{\"failed_count\":1}'\nprintf '%s\\n' 'strict failed' >&2\nexit 7\n"
             .to_string()
     };
-    std::fs::write(&crop_bin, script).unwrap();
+    std::fs::write(&mdcrop_bin, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        let mut perms = std::fs::metadata(&mdcrop_bin).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&crop_bin, perms).unwrap();
+        std::fs::set_permissions(&mdcrop_bin, perms).unwrap();
     }
     let output_path = dir.path().join("inspect.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(dir.path())
@@ -3295,7 +3295,7 @@ fn binary_crop_inspect_views_writes_output_on_failure() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert_eq!(output.status.code(), Some(7));
     assert_eq!(
@@ -3306,7 +3306,7 @@ fn binary_crop_inspect_views_writes_output_on_failure() {
 }
 
 #[test]
-fn binary_crop_view_writes_crop_view_recipe() {
+fn binary_mdcrop_view_writes_mdcrop_view_recipe() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3322,10 +3322,10 @@ exclude = ["target/**"]
 "#,
     )
     .unwrap();
-    let output_path = dir.path().join(".crop").join("views").join("ready.json");
+    let output_path = dir.path().join(".mdcrop").join("views").join("ready.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("view")
         .arg("--root")
         .arg(dir.path())
@@ -3342,17 +3342,17 @@ exclude = ["target/**"]
         .arg("--content-tag")
         .arg("markdown")
         .output()
-        .expect("failed to run mdloom crop view");
+        .expect("failed to run mdloom mdcrop view");
 
     assert!(
         output.status.success(),
-        "mdloom crop view failed:\n{}",
+        "mdloom mdcrop view failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
     let recipe: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
-    assert_eq!(recipe["schema_version"], "crop.view.v1");
+    assert_eq!(recipe["schema_version"], "mdcrop.view.v1");
     assert_eq!(recipe["name"], "ready-guides");
     assert_eq!(
         recipe["root"],
@@ -3367,7 +3367,7 @@ exclude = ["target/**"]
 }
 
 #[test]
-fn binary_crop_view_uses_global_output() {
+fn binary_mdcrop_view_uses_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3382,23 +3382,23 @@ include = ["src/**/*.source.md"]
 "#,
     )
     .unwrap();
-    let output_path = dir.path().join(".crop").join("views").join("global.json");
+    let output_path = dir.path().join(".mdcrop").join("views").join("global.json");
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("view")
         .arg("--root")
         .arg(dir.path())
         .arg("--name")
         .arg("global-view")
         .output()
-        .expect("failed to run mdloom crop view");
+        .expect("failed to run mdloom mdcrop view");
 
     assert!(
         output.status.success(),
-        "mdloom crop view failed:\n{}",
+        "mdloom mdcrop view failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
@@ -3412,22 +3412,22 @@ include = ["src/**/*.source.md"]
 }
 
 #[test]
-fn binary_crop_run_view_delegates_to_crop_view_file() {
+fn binary_mdcrop_run_view_delegates_to_mdcrop_view_file() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("ready.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("run-view")
         .arg("--file")
         .arg(&view_file)
@@ -3440,14 +3440,14 @@ fn binary_crop_run_view_delegates_to_crop_view_file() {
         .arg("--prefix-cache")
         .arg("generic")
         .output()
-        .expect("failed to run mdloom crop run-view");
+        .expect("failed to run mdloom mdcrop run-view");
 
     assert!(
         output.status.success(),
-        "mdloom crop run-view failed:\n{}",
+        "mdloom mdcrop run-view failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("view --file"), "got: {}", args);
     assert!(
         args.contains(&view_file.display().to_string()),
@@ -3462,30 +3462,30 @@ fn binary_crop_run_view_delegates_to_crop_view_file() {
 }
 
 #[test]
-fn binary_crop_run_view_writes_global_output() {
+fn binary_mdcrop_run_view_writes_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = if cfg!(windows) {
-        dir.path().join("crop.cmd")
+    let mdcrop_bin = if cfg!(windows) {
+        dir.path().join("mdcrop.cmd")
     } else {
-        dir.path().join("crop")
+        dir.path().join("mdcrop")
     };
     let script = if cfg!(windows) {
         "@echo off\r\necho {\"pack\":true}\r\nexit /b 0\r\n".to_string()
     } else {
         "#!/bin/sh\nprintf '%s\\n' '{\"pack\":true}'\nexit 0\n".to_string()
     };
-    std::fs::write(&crop_bin, script).unwrap();
+    std::fs::write(&mdcrop_bin, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&crop_bin).unwrap().permissions();
+        let mut perms = std::fs::metadata(&mdcrop_bin).unwrap().permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&crop_bin, perms).unwrap();
+        std::fs::set_permissions(&mdcrop_bin, perms).unwrap();
     }
     let view_file = dir.path().join("ready.json");
     let output_path = dir.path().join("pack.json");
@@ -3494,18 +3494,18 @@ fn binary_crop_run_view_writes_global_output() {
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("run-view")
         .arg("--file")
         .arg(&view_file)
         .output()
-        .expect("failed to run mdloom crop run-view");
+        .expect("failed to run mdloom mdcrop run-view");
 
     assert!(
         output.status.success(),
-        "mdloom crop run-view failed:\n{}",
+        "mdloom mdcrop run-view failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(output.stdout.is_empty());
@@ -3516,70 +3516,70 @@ fn binary_crop_run_view_writes_global_output() {
 }
 
 #[test]
-fn binary_crop_run_view_rejects_global_markdown_format() {
+fn binary_mdcrop_run_view_rejects_global_markdown_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("ready.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("markdown")
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("run-view")
         .arg("--file")
         .arg(&view_file)
         .output()
-        .expect("failed to run mdloom crop run-view");
+        .expect("failed to run mdloom mdcrop run-view");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("writes JSON artifacts"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_run_view_rejects_unknown_prefix_cache() {
+fn binary_mdcrop_run_view_rejects_unknown_prefix_cache() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("ready.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("run-view")
         .arg("--file")
         .arg(&view_file)
         .arg("--prefix-cache")
         .arg("specialized")
         .output()
-        .expect("failed to run mdloom crop run-view");
+        .expect("failed to run mdloom mdcrop run-view");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("invalid value"), "got: {}", stderr);
     assert!(stderr.contains("generic"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_view_rejects_global_markdown_format() {
+fn binary_mdcrop_view_rejects_global_markdown_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3591,14 +3591,14 @@ fn binary_crop_view_rejects_global_markdown_format() {
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("markdown")
-        .arg("crop")
+        .arg("mdcrop")
         .arg("view")
         .arg("--root")
         .arg(dir.path())
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop view");
+        .expect("failed to run mdloom mdcrop view");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3607,23 +3607,23 @@ fn binary_crop_view_rejects_global_markdown_format() {
 }
 
 #[test]
-fn binary_crop_side_info_delegates_to_named_crop_report() {
+fn binary_mdcrop_side_info_delegates_to_named_mdcrop_report() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("ready-guides.json");
     let output_path = dir.path().join("frontmatter.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("frontmatter")
         .arg("--view")
         .arg(&view_file)
@@ -3636,15 +3636,15 @@ fn binary_crop_side_info_delegates_to_named_crop_report() {
         .arg("--exclude-dir")
         .arg("target")
         .output()
-        .expect("failed to run mdloom crop frontmatter");
+        .expect("failed to run mdloom mdcrop frontmatter");
 
     assert!(
         output.status.success(),
-        "mdloom crop frontmatter failed:\n{}",
+        "mdloom mdcrop frontmatter failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("frontmatter"), "got: {}", args);
     assert!(args.contains("--view"), "got: {}", args);
     assert!(
@@ -3664,21 +3664,21 @@ fn binary_crop_side_info_delegates_to_named_crop_report() {
 }
 
 #[test]
-fn binary_crop_sync_generates_all_side_info_reports() {
+fn binary_mdcrop_sync_generates_all_side_info_reports() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_dir = dir.path().join(".mdloom").join("side-info");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("sync")
         .arg("--root")
         .arg(dir.path())
@@ -3689,15 +3689,15 @@ fn binary_crop_sync_generates_all_side_info_reports() {
         .arg("--exclude-dir")
         .arg("target")
         .output()
-        .expect("failed to run mdloom crop sync");
+        .expect("failed to run mdloom mdcrop sync");
 
     assert!(
         output.status.success(),
-        "mdloom crop sync failed:\n{}",
+        "mdloom mdcrop sync failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     for command in ["links", "backlinks", "frontmatter", "headings"] {
         assert!(args.contains(command), "got: {}", args);
         assert!(
@@ -3717,54 +3717,54 @@ fn binary_crop_sync_generates_all_side_info_reports() {
 }
 
 #[test]
-fn binary_crop_sync_rejects_global_output() {
+fn binary_mdcrop_sync_rejects_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(dir.path().join("side-info.json"))
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("sync")
         .arg("--root")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop sync");
+        .expect("failed to run mdloom mdcrop sync");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("--output-dir"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
+fn binary_mdcrop_prepare_inspects_views_then_syncs_side_info() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
-    let view_dir = dir.path().join(".crop").join("views");
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
+    let view_dir = dir.path().join(".mdcrop").join("views");
     let view_file = view_dir.join("mdloom-guides.json");
     let output_dir = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&view_dir).unwrap();
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("prepare")
         .arg("--dir")
         .arg(&view_dir)
@@ -3773,15 +3773,15 @@ fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
         .arg("--output-dir")
         .arg(&output_dir)
         .output()
-        .expect("failed to run mdloom crop prepare");
+        .expect("failed to run mdloom mdcrop prepare");
 
     assert!(
         output.status.success(),
-        "mdloom crop prepare failed:\n{}",
+        "mdloom mdcrop prepare failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     let lines: Vec<_> = args.lines().collect();
     assert_eq!(lines.len(), 6, "got: {}", args);
     assert!(lines[0].contains("view --inspect"), "got: {}", args);
@@ -3818,38 +3818,38 @@ fn binary_crop_prepare_inspects_views_then_syncs_side_info() {
 }
 
 #[test]
-fn binary_crop_prepare_rejects_global_output() {
+fn binary_mdcrop_prepare_rejects_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("mdloom-guides.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(dir.path().join("side-info.json"))
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("prepare")
         .arg("--view")
         .arg(&view_file)
         .output()
-        .expect("failed to run mdloom crop prepare");
+        .expect("failed to run mdloom mdcrop prepare");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("--output-dir"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_backlink_list_renders_target_snippet() {
+fn binary_mdcrop_backlink_list_renders_target_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3873,18 +3873,18 @@ fn binary_crop_backlink_list_renders_target_snippet() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("backlink-list")
         .arg("--target")
         .arg("md://README.md#overview")
         .arg("--side-info")
         .arg(&side_info)
         .output()
-        .expect("failed to run mdloom crop backlink-list");
+        .expect("failed to run mdloom mdcrop backlink-list");
 
     assert!(
         output.status.success(),
-        "mdloom crop backlink-list failed:\n{}",
+        "mdloom mdcrop backlink-list failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -3892,7 +3892,7 @@ fn binary_crop_backlink_list_renders_target_snippet() {
 }
 
 #[test]
-fn binary_crop_link_list_renders_filtered_snippet() {
+fn binary_mdcrop_link_list_renders_filtered_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3913,7 +3913,7 @@ fn binary_crop_link_list_renders_filtered_snippet() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("link-list")
         .arg("--source")
         .arg("md://README.md#overview")
@@ -3922,11 +3922,11 @@ fn binary_crop_link_list_renders_filtered_snippet() {
         .arg("--side-info")
         .arg(&side_info)
         .output()
-        .expect("failed to run mdloom crop link-list");
+        .expect("failed to run mdloom mdcrop link-list");
 
     assert!(
         output.status.success(),
-        "mdloom crop link-list failed:\n{}",
+        "mdloom mdcrop link-list failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -3935,7 +3935,7 @@ fn binary_crop_link_list_renders_filtered_snippet() {
 }
 
 #[test]
-fn binary_crop_link_list_rejects_global_json_format() {
+fn binary_mdcrop_link_list_rejects_global_json_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3948,12 +3948,12 @@ fn binary_crop_link_list_rejects_global_json_format() {
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("json")
-        .arg("crop")
+        .arg("mdcrop")
         .arg("link-list")
         .arg("--side-info")
         .arg(&side_info)
         .output()
-        .expect("failed to run mdloom crop link-list");
+        .expect("failed to run mdloom mdcrop link-list");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3961,7 +3961,7 @@ fn binary_crop_link_list_rejects_global_json_format() {
 }
 
 #[test]
-fn binary_crop_link_list_rejects_invalid_local_status_before_reading_side_info() {
+fn binary_mdcrop_link_list_rejects_invalid_local_status_before_reading_side_info() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -3971,14 +3971,14 @@ fn binary_crop_link_list_rejects_invalid_local_status_before_reading_side_info()
     let missing_side_info = dir.path().join("missing-links.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("link-list")
         .arg("--side-info")
         .arg(&missing_side_info)
         .arg("--status")
         .arg("maybe")
         .output()
-        .expect("failed to run mdloom crop link-list");
+        .expect("failed to run mdloom mdcrop link-list");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3994,7 +3994,7 @@ fn binary_crop_link_list_rejects_invalid_local_status_before_reading_side_info()
 }
 
 #[test]
-fn binary_crop_backlink_list_rejects_invalid_local_format_before_reading_side_info() {
+fn binary_mdcrop_backlink_list_rejects_invalid_local_format_before_reading_side_info() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4004,7 +4004,7 @@ fn binary_crop_backlink_list_rejects_invalid_local_format_before_reading_side_in
     let missing_side_info = dir.path().join("missing-backlinks.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("backlink-list")
         .arg("--target")
         .arg("README.md")
@@ -4013,7 +4013,7 @@ fn binary_crop_backlink_list_rejects_invalid_local_format_before_reading_side_in
         .arg("--format")
         .arg("yaml")
         .output()
-        .expect("failed to run mdloom crop backlink-list");
+        .expect("failed to run mdloom mdcrop backlink-list");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -4029,7 +4029,7 @@ fn binary_crop_backlink_list_rejects_invalid_local_format_before_reading_side_in
 }
 
 #[test]
-fn binary_crop_frontmatter_list_rejects_invalid_local_op_before_reading_side_info() {
+fn binary_mdcrop_frontmatter_list_rejects_invalid_local_op_before_reading_side_info() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4039,7 +4039,7 @@ fn binary_crop_frontmatter_list_rejects_invalid_local_op_before_reading_side_inf
     let missing_side_info = dir.path().join("missing-frontmatter.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("frontmatter-list")
         .arg("--side-info")
         .arg(&missing_side_info)
@@ -4050,7 +4050,7 @@ fn binary_crop_frontmatter_list_rejects_invalid_local_op_before_reading_side_inf
         .arg("--op")
         .arg("contains")
         .output()
-        .expect("failed to run mdloom crop frontmatter-list");
+        .expect("failed to run mdloom mdcrop frontmatter-list");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -4065,7 +4065,7 @@ fn binary_crop_frontmatter_list_rejects_invalid_local_op_before_reading_side_inf
 }
 
 #[test]
-fn binary_crop_link_list_writes_table_output() {
+fn binary_mdcrop_link_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4085,7 +4085,7 @@ fn binary_crop_link_list_writes_table_output() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("link-list")
         .arg("--status")
         .arg("broken")
@@ -4096,11 +4096,11 @@ fn binary_crop_link_list_writes_table_output() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop link-list --output");
+        .expect("failed to run mdloom mdcrop link-list --output");
 
     assert!(
         output.status.success(),
-        "mdloom crop link-list --output failed:\n{}",
+        "mdloom mdcrop link-list --output failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let rendered = std::fs::read_to_string(&output_path).unwrap();
@@ -4109,7 +4109,7 @@ fn binary_crop_link_list_writes_table_output() {
 }
 
 #[test]
-fn binary_crop_link_list_uses_global_output() {
+fn binary_mdcrop_link_list_uses_global_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4131,7 +4131,7 @@ fn binary_crop_link_list_uses_global_output() {
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("link-list")
         .arg("--status")
         .arg("broken")
@@ -4140,11 +4140,11 @@ fn binary_crop_link_list_uses_global_output() {
         .arg("--format")
         .arg("table")
         .output()
-        .expect("failed to run mdloom crop link-list");
+        .expect("failed to run mdloom mdcrop link-list");
 
     assert!(
         output.status.success(),
-        "mdloom crop link-list failed:\n{}",
+        "mdloom mdcrop link-list failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let rendered = std::fs::read_to_string(&output_path).unwrap();
@@ -4153,7 +4153,7 @@ fn binary_crop_link_list_uses_global_output() {
 }
 
 #[test]
-fn binary_crop_backlink_list_writes_table_output() {
+fn binary_mdcrop_backlink_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4178,7 +4178,7 @@ fn binary_crop_backlink_list_writes_table_output() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("backlink-list")
         .arg("--target")
         .arg("README.md")
@@ -4189,11 +4189,11 @@ fn binary_crop_backlink_list_writes_table_output() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop backlink-list --output");
+        .expect("failed to run mdloom mdcrop backlink-list --output");
 
     assert!(
         output.status.success(),
-        "mdloom crop backlink-list --output failed:\n{}",
+        "mdloom mdcrop backlink-list --output failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let rendered = std::fs::read_to_string(&output_path).unwrap();
@@ -4202,7 +4202,7 @@ fn binary_crop_backlink_list_writes_table_output() {
 }
 
 #[test]
-fn binary_crop_heading_list_renders_source_snippet() {
+fn binary_mdcrop_heading_list_renders_source_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4223,18 +4223,18 @@ fn binary_crop_heading_list_renders_source_snippet() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("heading-list")
         .arg("--source")
         .arg("md://README.md#overview")
         .arg("--side-info")
         .arg(&side_info)
         .output()
-        .expect("failed to run mdloom crop heading-list");
+        .expect("failed to run mdloom mdcrop heading-list");
 
     assert!(
         output.status.success(),
-        "mdloom crop heading-list failed:\n{}",
+        "mdloom mdcrop heading-list failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -4244,7 +4244,7 @@ fn binary_crop_heading_list_renders_source_snippet() {
 }
 
 #[test]
-fn binary_crop_heading_list_writes_count_output() {
+fn binary_mdcrop_heading_list_writes_count_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4266,7 +4266,7 @@ fn binary_crop_heading_list_writes_count_output() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("heading-list")
         .arg("--source")
         .arg("README.md")
@@ -4277,11 +4277,11 @@ fn binary_crop_heading_list_writes_count_output() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop heading-list --output");
+        .expect("failed to run mdloom mdcrop heading-list --output");
 
     assert!(
         output.status.success(),
-        "mdloom crop heading-list --output failed:\n{}",
+        "mdloom mdcrop heading-list --output failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let rendered = std::fs::read_to_string(&output_path).unwrap();
@@ -4289,7 +4289,7 @@ fn binary_crop_heading_list_writes_count_output() {
 }
 
 #[test]
-fn binary_crop_frontmatter_list_renders_filtered_snippet() {
+fn binary_mdcrop_frontmatter_list_renders_filtered_snippet() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4317,7 +4317,7 @@ fn binary_crop_frontmatter_list_renders_filtered_snippet() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("frontmatter-list")
         .arg("--side-info")
         .arg(&side_info)
@@ -4326,11 +4326,11 @@ fn binary_crop_frontmatter_list_renders_filtered_snippet() {
         .arg("--value")
         .arg("guide")
         .output()
-        .expect("failed to run mdloom crop frontmatter-list");
+        .expect("failed to run mdloom mdcrop frontmatter-list");
 
     assert!(
         output.status.success(),
-        "mdloom crop frontmatter-list failed:\n{}",
+        "mdloom mdcrop frontmatter-list failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -4339,7 +4339,7 @@ fn binary_crop_frontmatter_list_renders_filtered_snippet() {
 }
 
 #[test]
-fn binary_crop_frontmatter_list_writes_table_output() {
+fn binary_mdcrop_frontmatter_list_writes_table_output() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
@@ -4363,7 +4363,7 @@ fn binary_crop_frontmatter_list_writes_table_output() {
     .unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
+        .arg("mdcrop")
         .arg("frontmatter-list")
         .arg("--side-info")
         .arg(&side_info)
@@ -4378,11 +4378,11 @@ fn binary_crop_frontmatter_list_writes_table_output() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop frontmatter-list --output");
+        .expect("failed to run mdloom mdcrop frontmatter-list --output");
 
     assert!(
         output.status.success(),
-        "mdloom crop frontmatter-list --output failed:\n{}",
+        "mdloom mdcrop frontmatter-list --output failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let rendered = std::fs::read_to_string(&output_path).unwrap();
@@ -4391,23 +4391,23 @@ fn binary_crop_frontmatter_list_writes_table_output() {
 }
 
 #[test]
-fn binary_crop_artifacts_delegates_to_crop_artifacts() {
+fn binary_mdcrop_artifacts_delegates_to_mdcrop_artifacts() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let manifest_path = dir.path().join("artifacts.json");
     let output_path = dir.path().join("ARTIFACTS.md");
     std::fs::write(&manifest_path, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("artifacts")
         .arg("--manifest")
         .arg(&manifest_path)
@@ -4416,15 +4416,15 @@ fn binary_crop_artifacts_delegates_to_crop_artifacts() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop artifacts");
+        .expect("failed to run mdloom mdcrop artifacts");
 
     assert!(
         output.status.success(),
-        "mdloom crop artifacts failed:\n{}",
+        "mdloom mdcrop artifacts failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("artifacts"), "got: {}", args);
     assert!(args.contains("--manifest"), "got: {}", args);
     assert!(
@@ -4442,23 +4442,23 @@ fn binary_crop_artifacts_delegates_to_crop_artifacts() {
 }
 
 #[test]
-fn binary_crop_artifacts_requires_root_or_manifest() {
+fn binary_mdcrop_artifacts_requires_root_or_manifest() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("artifacts")
         .output()
-        .expect("failed to run mdloom crop artifacts");
+        .expect("failed to run mdloom mdcrop artifacts");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -4467,33 +4467,33 @@ fn binary_crop_artifacts_requires_root_or_manifest() {
         "got: {}",
         stderr
     );
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_artifacts_rejects_root_and_manifest() {
+fn binary_mdcrop_artifacts_rejects_root_and_manifest() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let manifest_path = dir.path().join("artifacts.json");
     std::fs::write(&manifest_path, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("artifacts")
         .arg("--root")
         .arg(dir.path())
         .arg("--manifest")
         .arg(&manifest_path)
         .output()
-        .expect("failed to run mdloom crop artifacts");
+        .expect("failed to run mdloom mdcrop artifacts");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -4502,80 +4502,80 @@ fn binary_crop_artifacts_rejects_root_and_manifest() {
         "got: {}",
         stderr
     );
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_artifacts_rejects_global_rich_format() {
+fn binary_mdcrop_artifacts_rejects_global_rich_format() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let manifest_path = dir.path().join("artifacts.json");
     std::fs::write(&manifest_path, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("rich")
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("artifacts")
         .arg("--manifest")
         .arg(&manifest_path)
         .output()
-        .expect("failed to run mdloom crop artifacts");
+        .expect("failed to run mdloom mdcrop artifacts");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("json or markdown"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_crop_relays_crop_exit_code() {
+fn binary_mdcrop_relays_mdcrop_exit_code() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 7);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 7);
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("inspect-views")
         .arg("--dir")
         .arg(dir.path())
         .output()
-        .expect("failed to run mdloom crop inspect-views");
+        .expect("failed to run mdloom mdcrop inspect-views");
 
     assert_eq!(output.status.code(), Some(7));
 }
 
 #[test]
-fn binary_index_delegates_to_crop_index() {
+fn binary_index_delegates_to_mdcrop_index() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_path = dir.path().join("INDEX.md");
 
     let output = std::process::Command::new(&bin)
         .arg("index")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--root")
         .arg(dir.path())
         .arg("--title")
@@ -4595,7 +4595,7 @@ fn binary_index_delegates_to_crop_index() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("index"), "got: {}", args);
     assert!(args.contains("--root"), "got: {}", args);
     assert!(
@@ -4623,16 +4623,16 @@ fn binary_index_uses_global_output() {
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let output_path = dir.path().join("GLOBAL_INDEX.md");
 
     let output = std::process::Command::new(&bin)
         .arg("-o")
         .arg(&output_path)
         .arg("index")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--root")
         .arg(dir.path())
         .output()
@@ -4644,7 +4644,7 @@ fn binary_index_uses_global_output() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("--output"), "got: {}", args);
     assert!(
         args.contains(&output_path.display().to_string()),
@@ -4661,15 +4661,15 @@ fn binary_index_rejects_global_json_format() {
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("-f")
         .arg("json")
         .arg("index")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--root")
         .arg(dir.path())
         .output()
@@ -4678,24 +4678,24 @@ fn binary_index_rejects_global_json_format() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Markdown-only"), "got: {}", stderr);
-    assert!(!args_file.exists(), "CROP should not be invoked");
+    assert!(!args_file.exists(), "MDCROP should not be invoked");
 }
 
 #[test]
-fn binary_toc_delegates_to_crop_index_with_toc_title() {
+fn binary_toc_delegates_to_mdcrop_index_with_toc_title() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
 
     let output = std::process::Command::new(&bin)
         .arg("toc")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--root")
         .arg(dir.path())
         .output()
@@ -4707,29 +4707,29 @@ fn binary_toc_delegates_to_crop_index_with_toc_title() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("index"), "got: {}", args);
     assert!(args.contains("--title"), "got: {}", args);
     assert!(args.contains("Table of Contents"), "got: {}", args);
 }
 
 #[test]
-fn binary_catalog_delegates_to_crop_catalog() {
+fn binary_catalog_delegates_to_mdcrop_catalog() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let args_file = dir.path().join("crop-args.txt");
-    let crop_bin = write_fake_crop_bin(dir.path(), &args_file, 0);
+    let args_file = dir.path().join("mdcrop-args.txt");
+    let mdcrop_bin = write_fake_mdcrop_bin(dir.path(), &args_file, 0);
     let view_file = dir.path().join("ready-guides.json");
     std::fs::write(&view_file, "{}").unwrap();
 
     let output = std::process::Command::new(&bin)
         .arg("catalog")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
         .arg(&view_file)
         .arg("--output")
@@ -4743,7 +4743,7 @@ fn binary_catalog_delegates_to_crop_catalog() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let args = std::fs::read_to_string(&args_file).expect("fake crop args");
+    let args = std::fs::read_to_string(&args_file).expect("fake mdcrop args");
     assert!(args.contains("catalog"), "got: {}", args);
     assert!(args.contains("--view"), "got: {}", args);
     assert!(
@@ -4754,71 +4754,71 @@ fn binary_catalog_delegates_to_crop_catalog() {
 }
 
 #[test]
-fn binary_real_crop_index_generates_fixture_markdown() {
+fn binary_real_mdcrop_index_generates_fixture_markdown() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
-    let Some(crop_manifest) = sibling_crop_manifest() else {
+    let Some(mdcrop_manifest) = sibling_mdcrop_manifest() else {
         return;
     };
-    let fixture_root = sibling_crop_fixture_root(&crop_manifest);
+    let fixture_root = sibling_mdcrop_fixture_root(&mdcrop_manifest);
     let view_file = fixture_root.join("mdloom-ready-view.json");
     if !view_file.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = write_real_crop_bin(dir.path(), &crop_manifest);
+    let mdcrop_bin = write_real_mdcrop_bin(dir.path(), &mdcrop_manifest);
     let output_path = dir.path().join("INDEX.md");
 
     let output = std::process::Command::new(&bin)
         .arg("index")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("--view")
         .arg(&view_file)
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom index with real CROP");
+        .expect("failed to run mdloom index with real MDCROP");
 
     assert!(
         output.status.success(),
-        "mdloom index real CROP failed:\nstdout:\n{}\nstderr:\n{}",
+        "mdloom index real MDCROP failed:\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let index = std::fs::read_to_string(&output_path).expect("real CROP index output");
+    let index = std::fs::read_to_string(&output_path).expect("real MDCROP index output");
     assert!(index.contains("# mdloom-fixture-ready"), "got:\n{}", index);
     assert!(index.contains("guide.source.md"), "got:\n{}", index);
     assert!(index.contains("reference.source.md"), "got:\n{}", index);
 }
 
 #[test]
-fn binary_real_crop_frontmatter_generates_fixture_json() {
+fn binary_real_mdcrop_frontmatter_generates_fixture_json() {
     let bin = debug_bin();
     if !bin.exists() {
         return;
     }
-    let Some(crop_manifest) = sibling_crop_manifest() else {
+    let Some(mdcrop_manifest) = sibling_mdcrop_manifest() else {
         return;
     };
-    let fixture_root = sibling_crop_fixture_root(&crop_manifest);
+    let fixture_root = sibling_mdcrop_fixture_root(&mdcrop_manifest);
     let view_file = fixture_root.join("mdloom-ready-view.json");
     if !view_file.exists() {
         return;
     }
 
     let dir = tempfile::tempdir().unwrap();
-    let crop_bin = write_real_crop_bin(dir.path(), &crop_manifest);
+    let mdcrop_bin = write_real_mdcrop_bin(dir.path(), &mdcrop_manifest);
     let output_path = dir.path().join("frontmatter.json");
 
     let output = std::process::Command::new(&bin)
-        .arg("crop")
-        .arg("--crop-bin")
-        .arg(&crop_bin)
+        .arg("mdcrop")
+        .arg("--mdcrop-bin")
+        .arg(&mdcrop_bin)
         .arg("frontmatter")
         .arg("--view")
         .arg(&view_file)
@@ -4827,18 +4827,18 @@ fn binary_real_crop_frontmatter_generates_fixture_json() {
         .arg("--output")
         .arg(&output_path)
         .output()
-        .expect("failed to run mdloom crop frontmatter with real CROP");
+        .expect("failed to run mdloom mdcrop frontmatter with real MDCROP");
 
     assert!(
         output.status.success(),
-        "mdloom crop frontmatter real CROP failed:\nstdout:\n{}\nstderr:\n{}",
+        "mdloom mdcrop frontmatter real MDCROP failed:\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 
     let json: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&output_path).unwrap()).unwrap();
-    assert_eq!(json["schema_version"], "crop.markdown-frontmatter.v1");
+    assert_eq!(json["schema_version"], "mdcrop.markdown-frontmatter.v1");
     assert_eq!(json["source_count"], 2);
     assert!(json["key_counts"]["tags"].as_u64().unwrap_or(0) >= 2);
 }
