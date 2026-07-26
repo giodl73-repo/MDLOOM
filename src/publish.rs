@@ -8,11 +8,11 @@ use std::{
 use zip::{write::FileOptions, ZipWriter};
 
 use crate::frontmatter::SourceFrontmatter;
-use crate::pebble_output;
+use crate::mdport_output;
 use crate::slide::{parse_slide_doc, Slide, SlideLayout};
 
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
-    let title = pebble_output::document_title(markdown, title);
+    let title = mdport_output::document_title(markdown, title);
     let body = markdown_to_html_fragment(markdown);
 
     format!(
@@ -43,14 +43,14 @@ pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
     )
 }
 
-pub fn markdown_to_pebble_document(
+pub fn markdown_to_mdport_document(
     markdown: &str,
     fallback_title: &str,
     source_path: &Path,
     resolved_files: &[PathBuf],
 ) -> String {
     let refs = resolved_files.iter().map(|path| path_string(path));
-    pebble_output::document_json(markdown, fallback_title, path_string(source_path), refs)
+    mdport_output::document_json(markdown, fallback_title, path_string(source_path), refs)
 }
 
 pub fn markdown_to_json_report_bundle(
@@ -62,7 +62,7 @@ pub fn markdown_to_json_report_bundle(
     frontmatter: SourceFrontmatter,
     compile: JsonReportCompile,
 ) -> String {
-    let title = pebble_output::document_title(markdown, fallback_title);
+    let title = mdport_output::document_title(markdown, fallback_title);
     let sections = json_report_sections(markdown);
     let report = JsonReportBundle {
         schema: "mdloom.publish.json_report.v1".to_string(),
@@ -173,7 +173,7 @@ pub fn html_to_pdf_document(html: &str, fallback_title: &str) -> Vec<u8> {
 }
 
 pub fn markdown_to_docx_document(markdown: &str, fallback_title: &str) -> Vec<u8> {
-    let title = pebble_output::document_title(markdown, fallback_title);
+    let title = mdport_output::document_title(markdown, fallback_title);
     let blocks = markdown_to_docx_blocks(markdown);
     let document = docx_document_xml(&blocks);
     let core = docx_core_xml(&title);
@@ -1348,16 +1348,16 @@ mod tests {
     }
 
     #[test]
-    fn pebble_backend_chunks_markdown_for_transfer() {
-        let pebble = markdown_to_pebble_document(
+    fn mdport_backend_chunks_markdown_for_transfer() {
+        let mdport = markdown_to_mdport_document(
             "---\ntags: [mdloom, guide]\nstatus: ready\n---\n\n# Guide\n\nIntro.\n\n## Steps\n\n- one\n- two\n",
             "fallback",
             Path::new("guide.source.md"),
             &[PathBuf::from(".mdloom\\side-info\\links.json")],
         );
-        let json: serde_json::Value = serde_json::from_str(&pebble).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&mdport).unwrap();
 
-        assert_eq!(json["schema"], "pebble.v1");
+        assert_eq!(json["schema"], "mdport.v1");
         assert_eq!(json["title"], "Guide");
         assert_eq!(json["source"], "guide.source.md");
         assert_eq!(json["metadata"]["status"], "ready");

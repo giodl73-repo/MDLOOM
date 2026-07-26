@@ -7,7 +7,7 @@ token set that every backend can map into its own native output.
 ## Mission
 
 Turn resolved MDLOOM content into a structured publication AST before rendering to
-HTML, site pages, PDF, DOCX, PPTX, JSON report, or Pebble. The AST owns document
+HTML, site pages, PDF, DOCX, PPTX, JSON report, or Mdport. The AST owns document
 semantics; themes own visual intent. Backends own target-specific serialization.
 
 ## Current problem
@@ -39,7 +39,7 @@ resolved compile output / slide source model
 Publication AST + Theme tokens
         │
         ├── html/site renderer
-        ├── json-report/pebble serializers
+        ├── json-report/mdport serializers
         ├── pdf renderer
         ├── docx OOXML renderer
         └── pptx OOXML renderer
@@ -135,7 +135,7 @@ Initial built-in themes:
 |---|---|---|
 | HTML/site | Render semantic blocks/inlines to HTML. | CSS variables and stylesheet. |
 | JSON report | Serialize AST summary and theme name alongside existing report fields. | Metadata only initially. |
-| Pebble | Continue compact chunks; optionally derive chunks from AST sections. | None initially. |
+| Mdport | Continue compact chunks; optionally derive chunks from AST sections. | None initially. |
 | PDF | Render AST text with page/typography tokens. | Font sizes, margins, line height, colors where supported. |
 | DOCX | Map headings/lists/tables/code to styles and numbering. | `word/styles.xml`, numbering, theme colors/fonts. |
 | PPTX | Map `Slide` nodes to native text boxes/placeholders. | Theme, sizes, colors, bullet indentation, slide dimensions. |

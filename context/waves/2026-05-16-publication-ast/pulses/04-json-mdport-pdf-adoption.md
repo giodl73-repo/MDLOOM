@@ -7,12 +7,12 @@ depends_on: ["publication-ast/pulse-02"]
 governing_roles: ["SCHEMA", "SIGNAL", "BENCH"]
 ---
 
-# Pulse 04: JSON/Pebble/PDF adoption
+# Pulse 04: JSON/Mdport/PDF adoption
 
 ## Mission
 
 Use the publication AST as the shared source for JSON report section summaries,
-Pebble chunk boundaries where practical, and PDF text output.
+Mdport chunk boundaries where practical, and PDF text output.
 
 ## Scope inventory
 
@@ -23,12 +23,12 @@ Pebble chunk boundaries where practical, and PDF text output.
   - `tests/integration_tests.rs`
 - Generated/user artifacts:
   - `*.mdloom-report.json`
-  - `*.pebble.json`
+  - `*.mdport.json`
   - `*.pdf`
 
 ## Pre-implementation scout
 
-- Compare current JSON section extraction and Pebble section extraction.
+- Compare current JSON section extraction and Mdport section extraction.
 - Identify what PDF text extraction loses today.
 - Decide which JSON additions are backwards-compatible.
 
@@ -36,7 +36,7 @@ Pebble chunk boundaries where practical, and PDF text output.
 
 - [ ] Derive JSON report section summaries from AST headings.
 - [ ] Add AST/theme summary fields without breaking existing report consumers.
-- [ ] Keep Pebble compact and compatible; only adopt AST where it improves
+- [ ] Keep Mdport compact and compatible; only adopt AST where it improves
       section fidelity.
 - [ ] Render PDF text lines from AST blocks rather than HTML text stripping.
 - [ ] Add regression tests for all three targets.
@@ -47,14 +47,14 @@ Pebble chunk boundaries where practical, and PDF text output.
 - `cargo test json_report_backend_serializes_compile_bundle`
 - `cargo test pdf_backend_writes_valid_pdf_bytes_from_html`
 - `cargo test binary_compile_target_json_report_writes_bundle`
-- `cargo test binary_compile_target_pebble_writes_ai_context_pack`
+- `cargo test binary_compile_target_mdport_writes_ai_context_pack`
 - `cargo test binary_compile_target_pdf_writes_pdf`
 - `cargo test --test integration_tests`
 - `git diff --check`
 
 ## Non-goals
 
-- Do not make Pebble verbose.
+- Do not make Mdport verbose.
 - Do not implement print-engine PDF layout in this pulse.
 
 ## Evidence

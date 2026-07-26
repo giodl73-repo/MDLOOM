@@ -9,7 +9,7 @@ source_request: "Make a spec and plan for PPTX, PDF, DOCX, static site, and JSON
 
 ## Mission
 
-Extend MDLOOM's compile graph from Markdown, HTML, and Pebble into a planned
+Extend MDLOOM's compile graph from Markdown, HTML, and Mdport into a planned
 publish backend family: JSON report bundle, static site, PDF, DOCX, and PPTX.
 Keep every backend behind the same source-resolution pipeline so target-specific
 renderers never bypass directive compilation, diagnostics, manifests, or cache
@@ -25,7 +25,7 @@ ranking, or LaTeX in this wave.
 
 ## Inputs
 
-- Existing `mdloom compile --target md|html|pebble`.
+- Existing `mdloom compile --target md|html|mdport`.
 - Existing artifact manifest `.mdloom/artifacts.json`.
 - Existing publish helpers in `src/publish.rs`.
 - Existing slide source concepts for future PPTX grounding.
@@ -56,7 +56,7 @@ ranking, or LaTeX in this wave.
 
 - Every planned backend has a pulse with scope, gates, non-goals, and output
   claims.
-- `md`, `html`, and `pebble` remain the stable baseline targets.
+- `md`, `html`, and `mdport` remain the stable baseline targets.
 - `json-report`, `site`, `pdf`, `docx`, and `pptx` each become supported only
   after command surface, integration tests, manifest entries, docs, and
   diagnostics are implemented.
@@ -78,6 +78,6 @@ ranking, or LaTeX in this wave.
 
 - Closed in `CLOSE.md`.
 - MDLOOM now supports scoped `json-report`, `site`, `pdf`, `docx`, and `pptx`
-  publish targets in addition to `md`, `html`, and `pebble`.
+  publish targets in addition to `md`, `html`, and `mdport`.
 - LaTeX remains deferred, and richer Office/PDF fidelity work is carried forward
   explicitly rather than implied by first-scope support.

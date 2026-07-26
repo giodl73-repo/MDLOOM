@@ -9,7 +9,7 @@ The rename also simplified the publication boundary:
 
 - `mdloom-math` is the single math implementation.
 - `mdloom-canvas` and `mdloom-math` package independently.
-- MDLOOM no longer has direct Git dependencies on PEBBLE or SLICE.
+- MDLOOM no longer has direct Git dependencies on MDPORT or SLICE.
 - MDPATH remains the only portfolio Git dependency until `mdpath` is published.
 
 Validation evidence:

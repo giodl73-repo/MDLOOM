@@ -65,7 +65,7 @@ and DOCX support landed, before starting PPTX.
 - Added L1 compile-pipeline coverage proving publish helpers consume resolved
   Markdown from `compile_file`, after a `mdloom:toc` directive has been expanded,
   across HTML, JSON report, PDF, and DOCX helpers.
-- Existing L2 CLI backend tests remain in place for `html`, `pebble`,
+- Existing L2 CLI backend tests remain in place for `html`, `mdport`,
   `json-report`, `site`, `pdf`, and `docx`.
 - Validation:
   - `cargo fmt --check`

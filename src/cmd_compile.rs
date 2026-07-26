@@ -53,7 +53,7 @@ pub(crate) struct Args {
 enum CompileTarget {
     Md,
     Html,
-    Pebble,
+    Mdport,
     JsonReport,
     Site,
     Pdf,
@@ -66,7 +66,7 @@ impl CompileTarget {
         match self {
             CompileTarget::Md => "md",
             CompileTarget::Html => "html",
-            CompileTarget::Pebble => "pebble",
+            CompileTarget::Mdport => "mdport",
             CompileTarget::JsonReport => "json-report",
             CompileTarget::Site => "site",
             CompileTarget::Pdf => "pdf",
@@ -452,8 +452,8 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
         CompileTarget::Html => {
             output.set_extension("html");
         }
-        CompileTarget::Pebble => {
-            output.set_extension("pebble.json");
+        CompileTarget::Mdport => {
+            output.set_extension("mdport.json");
         }
         CompileTarget::JsonReport => {
             output.set_extension("mdloom-report.json");
@@ -484,7 +484,7 @@ fn compile_target_file(
     match target {
         CompileTarget::Md => compile_file(source_path, output_path, root, config),
         CompileTarget::Html => compile_html_file(source_path, output_path, root, config),
-        CompileTarget::Pebble => compile_pebble_file(source_path, output_path, root, config),
+        CompileTarget::Mdport => compile_mdport_file(source_path, output_path, root, config),
         CompileTarget::JsonReport => {
             compile_json_report_file(source_path, output_path, root, config)
         }
@@ -532,7 +532,7 @@ fn compile_html_file(
     Ok(result)
 }
 
-fn compile_pebble_file(
+fn compile_mdport_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
@@ -556,17 +556,17 @@ fn compile_pebble_file(
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("mdloom document");
-    let pebble = mdloom_lib::publish::markdown_to_pebble_document(
+    let mdport = mdloom_lib::publish::markdown_to_mdport_document(
         &markdown,
         title,
         source_path,
         &result.resolved_files,
     );
     let current = std::fs::read_to_string(output_path).unwrap_or_default();
-    result.written = current != pebble;
+    result.written = current != mdport;
     if result.written {
         let tmp = output_path.with_extension("mdloom_tmp");
-        std::fs::write(&tmp, pebble)?;
+        std::fs::write(&tmp, mdport)?;
         std::fs::rename(&tmp, output_path)?;
     }
     result.output_path = output_path.to_path_buf();

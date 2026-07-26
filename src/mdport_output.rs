@@ -2,19 +2,19 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 #[derive(Serialize)]
-struct PebbleDocument {
+struct MdportDocument {
     schema: &'static str,
     kind: &'static str,
     title: String,
     source: String,
     format: &'static str,
     metadata: BTreeMap<String, String>,
-    sections: Vec<PebbleSection>,
+    sections: Vec<MdportSection>,
     refs: Vec<String>,
 }
 
 #[derive(Serialize)]
-struct PebbleSection {
+struct MdportSection {
     id: String,
     path: Vec<String>,
     level: usize,
@@ -35,8 +35,8 @@ pub(crate) fn document_json(
         .get("title")
         .cloned()
         .unwrap_or_else(|| document_title(parsed.content, fallback_title));
-    let document = PebbleDocument {
-        schema: "pebble.v1",
+    let document = MdportDocument {
+        schema: "mdport.v1",
         kind: "document",
         title,
         source,
@@ -45,7 +45,7 @@ pub(crate) fn document_json(
         sections: sections(parsed.content, &parsed.metadata, parsed.start_line),
         refs: refs.into_iter().map(Into::into).collect(),
     };
-    serde_json::to_string(&document).expect("serializing Pebble document cannot fail")
+    serde_json::to_string(&document).expect("serializing Mdport document cannot fail")
 }
 
 pub(crate) fn document_title(markdown: &str, fallback: &str) -> String {
@@ -65,7 +65,7 @@ fn sections(
     markdown: &str,
     metadata: &BTreeMap<String, String>,
     start_line: usize,
-) -> Vec<PebbleSection> {
+) -> Vec<MdportSection> {
     let mut sections = Vec::new();
     let mut current_start = start_line;
     let mut current_level = 0;
@@ -112,7 +112,7 @@ fn sections(
         metadata,
     );
     if sections.is_empty() {
-        sections.push(PebbleSection {
+        sections.push(MdportSection {
             id: "document".to_string(),
             path: Vec::new(),
             level: 0,
@@ -125,7 +125,7 @@ fn sections(
 }
 
 fn push_section(
-    sections: &mut Vec<PebbleSection>,
+    sections: &mut Vec<MdportSection>,
     line: usize,
     level: usize,
     path: &[String],
@@ -149,7 +149,7 @@ fn push_section(
         id = format!("{base}-{suffix}");
         suffix += 1;
     }
-    sections.push(PebbleSection {
+    sections.push(MdportSection {
         id,
         path: path.to_vec(),
         level,

@@ -38,15 +38,15 @@ v0.1  │ check · ASCII box / flow / tree · markdown rules              │
   package family.
 - Removed the obsolete duplicate math implementation from the root crate;
   MDLOOM now uses `mdloom-math` as its single implementation.
-- Removed direct Git dependencies on PEBBLE and SLICE. MDLOOM emits the stable
-  `pebble.v1` JSON contract locally and leaves artifact selection to external
+- Removed direct Git dependencies on MDPORT and SLICE. MDLOOM emits the stable
+  `mdport.v1` JSON contract locally and leaves artifact selection to external
   consumers.
 
 ### Added
 
 - **Publish backend family for `mdloom compile`.** Added scoped targets for
   `json-report`, `site`, `pdf`, `docx`, and `pptx` while preserving `md`, `html`,
-  and `pebble` as baseline outputs.
+  and `mdport` as baseline outputs.
 - **`--target json-report`** writes `mdloom.publish.json_report.v1` bundles with
   artifact summary, resolved Markdown, section metadata, source frontmatter,
   dependency refs, diagnostics, and compile counts.

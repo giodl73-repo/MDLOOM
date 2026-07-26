@@ -22,7 +22,7 @@ systems, chart/media embedding, or LaTeX.
 
 ## Inputs
 
-- Supported publish targets: `md`, `html`, `pebble`, `json-report`, `site`,
+- Supported publish targets: `md`, `html`, `mdport`, `json-report`, `site`,
   `pdf`, `docx`, and `pptx`.
 - Existing publish helpers in `src/publish.rs`.
 - Existing slide parser/model in `src/slide/`.
@@ -38,7 +38,7 @@ systems, chart/media embedding, or LaTeX.
 | 01 | AST and theme contract | done | Added exported typed publication AST/theme module with built-in theme tokens and L0 contract tests. |
 | 02 | Markdown AST extraction | done | Added resolved Markdown extraction into PublicationDocument blocks/inlines with heading path metadata and L0/L1 coverage. |
 | 03 | HTML/site adoption | todo | Render HTML and static site pages from the AST with CSS theme tokens. |
-| 04 | JSON/Pebble/PDF adoption | todo | Feed report summaries, Pebble chunks, and PDF text output from AST sections. |
+| 04 | JSON/Mdport/PDF adoption | todo | Feed report summaries, Mdport chunks, and PDF text output from AST sections. |
 | 05 | DOCX theme mapping | todo | Map AST/theme into DOCX styles, numbering, fonts, colors, and spacing. |
 | 06 | PPTX theme mapping | todo | Map slide AST/theme into PPTX text, bullets, dimensions, fonts, colors, and notes. |
 | 07 | Theme config surface | todo | Add built-in theme selection via CLI/config with manifest/report evidence. |

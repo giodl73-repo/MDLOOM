@@ -825,7 +825,7 @@ COMPILE OPTIONS
         --progress                Show a running compiled/total count
         --output-dir <DIR>        Write compiled files under DIR
         --root <DIR>              Root directory for md:// URI resolution
-        --target <TARGET>         md (default) | html | pebble | json-report | site | pdf | docx | pptx
+        --target <TARGET>         md (default) | html | mdport | json-report | site | pdf | docx | pptx
         --tag <TAG>               Only compile source files with this tag
         --op <OP>                 Only compile source files with this operation tag
         --content-tag <TAG>       Only compile source files with this content tag
@@ -838,9 +838,9 @@ COMPILE OPTIONS
   including headings, lists, tables, links, task lists, strikethrough, and fenced
   code; raw HTML is escaped rather than passed through.
 
-  `pebble` writes Pebbles (`pebble.v1`): compact JSON context
+  `mdport` writes Mdports (`mdport.v1`): compact JSON context
   transfer artifacts optimized for agents rather than human presentation. A
-  pebble records source path, title, format, resolved dependency refs, and
+  mdport records source path, title, format, resolved dependency refs, and
   section chunks with stable IDs, heading paths, source line numbers, and resolved
   Markdown text. CROP may emit the same schema for view/corpus slices so MDLOOM
   and CROP can share provenance-bearing context packs. `--watch` currently
@@ -850,7 +850,7 @@ COMPILE OPTIONS
   compile/report bundle for CI, agents, and integrations. It records source path,
   title, artifact summary, source metadata, resolved Markdown, section summaries,
   dependency refs, diagnostics, and compile counts. It is intentionally more
-  verbose than Pebble and does not replace Pebble's compact retrieval schema.
+  verbose than Mdport and does not replace Mdport's compact retrieval schema.
 
   `site` compiles source trees to static HTML pages, a navigation `index.html`,
   and a `mdloom-site.json` manifest with page/source/output/diagnostic metadata.
@@ -878,7 +878,7 @@ COMPILE OPTIONS
 
   Non-watch compile runs write `.mdloom/artifacts.json` with schema version,
   config root, generation timestamp, and one artifact entry per source. Each
-  entry records source path, output path, target (`md`, `html`, `pebble`,
+  entry records source path, output path, target (`md`, `html`, `mdport`,
   `json-report`, `site`, `pdf`, future publish backends), status (`written`,
   `cached`, `up_to_date`, `error`), resolved
   directive count, cache usage, and diagnostics. The manifest is provenance for

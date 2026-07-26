@@ -31,7 +31,7 @@ for CI, agents, and integrations.
 ## Pre-implementation scout
 
 - Inspect compile result fields available after Markdown resolution.
-- Compare with Pebble output to avoid duplicating its retrieval-focused schema.
+- Compare with Mdport output to avoid duplicating its retrieval-focused schema.
 - Define `mdloom.publish.json_report.v1` before writing code.
 
 ## Deliverables checklist
@@ -53,7 +53,7 @@ for CI, agents, and integrations.
 
 ## Non-goals
 
-- Do not replace Pebble.
+- Do not replace Mdport.
 - Do not add remote upload, CI annotations, or dashboards.
 - Do not serialize unstable internal Rust structs directly.
 

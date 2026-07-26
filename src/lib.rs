@@ -63,7 +63,7 @@ pub mod frontmatter;
 pub mod layout;
 pub mod lint;
 pub mod math;
-mod pebble_output;
+mod mdport_output;
 pub mod publication;
 pub mod publish;
 pub mod runner;

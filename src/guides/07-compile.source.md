@@ -47,7 +47,7 @@ mdloom compile src/guides/ --output-dir docs/guides/
 mdloom compile src/guides/math.source.md --target html -o docs/guides/math.html
 
 # Compile one source file into a compact AI/context transfer artifact
-mdloom compile src/guides/math.source.md --target pebble -o context/math.pebble.json
+mdloom compile src/guides/math.source.md --target mdport -o context/math.mdport.json
 
 # Compile one source file into a machine-readable report bundle
 mdloom compile src/guides/math.source.md --target json-report -o reports/math.mdloom-report.json
@@ -79,9 +79,9 @@ code. Raw HTML in source Markdown is escaped rather than passed through, so the
 publish backend stays safe by default. Watch mode remains Markdown-only until
 target-aware watch manifests are modeled.
 
-`--target pebble` writes **Pebbles**: compact `pebble.v1` JSON
+`--target mdport` writes **Mdports**: compact `mdport.v1` JSON
 documents optimized for agents, retrieval, and transfer rather than visual
-presentation. A pebble contains the source path, title, resolved dependency refs,
+presentation. A mdport contains the source path, title, resolved dependency refs,
 and section chunks with stable IDs, heading paths, line numbers, and resolved
 Markdown text. The schema is intentionally CROP-friendly: CROP can emit the same
 shape for view packs or corpus slices, while MDLOOM emits it for compiled source
@@ -91,7 +91,7 @@ documents.
 machine-readable compile bundle for CI, agents, and integrations. It includes
 artifact summary, resolved Markdown, section summaries, source metadata,
 dependency refs, diagnostics, and compile counts. It is intentionally more
-verbose than Pebble and is not a replacement for Pebble's compact retrieval
+verbose than Mdport and is not a replacement for Mdport's compact retrieval
 format.
 
 `--target site` compiles a source tree to static HTML pages and writes a

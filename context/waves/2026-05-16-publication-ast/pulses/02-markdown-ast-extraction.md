@@ -25,7 +25,7 @@ to support existing publish backend claims.
 
 ## Pre-implementation scout
 
-- Compare current HTML, JSON report, PDF, DOCX, and Pebble Markdown parsing.
+- Compare current HTML, JSON report, PDF, DOCX, and Mdport Markdown parsing.
 - Identify block types currently supported by all or most backends.
 - Decide how to preserve heading IDs and paths.
 

@@ -13,7 +13,7 @@ MDLOOM now supports a scoped publish backend family behind `mdloom compile`:
 - `pptx` for native editable PowerPoint OOXML decks from explicit
   `.slides.source.md` inputs.
 
-The baseline targets `md`, `html`, and `pebble` remain intact. LaTeX stayed
+The baseline targets `md`, `html`, and `mdport` remain intact. LaTeX stayed
 deferred.
 
 ## Shipped pulses
@@ -51,8 +51,8 @@ named in the pulse. The final PPTX pulse also ran:
   usefulness but not OOXML package correctness.
 - PPTX must remain slide-source-driven. Rejecting arbitrary prose keeps deck
   generation intentional and prevents accidental shallow conversions.
-- JSON report and Pebble serve different jobs: JSON report is verbose for CI and
-  integrations; Pebble stays compact for retrieval/context transfer.
+- JSON report and Mdport serve different jobs: JSON report is verbose for CI and
+  integrations; Mdport stays compact for retrieval/context transfer.
 
 ## Carry-forwards
 

@@ -28,8 +28,8 @@ existing compile graph.
 
 ## Pre-implementation scout
 
-- Confirm current target support is `md`, `html`, and `pebble`.
-- Confirm HTML and Pebble docs describe their scoped support.
+- Confirm current target support is `md`, `html`, and `mdport`.
+- Confirm HTML and Mdport docs describe their scoped support.
 - Confirm future targets should include JSON report bundle, static site, PDF,
   DOCX, and PPTX while deferring LaTeX.
 
