@@ -8,6 +8,22 @@
 [ROLES](https://github.com/giodl73-repo/ROLES), the `.roles` convention for
 repository-local review panels.
 
+## MD family
+
+MDLOOM is the build and publication layer in the MD family:
+
+```text
+Markdown → MDPATH → MDCROP → MDLOOM → MDPORT
+             address    select     build      transfer
+```
+
+| Repo | Responsibility |
+|------|----------------|
+| [MDPATH](https://github.com/giodl73-repo/MDPATH) | Stable `md://` addresses for Markdown elements. |
+| [MDCROP](https://github.com/giodl73-repo/MDCROP) | Corpus indexing, graph selection, and bounded context. |
+| **MDLOOM** | Validation, compilation, rendering, and publication. |
+| [MDPORT](https://github.com/giodl73-repo/MDPORT) | Compact portable `mdport.v1` records. |
+
 MDLOOM is a full Markdown compilation toolchain — LaTeX math, ASCII slide decks,
 live dashboards, tree diagrams, sparkline charts, cross-referenced guides — all
 authored in plain text, compiled to terminal-perfect output.
