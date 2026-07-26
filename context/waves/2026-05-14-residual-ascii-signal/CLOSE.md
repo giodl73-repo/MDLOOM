@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Closed the remaining proof-owned ASCII detector noise from the prior corpus
+Closed the remaining mdloom-owned ASCII detector noise from the prior corpus
 pass:
 
 - `ascii_barchart_*` dropped to zero by excluding non-chart row shapes and
@@ -15,7 +15,7 @@ pass:
 
 ## Corpus Result
 
-MAXIM (`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`):
+MAXIM (`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`):
 
 - Before wave: 1142 warnings, 0 errors.
 - After wave: 1053 warnings, 0 errors.

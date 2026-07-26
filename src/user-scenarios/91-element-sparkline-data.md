@@ -4,11 +4,11 @@ A sparkline rendered from a comma-separated number list passed via
 `value="..."`. The element's parser splits on commas and renders one glyph
 per number.
 
-<!-- proof:compiled from="proof:element" uri="inline" -->
+<!-- mdloom:compiled from="mdloom:element" uri="inline" -->
 ```
 ▂▃▁▆▇██▂▃▁▆▇██▂▃▁▆▇█
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-For sparklines driven from a data table, wrap `proof:element kind=sparkline
-field=col` inside a `proof:row source=md://...` (see US-95).
+For sparklines driven from a data table, wrap `mdloom:element kind=sparkline
+field=col` inside a `mdloom:row source=md://...` (see US-95).

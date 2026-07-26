@@ -7,7 +7,7 @@ literal-first source generation.
 
 ## Changes
 
-- Added advisory block inventory to `proof_lib::backfill`.
+- Added advisory block inventory to `mdloom_lib::backfill`.
 - Reports now include aggregate and per-file block counts for:
   - prose
   - fenced blocks

@@ -8,7 +8,7 @@ Reduced runner/reporting duplication introduced by actual file counts:
   `Runner::run_with_count()`.
 - `run_with_count()` collects matching files once, returns the selected count,
   and lints that same file set in parallel.
-- `proof check` and `proof stats` now use the one-pass API for directory inputs.
+- `mdloom check` and `mdloom stats` now use the one-pass API for directory inputs.
 
 ## Tests Reused
 

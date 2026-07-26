@@ -76,7 +76,7 @@ fn reject_non_markdown_global_format(command: &str, globals: &GlobalOptions) -> 
     match globals.format() {
         "text" | "markdown" => Ok(()),
         other => bail!(
-            "proof {} is Markdown-only; use text/markdown output format, got {:?}",
+            "mdloom {} is Markdown-only; use text/markdown output format, got {:?}",
             command,
             other
         ),
@@ -92,12 +92,12 @@ fn build_crop_page_args(command: &str, args: Args) -> Result<Vec<String>> {
     let page = args.page;
     if page.root.is_some() && page.view.is_some() {
         bail!(
-            "proof {} accepts either --root or --view, not both",
+            "mdloom {} accepts either --root or --view, not both",
             command
         );
     }
     if page.root.is_none() && page.view.is_none() {
-        bail!("proof {} requires --root or --view", command);
+        bail!("mdloom {} requires --root or --view", command);
     }
 
     let mut crop_args = vec![command.to_string()];

@@ -1,12 +1,12 @@
-# proof tree — ASCII Tree Composer and Validator
+# mdloom tree — ASCII Tree Composer and Validator
 
-> **Status**: ✅ Implemented — `src/tree/`. Kinds: dirtree, org, taxonomy, dependency, outline, decision. Schema-driven from md:// table or JSON sources. Inline body support: numbered bullets for `outline` (auto-indented by dot depth); dash bullets for `org`/`taxonomy`/`dependency` (auto-detected indent unit, proper `│` continuation). `proof tree generate` and `proof tree verify` CLI commands live.
+> **Status**: ✅ Implemented — `src/tree/`. Kinds: dirtree, org, taxonomy, dependency, outline, decision. Schema-driven from md:// table or JSON sources. Inline body support: numbered bullets for `outline` (auto-indented by dot depth); dash bullets for `org`/`taxonomy`/`dependency` (auto-detected indent unit, proper `│` continuation). `mdloom tree generate` and `mdloom tree verify` CLI commands live.
 
 ---
 
 ## What it is
 
-`proof tree` handles ASCII art trees across all kinds: directory structures,
+`mdloom tree` handles ASCII art trees across all kinds: directory structures,
 org charts, taxonomies, dependency graphs, and more. It does three things:
 
 1. **Validate** — check connector grammar, indentation consistency, and kind-specific rules
@@ -107,18 +107,18 @@ src/
 | Path existence | `tree_path_missing` | (opt-in) resolved path does not exist on disk |
 | Duplicate entry | `tree_duplicate` | Same name appears twice under same parent |
 
-**Note on false positives:** The tree validator only runs inside code blocks tagged with a `dirtree` info string (e.g. ` ```dirtree `) or identified as a tree by a `proof:tree` directive. It does not scan arbitrary code blocks, so `│` characters inside `ascii_box` diagrams or other fenced blocks do not trigger `tree_orphan`.
+**Note on false positives:** The tree validator only runs inside code blocks tagged with a `dirtree` info string (e.g. ` ```dirtree `) or identified as a tree by a `mdloom:tree` directive. It does not scan arbitrary code blocks, so `│` characters inside `ascii_box` diagrams or other fenced blocks do not trigger `tree_orphan`.
 
 ### Filesystem validation
 
-With `--verify-paths` (or `verify_paths = true` in proof.toml), proof resolves
+With `--verify-paths` (or `verify_paths = true` in mdloom.toml), mdloom resolves
 each entry against the filesystem root:
 
 ```bash
-proof tree check --verify-paths --root /project figures/structure.md
+mdloom tree check --verify-paths --root /project figures/structure.md
 ```
 
-For each directory or file in the tree, proof checks whether `{root}/{path}` exists.
+For each directory or file in the tree, mdloom checks whether `{root}/{path}` exists.
 Missing entries emit `tree_path_missing` errors.
 
 ### Auto-fixable
@@ -134,7 +134,7 @@ Missing entries emit `tree_path_missing` errors.
 ### Generation from filesystem
 
 ```bash
-proof tree generate --kind dirtree --root /project/src --max-depth 3
+mdloom tree generate --kind dirtree --root /project/src --max-depth 3
 ```
 
 Walks the filesystem from `--root`, applies `--max-depth`, `--exclude` globs,
@@ -154,21 +154,21 @@ and emits a formatted dirtree. Options:
 
 ## Other tree kinds — source schema and generation
 
-For non-dirtree kinds, the source data lives at an `md://` address. Proof reads the
+For non-dirtree kinds, the source data lives at an `md://` address. Mdloom reads the
 source, validates it against the kind's schema, and generates the tree.
 
 ### Field mapping — flexible, not rigid
 
-Proof does **not** require specific column names. Field binding follows
-**[MAPPING-SPEC.md](./mapping-spec.md)** — the shared system for all proof
+Mdloom does **not** require specific column names. Field binding follows
+**[MAPPING-SPEC.md](./mapping-spec.md)** — the shared system for all mdloom
 directives. Summary below; the full spec covers query parameters, row selectors,
 type coercion, and numeric formatting.
 
-Proof uses a field mapping strategy:
+Mdloom uses a field mapping strategy:
 
 1. **Explicit mapping** — you declare which field/column maps to which role via
-   directive attributes or `proof tree generate` flags.
-2. **Auto-detection** — if no mapping is provided, proof searches for common names
+   directive attributes or `mdloom tree generate` flags.
+2. **Auto-detection** — if no mapping is provided, mdloom searches for common names
    (case-insensitive) in the source table's headers or JSON keys.
 
 This means your existing data works as-is, with column names like `Employee`/`Manager`
@@ -187,13 +187,13 @@ For Wave 3, **markdown tables** and **inline JSON** are the primary formats.
 ### Directive syntax (compile mode)
 
 ```
-```proof:tree kind=org name="Employee" parent="Manager" label="Title"
+```mdloom:tree kind=org name="Employee" parent="Manager" label="Title"
 md://org/team.md#:table:0
 ```
 ```
 
 ```
-```proof:tree kind=org format=json name="full_name" parent="reports_to" label="title"
+```mdloom:tree kind=org format=json name="full_name" parent="reports_to" label="title"
 md://org/team.json
 ```
 ```
@@ -201,18 +201,18 @@ md://org/team.json
 ### CLI syntax
 
 ```bash
-proof tree generate --kind org \
+mdloom tree generate --kind org \
     --name "Employee" --parent "Manager" --label "Title" \
     md://org/team.md#:table:0
 
-proof tree generate --kind org --format json \
+mdloom tree generate --kind org --format json \
     --name "full_name" --parent "reports_to" \
     md://org/team.json
 ```
 
 ### Auto-detection defaults per kind
 
-If no field mapping is provided, proof tries these names (case-insensitive, first match wins):
+If no field mapping is provided, mdloom tries these names (case-insensitive, first match wins):
 
 | Kind | name field | parent field | extra fields |
 |------|-----------|--------------|-------------|
@@ -322,18 +322,18 @@ Kingdom: Animals
 ```markdown
 | Package | Depends On | Version |
 |---------|-----------|---------|
-| myapp | proof | 0.5.0 |
+| myapp | mdloom | 0.5.0 |
 | myapp | mdpath | 0.5.0 |
-| proof | mdpath | 0.5.0 |
-| proof | clap | 4.x |
-| proof | serde | 1.x |
+| mdloom | mdpath | 0.5.0 |
+| mdloom | clap | 4.x |
+| mdloom | serde | 1.x |
 | mdpath | thiserror | 2.x |
 ```
 
 **Generated tree** (rooted at `myapp`):
 ```
 myapp
-├── proof 0.5.0
+├── mdloom 0.5.0
 │   ├── mdpath 0.5.0
 │   │   └── thiserror 2.x
 │   ├── clap 4.x
@@ -353,10 +353,10 @@ myapp
 **Source schema** (heading structure of a markdown file):
 
 ```bash
-proof tree generate --kind outline md://docs/spec.md
+mdloom tree generate --kind outline md://docs/spec.md
 ```
 
-Proof parses the heading structure of the target file and produces an outline tree.
+Mdloom parses the heading structure of the target file and produces an outline tree.
 No explicit source table needed — the headings ARE the source.
 
 **Generated tree** (from a file with H1/H2/H3):
@@ -385,14 +385,14 @@ Spec Document
 | Node | Condition | Yes → | No → |
 |------|-----------|-------|------|
 | root | Is the file .md? | parse | skip |
-| parse | Has proof: directive? | compile | check-only |
+| parse | Has mdloom: directive? | compile | check-only |
 | compile | DaVinci pin exists? | validate | embed |
 ```
 
 **Generated tree:**
 ```
 Is the file .md?
-├── Yes → Has proof: directive?
+├── Yes → Has mdloom: directive?
 │         ├── Yes → DaVinci pin exists?
 │         │         ├── Yes → validate
 │         │         └── No  → embed
@@ -412,34 +412,34 @@ Is the file .md?
 
 ```bash
 # Validate a tree code block in a markdown file
-proof tree check [--kind dirtree|org|taxonomy|...] [--verify-paths] [--root <dir>] <uri>
+mdloom tree check [--kind dirtree|org|taxonomy|...] [--verify-paths] [--root <dir>] <uri>
 
 # Auto-fix connector and indentation errors
-proof tree fix <uri>
+mdloom tree fix <uri>
 
 # Generate a tree from filesystem
-proof tree generate --kind dirtree --root <dir> [options]
+mdloom tree generate --kind dirtree --root <dir> [options]
 
 # Generate a tree from source data at md:// URI
-proof tree generate --kind org|taxonomy|dependency|outline|decision <source-uri>
+mdloom tree generate --kind org|taxonomy|dependency|outline|decision <source-uri>
 
 # Output to file
-proof tree generate --kind dirtree --root /project -o docs/structure.md
+mdloom tree generate --kind dirtree --root /project -o docs/structure.md
 ```
 
 ---
 
-## The `proof:tree` directive (compile mode)
+## The `mdloom:tree` directive (compile mode)
 
-In source documents, use `proof:tree` to embed a live-generated tree:
+In source documents, use `mdloom:tree` to embed a live-generated tree:
 
 ````markdown
-```proof:tree kind=dirtree root=src/ max-depth=3 exclude=target/**
+```mdloom:tree kind=dirtree root=src/ max-depth=3 exclude=target/**
 ```
 ````
 
 ````markdown
-```proof:tree kind=org
+```mdloom:tree kind=org
 md://docs/team.md#engineering-org:table:0
 ```
 ````
@@ -447,13 +447,13 @@ md://docs/team.md#engineering-org:table:0
 The compiler resolves the source, generates the tree, and embeds it with traceability:
 
 ```markdown
-<!-- proof:compiled from="proof:tree kind=dirtree root=src/" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dirtree root=src/" -->
 ```
 src/
 ├── main.rs
 └── lib.rs
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ```
 
 ### Directive attributes
@@ -469,15 +469,15 @@ src/
 | `sort` | dirtree, org | Sort order: `name`, `alpha`, `mtime` |
 | `dirs-first` | dirtree | Directories before files (default: true) |
 
-**Attribute naming convention:** Directive attributes use hyphenated names (e.g. `max-depth`). The corresponding `proof.toml` keys use underscores (e.g. `max_depth`). CLI flags use `--max-depth`. This follows the same convention as all other proof directives.
+**Attribute naming convention:** Directive attributes use hyphenated names (e.g. `max-depth`). The corresponding `mdloom.toml` keys use underscores (e.g. `max_depth`). CLI flags use `--max-depth`. This follows the same convention as all other mdloom directives.
 
-**Canonical triple for boolean options** (e.g. path verification): directive attribute = `verify-paths`, CLI flag = `--verify-paths`, proof.toml key = `verify_paths`.
+**Canonical triple for boolean options** (e.g. path verification): directive attribute = `verify-paths`, CLI flag = `--verify-paths`, mdloom.toml key = `verify_paths`.
 
 ---
 
 ## Cache key for tree generation
 
-When `proof compile` processes a `proof:tree` directive:
+When `mdloom compile` processes a `mdloom:tree` directive:
 
 - **dirtree from filesystem**: cache key includes directory content hash (mtime-based)
 - **generated from md:// source**: cache key = Tier 2 resolve_key of the source URI
@@ -538,7 +538,7 @@ regeneration on the next compile.
 
 ## See also
 
-- [Compile Spec](./compile-spec.md) — `proof:tree` directive in compile mode
+- [Compile Spec](./compile-spec.md) — `mdloom:tree` directive in compile mode
 - [Layout Spec](./layout-spec.md) — composing multiple trees side by side
 - [MDPATH](../../mdpath/design/SPEC.md) — `md://` URI scheme for source data
 
@@ -552,5 +552,5 @@ regeneration on the next compile.
 - **F86** (root detection): In inline body, `root:` prefix declares the root node. If absent, the first non-indented, non-empty line is treated as the root. If all lines are indented, emit COMPILE-002.
 - **F89** (org vs dependency): `org` and `dependency` produce identical ASCII output. The distinction is semantic intent: `org` for hierarchy (A manages B), `dependency` for dependency (A requires B). Future: may add `→` arrows for dependency kind.
 - **F90** (cycle detection): Circular references (A parent=B, B parent=A) are detected during `build_dfs_tree`. Detected cycles skip the cyclic child and emit a COMPILE-002 warning with the cycle path. No infinite loop.
-- **F91** (outline vs proof:ol): `proof:tree kind=outline` renders author-supplied numbers verbatim (pass-through). `proof:ol` auto-generates sequential decimal numbers. Use `outline` when the author controls numbering; use `proof:ol` when proof should generate it.
+- **F91** (outline vs mdloom:ol): `mdloom:tree kind=outline` renders author-supplied numbers verbatim (pass-through). `mdloom:ol` auto-generates sequential decimal numbers. Use `outline` when the author controls numbering; use `mdloom:ol` when mdloom should generate it.
 

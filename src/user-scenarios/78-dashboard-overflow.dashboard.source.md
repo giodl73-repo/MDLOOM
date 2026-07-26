@@ -6,7 +6,7 @@ dashboard:
     main: { x: 0, y: 0, width: 40, height: 4 }
 ---
 
-```proof:region name=main
+```mdloom:region name=main
 Line 1
 Line 2
 Line 3
@@ -16,4 +16,4 @@ Line 6 — even more overflow
 ```
 
 Demonstrates DASHBOARD-005 overflow warning — the region declares height=4
-but the body has 6 lines. Proof clips and reports.
+but the body has 6 lines. Mdloom clips and reports.

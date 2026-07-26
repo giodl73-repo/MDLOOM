@@ -4,9 +4,9 @@ use crate::slide::{FooterMode, Slide, SlideLayout, SlideMeta, SlideTheme};
 // Body stub (Wave 2 — completed in Wave 3)
 // ─────────────────────────────────────────────────────────
 
-/// Render body content — dispatches proof: directives, passes literal lines through.
-/// Handles: proof:bullets, proof:centered, proof:quote, proof:callout, proof:divider, proof:stat.
-/// proof:notes blocks are excluded from output (SL-5).
+/// Render body content — dispatches mdloom: directives, passes literal lines through.
+/// Handles: mdloom:bullets, mdloom:centered, mdloom:quote, mdloom:callout, mdloom:divider, mdloom:stat.
+/// mdloom:notes blocks are excluded from output (SL-5).
 ///
 /// Warnings (SLIDE-001 max-bullets, SLIDE-007 max-depth) are discarded — callers
 /// who need them should use [`render_body_lines_with_warnings`].
@@ -18,7 +18,7 @@ pub fn render_body_lines(body: &str, width: usize) -> Vec<String> {
 
 /// Same as [`render_body_lines`] but accepts an explicit [`BulletConfig`]
 /// (so `max_bullets`/`max_depth` from slide front-matter take effect) and
-/// returns the warnings produced by `proof:bullets` rendering.
+/// returns the warnings produced by `mdloom:bullets` rendering.
 pub fn render_body_lines_with_warnings(
     body: &str,
     width: usize,
@@ -38,12 +38,12 @@ pub fn render_body_lines_with_warnings(
     while i < lines.len() {
         let line = lines[i].trim();
 
-        // proof:notes — skip entire block until blank line (SL-5).
-        // Guard: only matches bare "proof:notes" directive, not prose containing the phrase.
-        // A line must be EXACTLY "proof:notes" (or "proof:notes" with only trailing spaces)
-        // to trigger the skip. This prevents "proof:notes are important" from being silently
+        // mdloom:notes — skip entire block until blank line (SL-5).
+        // Guard: only matches bare "mdloom:notes" directive, not prose containing the phrase.
+        // A line must be EXACTLY "mdloom:notes" (or "mdloom:notes" with only trailing spaces)
+        // to trigger the skip. This prevents "mdloom:notes are important" from being silently
         // consumed.
-        if line == "proof:notes" {
+        if line == "mdloom:notes" {
             i += 1;
             while i < lines.len() && !lines[i].trim().is_empty() {
                 i += 1;
@@ -52,13 +52,13 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:bullets — collect lines until blank or next directive
-        if line.starts_with("proof:bullets") {
+        // mdloom:bullets — collect lines until blank or next directive
+        if line.starts_with("mdloom:bullets") {
             i += 1;
             let mut bullet_lines = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 bullet_lines.push_str(lines[i]);
                 bullet_lines.push('\n');
@@ -70,13 +70,13 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:centered — next non-empty lines until blank
-        if line.starts_with("proof:centered") {
+        // mdloom:centered — next non-empty lines until blank
+        if line.starts_with("mdloom:centered") {
             i += 1;
             let mut text = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 text.push_str(lines[i]);
                 text.push('\n');
@@ -86,8 +86,8 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:callout style=X — collect content
-        if line.starts_with("proof:callout") {
+        // mdloom:callout style=X — collect content
+        if line.starts_with("mdloom:callout") {
             let style_str = line
                 .split("style=")
                 .nth(1)
@@ -98,7 +98,7 @@ pub fn render_body_lines_with_warnings(
             let mut text = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 text.push_str(lines[i]);
                 text.push('\n');
@@ -108,8 +108,8 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:divider style=X
-        if line.starts_with("proof:divider") {
+        // mdloom:divider style=X
+        if line.starts_with("mdloom:divider") {
             let style_str = line
                 .split("style=")
                 .nth(1)
@@ -121,13 +121,13 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:right — right-align a block of text
-        if line == "proof:right" {
+        // mdloom:right — right-align a block of text
+        if line == "mdloom:right" {
             i += 1;
             let mut text = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 text.push_str(lines[i]);
                 text.push('\n');
@@ -137,13 +137,13 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:numbered-list (primary) / proof:ol (short-form alias) — ordered list
-        if line == "proof:numbered-list" || line == "proof:ol" {
+        // mdloom:numbered-list (primary) / mdloom:ol (short-form alias) — ordered list
+        if line == "mdloom:numbered-list" || line == "mdloom:ol" {
             i += 1;
             let mut text = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 text.push_str(lines[i]);
                 text.push('\n');
@@ -153,8 +153,8 @@ pub fn render_body_lines_with_warnings(
             continue;
         }
 
-        // proof:quote attribution="..."
-        if line.starts_with("proof:quote") {
+        // mdloom:quote attribution="..."
+        if line.starts_with("mdloom:quote") {
             let attr = line
                 .split("attribution=")
                 .nth(1)
@@ -163,7 +163,7 @@ pub fn render_body_lines_with_warnings(
             let mut text = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 text.push_str(lines[i]);
                 text.push('\n');
@@ -383,7 +383,7 @@ fn separator(width: usize) -> String {
 // ─────────────────────────────────────────────────────────
 
 /// `title` layout — title + subtitle + author + date, all vertically and
-/// horizontally centered (compositor-driven, not proof:centered directive).
+/// horizontally centered (compositor-driven, not mdloom:centered directive).
 pub fn render_title(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let w = meta.width;
     let h = meta.height;
@@ -682,7 +682,7 @@ fn parse_comparison_body(body: &str) -> ComparisonBody {
 ///
 /// Caption text is read from the slide's `subtitle` field. Authors set it via
 /// the slide front-matter `subtitle: "..."` attribute or via the inline form
-/// (`proof:slide layout=content-caption title="..." subtitle="..."`).
+/// (`mdloom:slide layout=content-caption title="..." subtitle="..."`).
 /// If no subtitle is given the caption strip stays present but blank — keeping
 /// vertical alignment consistent across slides in a deck.
 pub fn render_content_caption(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
@@ -807,7 +807,7 @@ fn split_two_column(body: &str) -> (String, String) {
 
 /// `section` layout — compositor-driven centering. Title and subtitle
 /// centered both vertically and horizontally. Authors cannot override
-/// (use `blank` layout with proof:centered for custom alignment).
+/// (use `blank` layout with mdloom:centered for custom alignment).
 pub fn render_section(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let w = meta.width;
     let h = meta.height;
@@ -843,7 +843,7 @@ pub fn render_section(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 }
 
 /// `stats` layout — large numbers with labels, centered.
-/// Uses its own dedicated renderer (NOT proof:columns).
+/// Uses its own dedicated renderer (NOT mdloom:columns).
 /// SL-3 does not apply — column widths = floor(width/count), remainder to rightmost.
 pub fn render_stats(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
     let w = meta.width;
@@ -940,7 +940,7 @@ pub fn render_slide(slide: &Slide, meta: &SlideMeta) -> Vec<String> {
 }
 
 /// Render a slide and return both the rendered lines and any bullet-list warnings
-/// (SLIDE-001 max-bullets, SLIDE-007 max-depth) collected from `proof:bullets`
+/// (SLIDE-001 max-bullets, SLIDE-007 max-depth) collected from `mdloom:bullets`
 /// directives in the slide body.
 ///
 /// `BulletConfig` is derived from `meta.max_bullets` / `meta.max_depth` so authors
@@ -1013,7 +1013,7 @@ pub fn collect_section_titles(all_slides: &[crate::slide::Slide]) -> Vec<String>
 ///
 /// The slide's own body content is intentionally ignored — the bullet list
 /// always comes from the deck. Authors who need a manual list should use
-/// `layout=title-content` with an explicit `proof:bullets` block.
+/// `layout=title-content` with an explicit `mdloom:bullets` block.
 ///
 /// Title defaults to "Agenda" when the slide front-matter omits one.
 pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String]) -> Vec<String> {
@@ -1030,7 +1030,7 @@ pub fn render_agenda(slide: &Slide, meta: &SlideMeta, section_titles: &[String])
     }
     result.push(separator(w));
 
-    // Build the bullet body. `proof:bullets` would word-wrap to slide width
+    // Build the bullet body. `mdloom:bullets` would word-wrap to slide width
     // and apply hanging indents, but agenda items are typically short — a
     // direct numbered list keeps the output deterministic and easy to test.
     let body_lines: Vec<String> = if section_titles.is_empty() {
@@ -1152,7 +1152,7 @@ fn render_blank_with_warnings(
 
 /// Render a slide as one or more reveal "pages" (frames).
 ///
-/// When a `proof:bullets` block in the slide body contains `[N]` reveal-step
+/// When a `mdloom:bullets` block in the slide body contains `[N]` reveal-step
 /// prefixes, the slide is expanded into multiple pages — one per distinct step
 /// value.  Page N shows all bullets with step ≤ N (cumulative reveal).  The
 /// title/chrome is identical on every page; only the bullet visibility changes.
@@ -1208,9 +1208,9 @@ fn render_reveal_pages_title_content(
     }
     chrome.push(separator(w));
 
-    // Expand the body: split on proof:bullets, generate pages for each bullets block,
+    // Expand the body: split on mdloom:bullets, generate pages for each bullets block,
     // then reassemble. For simplicity, we treat the entire body as a single bullets
-    // block if it starts with proof:bullets; otherwise fall back to single-page.
+    // block if it starts with mdloom:bullets; otherwise fall back to single-page.
     //
     // Strategy: render_body_lines_pages returns Vec<Vec<String>> — one body rendition
     // per reveal step.  We then combine chrome + each body rendition into a full page.
@@ -1252,7 +1252,7 @@ fn render_reveal_pages_blank(
 
 /// Render body content for each reveal step, returning one `Vec<String>` per step.
 ///
-/// Scans the body for `proof:bullets` directives that contain `[N]` reveal
+/// Scans the body for `mdloom:bullets` directives that contain `[N]` reveal
 /// markers.  For each step, renders the body with that step's bullet visibility.
 /// Non-bullet directives and prose are identical across all pages.
 ///
@@ -1264,19 +1264,19 @@ pub fn render_body_lines_pages(
 ) -> Vec<Vec<String>> {
     use crate::slide::bullets::{has_reveal_markers, render_bullets_pages};
 
-    // Quick scan: does any proof:bullets block in this body have reveal markers?
+    // Quick scan: does any mdloom:bullets block in this body have reveal markers?
     // We need to find such blocks first.
     let lines: Vec<&str> = body.lines().collect();
     let mut has_any_reveal = false;
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i].trim();
-        if line.starts_with("proof:bullets") {
+        if line.starts_with("mdloom:bullets") {
             i += 1;
             let mut block = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 block.push_str(lines[i]);
                 block.push('\n');
@@ -1296,7 +1296,7 @@ pub fn render_body_lines_pages(
         return vec![out];
     }
 
-    // Full pass: for each proof:bullets block with reveal markers, collect the
+    // Full pass: for each mdloom:bullets block with reveal markers, collect the
     // pages it generates.  All other directives emit a single Vec<String> (same
     // on every page).  We then transpose: for page N, assemble the Nth slice of
     // each segment.
@@ -1316,7 +1316,7 @@ pub fn render_body_lines_pages(
     while i < lines.len() {
         let line = lines[i].trim();
 
-        if line == "proof:notes" {
+        if line == "mdloom:notes" {
             i += 1;
             while i < lines.len() && !lines[i].trim().is_empty() {
                 i += 1;
@@ -1325,12 +1325,12 @@ pub fn render_body_lines_pages(
             continue;
         }
 
-        if line.starts_with("proof:bullets") {
+        if line.starts_with("mdloom:bullets") {
             i += 1;
             let mut bullet_lines = String::new();
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 bullet_lines.push_str(lines[i]);
                 bullet_lines.push('\n');
@@ -1350,14 +1350,14 @@ pub fn render_body_lines_pages(
         // All other directives and prose: render normally into a Fixed segment
         // We render this single line/block via a mini body string
         let mut mini_body = String::new();
-        if line.starts_with("proof:") {
+        if line.starts_with("mdloom:") {
             // Consume the whole directive block
             mini_body.push_str(lines[i]);
             mini_body.push('\n');
             i += 1;
             while i < lines.len()
                 && !lines[i].trim().is_empty()
-                && !lines[i].trim().starts_with("proof:")
+                && !lines[i].trim().starts_with("mdloom:")
             {
                 mini_body.push_str(lines[i]);
                 mini_body.push('\n');
@@ -1846,7 +1846,7 @@ mod tests {
 
     #[test]
     fn ol_body_dispatch_short_alias() {
-        let body = "proof:ol\n- A\n- B";
+        let body = "mdloom:ol\n- A\n- B";
         let lines = render_body_lines(body, 40);
         assert!(lines.iter().any(|l| l.contains("1.") && l.contains('A')));
         assert!(lines.iter().any(|l| l.contains("2.") && l.contains('B')));
@@ -1854,9 +1854,9 @@ mod tests {
 
     #[test]
     fn numbered_list_body_dispatch_primary_name() {
-        // proof:numbered-list must produce identical output to proof:ol.
-        let from_long = render_body_lines("proof:numbered-list\n- A\n- B", 40);
-        let from_short = render_body_lines("proof:ol\n- A\n- B", 40);
+        // mdloom:numbered-list must produce identical output to mdloom:ol.
+        let from_long = render_body_lines("mdloom:numbered-list\n- A\n- B", 40);
+        let from_short = render_body_lines("mdloom:ol\n- A\n- B", 40);
         assert_eq!(from_long, from_short);
     }
 
@@ -1869,7 +1869,7 @@ mod tests {
         let meta = meta_80x24();
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("Too many points".into());
-        s.body_content = "proof:bullets\n- One\n- Two\n- Three\n- Four\n- Five\n- Six\n".into();
+        s.body_content = "mdloom:bullets\n- One\n- Two\n- Three\n- Four\n- Five\n- Six\n".into();
 
         let (_, warnings) = render_slide_with_warnings(&s, &meta);
         let slide001: Vec<_> = warnings.iter().filter(|w| w.code == "SLIDE-001").collect();
@@ -1886,7 +1886,7 @@ mod tests {
         let meta = meta_80x24();
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("Just right".into());
-        s.body_content = "proof:bullets\n- One\n- Two\n- Three\n- Four\n".into();
+        s.body_content = "mdloom:bullets\n- One\n- Two\n- Three\n- Four\n".into();
 
         let (_, warnings) = render_slide_with_warnings(&s, &meta);
         assert!(
@@ -1906,7 +1906,7 @@ mod tests {
         };
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("Higher threshold".into());
-        s.body_content = "proof:bullets\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n".into();
+        s.body_content = "mdloom:bullets\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n".into();
 
         let (_, warnings) = render_slide_with_warnings(&s, &meta);
         assert!(
@@ -1925,9 +1925,9 @@ mod tests {
         s.title = Some("Compare".into());
         s.body_content = concat!(
             "## col:left\n",
-            "proof:bullets\n- L1\n- L2\n- L3\n",
+            "mdloom:bullets\n- L1\n- L2\n- L3\n",
             "## col:right\n",
-            "proof:bullets\n- R1\n- R2\n- R3\n",
+            "mdloom:bullets\n- R1\n- R2\n- R3\n",
         )
         .into();
 
@@ -1943,7 +1943,7 @@ mod tests {
         );
     }
 
-    // ── render_slide_pages / proof:reveal ─────────────────
+    // ── render_slide_pages / mdloom:reveal ─────────────────
 
     fn make_reveal_slide(
         layout: SlideLayout,
@@ -1961,7 +1961,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::TitleContent,
             Some("Title"),
-            "proof:bullets\n- A\n- B\n",
+            "mdloom:bullets\n- A\n- B\n",
         );
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 1, "no reveal markers → single page");
@@ -1973,7 +1973,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::TitleContent,
             Some("Title"),
-            "proof:bullets\n- Always\n[2] - Step 2\n",
+            "mdloom:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 2, "two steps → two pages");
@@ -1987,7 +1987,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::TitleContent,
             Some("Title"),
-            "proof:bullets\n- Always\n[2] - Step 2\n",
+            "mdloom:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
         let p1 = pages[0].join("\n");
@@ -2000,7 +2000,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::TitleContent,
             Some("Title"),
-            "proof:bullets\n- Always\n[2] - Step 2\n",
+            "mdloom:bullets\n- Always\n[2] - Step 2\n",
         );
         let pages = render_slide_pages(&s, &meta);
         let p2 = pages[1].join("\n");
@@ -2015,7 +2015,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::TitleContent,
             Some("My Deck Title"),
-            "proof:bullets\n- A\n[2] - B\n[3] - C\n",
+            "mdloom:bullets\n- A\n[2] - B\n[3] - C\n",
         );
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 3);
@@ -2032,7 +2032,7 @@ mod tests {
         let (s, meta) = make_reveal_slide(
             SlideLayout::Blank,
             None,
-            "proof:bullets\n- One\n[2] - Two\n",
+            "mdloom:bullets\n- One\n[2] - Two\n",
         );
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 2);
@@ -2045,7 +2045,7 @@ mod tests {
     fn render_body_lines_pages_no_markers_single_page() {
         use crate::slide::bullets::BulletConfig;
         let cfg = BulletConfig::default();
-        let body = "proof:bullets\n- A\n- B\n";
+        let body = "mdloom:bullets\n- A\n- B\n";
         let pages = render_body_lines_pages(body, 80, &cfg);
         assert_eq!(pages.len(), 1);
     }
@@ -2234,7 +2234,7 @@ mod tests {
         );
         let mut s = blank_slide(SlideLayout::TitleContent);
         s.title = Some("T".into());
-        s.body_content = "proof:bullets\n- Always\n[2] - Step 2\n".into();
+        s.body_content = "mdloom:bullets\n- Always\n[2] - Step 2\n".into();
         let pages = render_slide_pages(&s, &meta);
         assert_eq!(pages.len(), 2);
         for (i, page) in pages.iter().enumerate() {
@@ -2256,7 +2256,7 @@ mod tests {
             ..BulletConfig::default()
         };
         // A fixed centered block, then a reveal bullets block
-        let body = "proof:centered\nIntro\n\nproof:bullets\n- Always\n[2] - Step 2\n";
+        let body = "mdloom:centered\nIntro\n\nmdloom:bullets\n- Always\n[2] - Step 2\n";
         let pages = render_body_lines_pages(body, 80, &cfg);
         assert_eq!(pages.len(), 2, "reveal block → 2 pages");
         for page in &pages {
@@ -2268,7 +2268,7 @@ mod tests {
         }
     }
 
-    // ── proof:slide layout=agenda ───────────────────────────────────────────
+    // ── mdloom:slide layout=agenda ───────────────────────────────────────────
 
     fn section_slide(idx: usize, title: &str) -> Slide {
         let mut s = blank_slide(SlideLayout::Section);

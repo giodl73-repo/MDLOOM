@@ -18,7 +18,7 @@ partially consumed CLI parser boundary.
 
 ## Validation
 
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_check_summary_file_count_honors_include_exclude`
 - `cargo test binary_config_prints_effective_cascaded_config`
 - `cargo test binary_stats_command_runs`

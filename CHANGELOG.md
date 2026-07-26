@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **proof** (formerly **glint**), in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows semantic versioning.
+All notable changes to **MDLOOM** (formerly **PROOF**, originally **glint**), in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows semantic versioning.
 
 The throughline: a tool that began as an ASCII-box width checker has grown into a four-stage document quality system — **detect → plan → fix → compile** — with stable figure addressing, invariant pinning, and a math/diagram/slide rendering pipeline on top.
 
@@ -27,16 +27,31 @@ v0.1  │ check · ASCII box / flow / tree · markdown rules              │
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-25 — *the MDLOOM release*
+
+### Changed
+
+- Renamed the product, repository, package, binary, library, directive prefix,
+  configuration file, state directory, schemas, skills, and supporting crates
+  from PROOF to MDLOOM.
+- Established `mdloom`, `mdloom-math`, and `mdloom-canvas` as the public Cargo
+  package family.
+- Removed the obsolete duplicate math implementation from the root crate;
+  MDLOOM now uses `mdloom-math` as its single implementation.
+- Removed direct Git dependencies on PEBBLE and SLICE. MDLOOM emits the stable
+  `pebble.v1` JSON contract locally and leaves artifact selection to external
+  consumers.
+
 ### Added
 
-- **Publish backend family for `proof compile`.** Added scoped targets for
+- **Publish backend family for `mdloom compile`.** Added scoped targets for
   `json-report`, `site`, `pdf`, `docx`, and `pptx` while preserving `md`, `html`,
   and `pebble` as baseline outputs.
-- **`--target json-report`** writes `proof.publish.json_report.v1` bundles with
+- **`--target json-report`** writes `mdloom.publish.json_report.v1` bundles with
   artifact summary, resolved Markdown, section metadata, source frontmatter,
   dependency refs, diagnostics, and compile counts.
 - **`--target site`** compiles source trees into local static HTML pages with
-  navigation `index.html`, `proof-site.json`, and `.proof/artifacts.json`
+  navigation `index.html`, `mdloom-site.json`, and `.mdloom/artifacts.json`
   provenance.
 - **`--target pdf`** emits deterministic dependency-free PDF artifacts from the
   resolved HTML publish output.
@@ -68,7 +83,7 @@ A 50-scenario authoring stress test (US-61..110) shook out four real bugs that t
 - **Chart-from-table parser was the *old* strict pipe parser.** `chart_data_from_table` still required `starts_with('|')` so it failed on mdpath's unbounded `a | b | c` output (parse_md_table was lenient since v0.7.0 but this site wasn't). Now delegates to parse_md_table for consistent behavior across every md:// table consumer.
 - **`kind=decision` had no inline-body dispatch.** generate_decision was wired into the source-URI arm but not the inline-body arm; an inline decision-table directive failed with "unknown tree kind 'decision'". The inline arm now also routes to generate_decision.
 - **`?count` silently dropped because split_md_query required `key=value`.** The query parser used `split_once('=')?` and bare keys like `?count` were filtered out before reaching apply_md_query. Bare keys now carry an empty value; operators that don't need one (count) work, ones that do error out cleanly.
-- **SYMBOL-SPEC overpromised proof:shape kinds.** Spec listed banner, badge, star, cloud (+ ribbon, callout-cloud, arrow examples). Code only ships banner, badge, ribbon. Spec trimmed to match what ships and now points readers at `proof figure import --shape <name>` for the 10-shape geometric roster (those live behind the figure-import path, not proof:shape).
+- **SYMBOL-SPEC overpromised mdloom:shape kinds.** Spec listed banner, badge, star, cloud (+ ribbon, callout-cloud, arrow examples). Code only ships banner, badge, ribbon. Spec trimmed to match what ships and now points readers at `mdloom figure import --shape <name>` for the 10-shape geometric roster (those live behind the figure-import path, not mdloom:shape).
 
 ### Added
 
@@ -88,17 +103,17 @@ A push to close every overpromised "✅ Implemented" status against the actual c
 
 ### Added
 
-- **Multi-line directives inside `proof:region` bodies** — `proof:chart`, `proof:tree`, `proof:row`, `proof:element`, `proof:symbol`, `proof:shape`, `proof:math` all render correctly when nested inside a dashboard region (fenceless syntax). Previously the inner directive header was kept but its body lines were dropped, so anything with inline data silently rendered as a placeholder. (Closed issue #6.)
-- **`proof:tree kind=outline` numbered-bullet inline mode** — `1. / 1.1 / 1.1.1` lines auto-indent by dot depth; trailing periods normalize at depth ≥ 1.
+- **Multi-line directives inside `mdloom:region` bodies** — `mdloom:chart`, `mdloom:tree`, `mdloom:row`, `mdloom:element`, `mdloom:symbol`, `mdloom:shape`, `mdloom:math` all render correctly when nested inside a dashboard region (fenceless syntax). Previously the inner directive header was kept but its body lines were dropped, so anything with inline data silently rendered as a placeholder. (Closed issue #6.)
+- **`mdloom:tree kind=outline` numbered-bullet inline mode** — `1. / 1.1 / 1.1.1` lines auto-indent by dot depth; trailing periods normalize at depth ≥ 1.
 - **Slide layout `content-caption`** — title + body + caption strip from `subtitle:`. Was previously a fallback to `title-content`.
 - **Slide layout `comparison`** — 2×2 quadrant grid via `## q:tl/tr/bl/br` markers, with optional `## axis:x` / `## axis:y` labels. Was previously a fallback.
-- **`proof:tree kind=decision`** — DFS with Yes/No branch labels, leaf labels for unknown targets, cycle guard. Was listed in TREE-SPEC but had no implementation.
+- **`mdloom:tree kind=decision`** — DFS with Yes/No branch labels, leaf labels for unknown targets, cycle guard. Was listed in TREE-SPEC but had no implementation.
 - **DaVinci `regex` invariant rule** — alongside the existing substring `pattern` rule. Powered by the `regex` crate.
 - **Quarter-block dither mode for figure import** — full 16-glyph 2×2 quadrant table; previously fell back to full-block. Also unbroke the `--features figure` build (37 → 0 errors).
 - **ASCII tree T-4 children-shape lint** — detects continuation `│` lines that imply a child but where the next real node sits at the same or shallower depth.
 - **md:// URI query parameters** — `?select=cols`, `?filter=col=val|col!=val|col>val|col<val`, `?count`, `?top=N`, `?skip=N`. Threaded through both URI resolution paths so every directive that reads md:// honors them.
 - **Eight new chart kinds** — `area`, `stacked-bar`, `waterfall`, `scatter`, `heatmap`, `candlestick`, `gantt`, `timeline`. `ChartPoint` extended with `extras: Vec<f64>` for multi-value kinds.
-- **Cache snapshots subsystem** — `proof cache snapshot {save|restore|list|diff|prune|deploy}`. Named compile states with integrity hash; restore is rejected with `COMPILE-004` if the manifest was tampered with.
+- **Cache snapshots subsystem** — `mdloom cache snapshot {save|restore|list|diff|prune|deploy}`. Named compile states with integrity hash; restore is rejected with `COMPILE-004` if the manifest was tampered with.
 
 ### Changed
 
@@ -107,7 +122,7 @@ A push to close every overpromised "✅ Implemented" status against the actual c
 
 ### Removed
 
-- **`proof:chart kind=sankey` removed from CHART-SPEC scope.** Proportional flow widths quantize poorly to fixed-width character cells. Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or embed an SVG via `proof:include`.
+- **`mdloom:chart kind=sankey` removed from CHART-SPEC scope.** Proportional flow widths quantize poorly to fixed-width character cells. Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or embed an SVG via `mdloom:include`.
 
 ### Tests
 
@@ -117,20 +132,20 @@ A push to close every overpromised "✅ Implemented" status against the actual c
 
 ## [0.6.0] — 2026-04-28 — *the author experience release*
 
-The focus shifts from "can proof render this?" to "does proof help you author well?" v0.6 closes the authoring loop: cross-references that update themselves, diagnostics that suggest fixes, AI-assisted invariant generation, and a full corpus-scale toolset. The slide system matures from a renderer into a presentation platform.
+The focus shifts from "can mdloom render this?" to "does mdloom help you author well?" v0.6 closes the authoring loop: cross-references that update themselves, diagnostics that suggest fixes, AI-assisted invariant generation, and a full corpus-scale toolset. The slide system matures from a renderer into a presentation platform.
 
 ### Added
 
 #### New compile directives
 
-- **`proof:chart`** — bar and line charts rendered to ASCII from a markdown table source. Supports axis labels, title, configurable width. Used inside any `.source.md` document or dashboard region.
-- **`proof:xref`** — cross-reference directive that resolves the target heading text at compile time. `uri="md://api.md#authentication"` renders as `*See: [Authentication](api.md#authentication)*`. Three formats: `inline`, `note`, `callout`. When a heading is renamed, recompile updates every `proof:xref` automatically.
-- **`proof:blockquote`** — prose document block quote with a left margin bar (`│`). Distinct from `proof:quote` (slide-only, centered); `proof:blockquote` is for document context with optional `attribution=` and `style=` (`bar` | `indented` | `double`).
-- **`proof:include pin=id`** — declare the expected DaVinci invariant ID inline on an include directive. Emits COMPILE-007 warning when no matching `[[davinci]]` entry exists in `proof.toml`, prompting `proof pin <uri> --id <id>`. When the pin exists, invariant validation runs as before.
+- **`mdloom:chart`** — bar and line charts rendered to ASCII from a markdown table source. Supports axis labels, title, configurable width. Used inside any `.source.md` document or dashboard region.
+- **`mdloom:xref`** — cross-reference directive that resolves the target heading text at compile time. `uri="md://api.md#authentication"` renders as `*See: [Authentication](api.md#authentication)*`. Three formats: `inline`, `note`, `callout`. When a heading is renamed, recompile updates every `mdloom:xref` automatically.
+- **`mdloom:blockquote`** — prose document block quote with a left margin bar (`│`). Distinct from `mdloom:quote` (slide-only, centered); `mdloom:blockquote` is for document context with optional `attribution=` and `style=` (`bar` | `indented` | `double`).
+- **`mdloom:include pin=id`** — declare the expected DaVinci invariant ID inline on an include directive. Emits COMPILE-007 warning when no matching `[[davinci]]` entry exists in `mdloom.toml`, prompting `mdloom pin <uri> --id <id>`. When the pin exists, invariant validation runs as before.
 
 #### Slide system — presentation platform
 
-- **Progressive reveal** — bullets prefixed `[N]` (N ≥ 2) are assigned to reveal step N. `proof compile` produces one canvas block per step, cumulative. The `[N]` syntax works inside any `proof:bullets` block in a `.slides.source.md` file.
+- **Progressive reveal** — bullets prefixed `[N]` (N ≥ 2) are assigned to reveal step N. `mdloom compile` produces one canvas block per step, cumulative. The `[N]` syntax works inside any `mdloom:bullets` block in a `.slides.source.md` file.
 - **Slide footer** — `footer: true` in front-matter stamps author, date, and deck title on the last row of every slide canvas. `footer-text: "Custom"` overrides the auto format.
 - **`layout=agenda`** — auto-generates a bullet list of all `layout=section` slide titles from the deck. The agenda lists section slides that appear *after* it — no manual maintenance.
 - **Slide progress bar** — `progress-bar: true` emits a `████░░░ N/M` proportional bar between the SLIDE separator and the canvas content. Outside the canvas (SL-1 invariant still holds).
@@ -138,14 +153,14 @@ The focus shifts from "can proof render this?" to "does proof help you author we
 
 #### Corpus-scale tools
 
-- **`proof status`** — one-screen corpus health summary: source count, compiled count, stale files, last compile time, cached error/warning counts, config summary. `proof check` now writes `.proof/last-check.json` after every run so `proof status` can display live diagnostic counts.
-- **`proof depends`** — reverse dependency lookup: `proof depends md://api.md#authentication` lists every `.source.md` file that references that URI. Find everything that breaks before renaming a heading or moving a figure.
-- **`proof check --unused`** — find `.md` figures that no `.source.md` references via `proof:include`, `proof:layout`, or `source=md://...`. Emits `unused_figure` warnings. Off by default (full corpus walk); enable with `--unused`.
-- **`proof check --deduplicate`** — at corpus scale, collapses repeated identical diagnostics into `42x warning [SLIDE-001]: ... in docs/slides/*.md`. Singletons still render normally.
+- **`mdloom status`** — one-screen corpus health summary: source count, compiled count, stale files, last compile time, cached error/warning counts, config summary. `mdloom check` now writes `.mdloom/last-check.json` after every run so `mdloom status` can display live diagnostic counts.
+- **`mdloom depends`** — reverse dependency lookup: `mdloom depends md://api.md#authentication` lists every `.source.md` file that references that URI. Find everything that breaks before renaming a heading or moving a figure.
+- **`mdloom check --unused`** — find `.md` figures that no `.source.md` references via `mdloom:include`, `mdloom:layout`, or `source=md://...`. Emits `unused_figure` warnings. Off by default (full corpus walk); enable with `--unused`.
+- **`mdloom check --deduplicate`** — at corpus scale, collapses repeated identical diagnostics into `42x warning [SLIDE-001]: ... in docs/slides/*.md`. Singletons still render normally.
 
 #### AI-assisted authoring
 
-- **`[ai]` config block** — configures any external AI CLI for `proof spec-generate --ai` and future commands. `command` + `args` with `{prompt}` substitution. Default: `claude -p "{prompt}"` (Claude Code). Works with `llm`, `ollama`, `aichat`, or any CLI that reads a prompt and writes a response.
+- **`[ai]` config block** — configures any external AI CLI for `mdloom spec-generate --ai` and future commands. `command` + `args` with `{prompt}` substitution. Default: `claude -p "{prompt}"` (Claude Code). Works with `llm`, `ollama`, `aichat`, or any CLI that reads a prompt and writes a response.
 
 ```toml
 [ai]
@@ -153,7 +168,7 @@ command = "claude"
 args    = ["-p", "{prompt}"]
 ```
 
-- **`proof spec-generate --ai`** — calls the configured AI CLI with the figure content and asks it to suggest `[[davinci]]` invariants. Without `--ai`, the existing static heuristic analysis runs with no dependencies.
+- **`mdloom spec-generate --ai`** — calls the configured AI CLI with the figure content and asks it to suggest `[[davinci]]` invariants. Without `--ai`, the existing static heuristic analysis runs with no dependencies.
 
 #### Schema — section rules
 
@@ -164,7 +179,7 @@ args    = ["-p", "{prompt}"]
 
 - **Did-you-mean for symbols** — `Unknown symbol 'checkmar' — did you mean 'checkmark'?` Levenshtein distance search across names + aliases.
 - **Did-you-mean for `md://` URIs** — `Reference to 'fig.md' not found — did you mean 'figs.md'?` Filesystem walk for closest match within edit distance 3.
-- **`md://` heading path validation in `proof check`** — verifies that heading slugs in URIs (e.g. `md://api.md#authentication`) resolve to real headings in the target file. Emits `md_broken_heading` when the heading doesn't exist. Previously only the file's existence was checked.
+- **`md://` heading path validation in `mdloom check`** — verifies that heading slugs in URIs (e.g. `md://api.md#authentication`) resolve to real headings in the target file. Emits `md_broken_heading` when the heading doesn't exist. Previously only the file's existence was checked.
 - **`SLIDE-001` message** — now reads `"Slide has 6 bullets — reduce to 4 or fewer (30-second rule)"` with actionable count and threshold. Default `max_bullets` changed from 6 → 4.
 - **Bullet continuation paragraphs** — indented prose under a bullet item renders with the parent bullet's content-column indent and no glyph. Does not count toward `max_bullets`.
 
@@ -174,25 +189,25 @@ args    = ["-p", "{prompt}"]
 
 ### Changed
 
-- `proof spec-generate` signature: now accepts `--ai` flag and reads `[ai]` config from `proof.toml`.
-- `proof:toc section=` parameter (already in v0.5) documented and tested with 7 dedicated tests.
+- `mdloom spec-generate` signature: now accepts `--ai` flag and reads `[ai]` config from `mdloom.toml`.
+- `mdloom:toc section=` parameter (already in v0.5) documented and tested with 7 dedicated tests.
 - All design spec status lines updated from "not yet implemented" to reflect actual implementation state.
 
 ### What it enables
 
-Authors can now write a 50-slide deck, reference 300 figures by name, and know that every cross-reference is alive, every invariant is enforced, and any heading rename ripples through automatically on the next compile. The `proof status` + `proof depends` + `proof check --unused` triad gives full corpus visibility without running the full check pipeline. The `[ai]` block turns any installed AI CLI into a first-class authoring assistant — no API keys in config, no SDK dependencies.
+Authors can now write a 50-slide deck, reference 300 figures by name, and know that every cross-reference is alive, every invariant is enforced, and any heading rename ripples through automatically on the next compile. The `mdloom status` + `mdloom depends` + `mdloom check --unused` triad gives full corpus visibility without running the full check pipeline. The `[ai]` block turns any installed AI CLI into a first-class authoring assistant — no API keys in config, no SDK dependencies.
 
 ---
 
 ## [0.5.0] — 2026-04-27 — *the rendering release*
 
-The shift from "compiles figures" to "compiles documents." A `.source.md` file can now embed real math, render trees and charts from data, and compose slide decks — all to ASCII output that survives any monospace pipeline. Multi-target watch builds and the `mdpath` Classifier extension make `proof` usable as a live build tool for any docs site, not just a CI gate.
+The shift from "compiles figures" to "compiles documents." A `.source.md` file can now embed real math, render trees and charts from data, and compose slide decks — all to ASCII output that survives any monospace pipeline. Multi-target watch builds and the `mdpath` Classifier extension make `mdloom` usable as a live build tool for any docs site, not just a CI gate.
 
 ### Added
 
-#### Math module — `proof:math`
+#### Math module — `mdloom:math`
 
-A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks expand to centered ASCII with real geometric layout — no LaTeX, no MathJax, no fonts.
+A complete ASCII math renderer. Inline `$...$` and display `mdloom:math` blocks expand to centered ASCII with real geometric layout — no LaTeX, no MathJax, no fonts.
 
 - **Tokenizer + symbol table** — Greek letters, operators, relations, set-theory symbols, arrows, calligraphic and blackboard letters. Hundreds of tokens map to single Unicode glyphs.
 - **Superscripts and subscripts** — `x^2` renders with real superscript digits; `H_2O` uses subscript digits. Multi-character exponents stack above the baseline.
@@ -203,9 +218,9 @@ A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks e
 - **Tier 2 layouts** — limits, piecewise functions, accents, multi-line equations.
 - **Render targets** — display math (centered block) and inline (single-line); both unicode-width-aware.
 
-#### `proof compile` — multi-target + watch
+#### `mdloom compile` — multi-target + watch
 
-- **`[[compile]]` config blocks** — declare any number of source/output directory pairs in `proof.toml`. Each pair can have its own `source_dir`, `output_dir`, and optional filters. `proof compile` with no args reads the table and compiles every target.
+- **`[[compile]]` config blocks** — declare any number of source/output directory pairs in `mdloom.toml`. Each pair can have its own `source_dir`, `output_dir`, and optional filters. `mdloom compile` with no args reads the table and compiles every target.
 - **`--watch`** — file watcher across all `[[compile]]` targets. Saves to `.source.md` files retrigger compile to the paired `output_dir`. Edits to a referenced figure retrigger every dependent file via the cache's reverse-dependency index.
 - **`--output-dir` / `-o-dir`** — single-flag override for ad-hoc output directory at the CLI. Mutually exclusive with `-o` (single-file output).
 - **Default output resolution** — CLI flag wins; otherwise the first matching `[[compile]]` target's `output_dir`; otherwise the source directory.
@@ -214,39 +229,39 @@ A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks e
 #### Source link checking
 
 - New checks `source_link_broken`, `source_link_missing` validate links inside `.source.md` files against the **resolved output paths**, not the source paths. A link to `../guides/01-math.md` in a source file now correctly checks against `docs/guides/01-math.md` after compile resolution.
-- Source-side link checks integrate into the `proof check` pipeline; CI can now catch broken cross-document links before compile.
+- Source-side link checks integrate into the `mdloom check` pipeline; CI can now catch broken cross-document links before compile.
 - **Prose link target verification** — `MarkdownCheck` now resolves every `[text](path.md)` link against the runner root (or file parent) and emits `link_broken_target` for missing files. Skips `http(s)://`, `mailto:`, `md://`, and `#anchor` links; ignores links inside fenced code blocks and backtick code spans. Toggle via `[markdown] check_links = false`.
 
 #### `mdpath` Classifier extension
 
-- The `mdpath` library now ships a **Classifier** trait that lets consumers extend element-kind detection without forking. `proof` registers classifiers for math blocks, slide regions, dashboard regions, and trees, so `md://` URIs with `:figure.math:`, `:figure.slide:`, `:figure.tree:` selectors resolve correctly.
+- The `mdpath` library now ships a **Classifier** trait that lets consumers extend element-kind detection without forking. `mdloom` registers classifiers for math blocks, slide regions, dashboard regions, and trees, so `md://` URIs with `:figure.math:`, `:figure.slide:`, `:figure.tree:` selectors resolve correctly.
 - Classifier registration is composable — multiple classifiers can claim non-overlapping kinds; conflicts are reported as `MDPATH-005`.
 
 #### New directives (full implementations, not just specs)
 
-- **`proof:tree`** — directory tree, taxonomy tree, or reference tree from a YAML/JSON source. Validators T-1 through T-8 enforce structure (no orphan children, consistent indent, balanced branches). 4 implementation waves complete.
-- **`proof:chart`** — ASCII bar chart, sparkline, histogram, and 5 more kinds. Three explicit categories (categorical, distribution, time-series). Reads from `[[mapping]]` data sources.
-- **`proof:slide`** — one slide per block in a `.slides.source.md` deck. Layout renderers handle title, two-column, image-with-caption, code-with-output, and bulleted forms. Wave 4 wires the deck-level compile.
-- **`proof:dashboard`** + **`proof:region`** — multi-region dashboard composition. Wave 3 region compositor places regions on a grid and equalizes row heights.
-- **`proof:element`** — named ASCII element library (boxes, banners, callouts) with image import via `image`/`resvg`. 99 tests.
-- **`proof:symbol`** — `[sym:name]` inline expansion engine and core symbol library. 39 tests.
-- **`proof:figure`** — named ASCII art figures with optional image import.
-- **`[[mapping]]`** — shared data-binding system used by `proof:row`, `proof:tree`, `proof:chart`. One mapping table, multiple consumers.
+- **`mdloom:tree`** — directory tree, taxonomy tree, or reference tree from a YAML/JSON source. Validators T-1 through T-8 enforce structure (no orphan children, consistent indent, balanced branches). 4 implementation waves complete.
+- **`mdloom:chart`** — ASCII bar chart, sparkline, histogram, and 5 more kinds. Three explicit categories (categorical, distribution, time-series). Reads from `[[mapping]]` data sources.
+- **`mdloom:slide`** — one slide per block in a `.slides.source.md` deck. Layout renderers handle title, two-column, image-with-caption, code-with-output, and bulleted forms. Wave 4 wires the deck-level compile.
+- **`mdloom:dashboard`** + **`mdloom:region`** — multi-region dashboard composition. Wave 3 region compositor places regions on a grid and equalizes row heights.
+- **`mdloom:element`** — named ASCII element library (boxes, banners, callouts) with image import via `image`/`resvg`. 99 tests.
+- **`mdloom:symbol`** — `[sym:name]` inline expansion engine and core symbol library. 39 tests.
+- **`mdloom:figure`** — named ASCII art figures with optional image import.
+- **`[[mapping]]`** — shared data-binding system used by `mdloom:row`, `mdloom:tree`, `mdloom:chart`. One mapping table, multiple consumers.
 
 #### Guides infrastructure
 
-- **`docs/guides/`** — first-class user guides authored as `.source.md` and compiled by `proof` itself (eat your own dog food). Topics: `00-getting-started`, `01-math`, `02-symbols`, `03-elements`, `04-slides`, `05-trees`, `06-dashboard`, `07-compile`, `08-lint`.
-- The guides directory is wired as a `[[compile]]` target in the repo's own `proof.toml`. Editing a guide source recompiles to `docs/guides/`.
+- **`docs/guides/`** — first-class user guides authored as `.source.md` and compiled by `mdloom` itself (eat your own dog food). Topics: `00-getting-started`, `01-math`, `02-symbols`, `03-elements`, `04-slides`, `05-trees`, `06-dashboard`, `07-compile`, `08-lint`.
+- The guides directory is wired as a `[[compile]]` target in the repo's own `mdloom.toml`. Editing a guide source recompiles to `docs/guides/`.
 
 #### Workspace setup
 
-- `proof` and `mdpath` now live as siblings under one parent (`C:/src/proof`, `C:/src/mdpath`) with `proof` consuming `mdpath` via path dependency. Cargo workspace config aligns versions and shares a target directory for faster incremental builds.
+- `mdloom` and `mdpath` now live as siblings under one parent (`C:/src/mdloom`, `C:/src/mdpath`) with `mdloom` consuming `mdpath` via path dependency. Cargo workspace config aligns versions and shares a target directory for faster incremental builds.
 - README and TUTORIAL document the two-repo clone-side-by-side install.
 
 #### Other
 
-- **`proof spec-generate`** — given a figure, suggests structural invariants (box count, required labels, minimum row count) suitable for a `[[davinci]]` block. Bootstraps pinning for a large existing corpus.
-- **`mdpath` BatchResolver** — resolve multiple `md://` URIs against the same file without reparsing. `proof compile` uses this for per-file resolution passes.
+- **`mdloom spec-generate`** — given a figure, suggests structural invariants (box count, required labels, minimum row count) suitable for a `[[davinci]]` block. Bootstraps pinning for a large existing corpus.
+- **`mdpath` BatchResolver** — resolve multiple `md://` URIs against the same file without reparsing. `mdloom compile` uses this for per-file resolution passes.
 - **31 spec scenarios** hand-simulated with findings resolved across compile, layout, cache, and snapshot specs (`design/SCENARIOS.md`).
 - **403+ tests** across SLIDE waves, **99** for element, **73** integration tests for L1 coverage gaps.
 - **Diagnostics**: `COMPILE-001..007`, `MDPATH-001..005`, `MATH-001..008`, `TREE-001..008`, `CHART-001..006`.
@@ -254,7 +269,7 @@ A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks e
 ### Changed
 
 - **Renamed `fig://` → `md://`** throughout — all specs, source code, tests, and config examples.
-- **Removed all `glint` references from source** — binary, library, config file, and emitted output. Naming history retained at the bottom of this file for reference.
+- **Removed all `mdloom` references from source** — binary, library, config file, and emitted output. Naming history retained at the bottom of this file for reference.
 - **Cargo description** updated to reflect full scope: figures, tables, links, ASCII art, and source compilation.
 - **Bottom-border tolerance** now correctly applied (was previously skipped); blank line between boxes no longer breaks box boundary detection; tree-diagram false positives suppressed.
 - **Auto-fix range extended** to ±4 box offsets; cell padding now auto-fixes for single-column boxes.
@@ -267,7 +282,7 @@ A complete ASCII math renderer. Inline `$...$` and display `proof:math` blocks e
 
 ### What it enables
 
-A docs site authored as `.source.md` files compiles to render-ready `.md` with correct math, validated figure references, alignment-checked ASCII art, and broken-link detection — all in a single watch loop. The MAXIM library (2,170 files, ~14,000 pages) is built end-to-end with `proof compile --watch`.
+A docs site authored as `.source.md` files compiles to render-ready `.md` with correct math, validated figure references, alignment-checked ASCII art, and broken-link detection — all in a single watch loop. The MAXIM library (2,170 files, ~14,000 pages) is built end-to-end with `mdloom compile --watch`.
 
 ---
 
@@ -290,20 +305,20 @@ Docs that need a slide deck, a dashboard, or a callout no longer drop down to AS
 
 ## [0.3.0] — 2026-04-25 — *the addressing release*
 
-The shift from "linter that finds problems" to "document quality system with stable handles for figures." Renamed `glint` → `proof`. Introduced the `md://` URI scheme, the `proof compile` pipeline, and DaVinci invariant pinning.
+The shift from "linter that finds problems" to "document quality system with stable handles for figures." Renamed `mdloom` → `mdloom`. Introduced the `md://` URI scheme, the `mdloom compile` pipeline, and DaVinci invariant pinning.
 
 ### Added
 
 - **`md://` URI scheme** — every figure (box, flowchart, table, chart) gets a stable handle of the form `md://path#heading:figure.kind:label`. Section-qualified addresses survive line shifts. Implemented in the `mdpath` standalone crate (56+ passing tests). Sub-selectors (`[row=X]`, `[col=Y]`, `[box=Z]`), OData query parameters (`?select`, `?filter`, `?top`, `?skip`, `?count`).
-- **`proof compile`** — markdown compiler that resolves `proof:include` and `proof:layout` directives in `.source.md`, validates DaVinci invariants on each included figure, and writes compiled output. `--check`, `--cache-status`, `--no-cache`, snapshot save/restore/diff/list/prune/deploy.
-- **`proof layout`** — ASCII collage composer. N figures arranged side-by-side with height equalization, gap insertion, unicode-width-aware columns, multi-row wrapping, label centering, top/center/bottom alignment, optional borders. Invariants L-1 through L-9.
-- **`proof resolve`** — print element content, file path, line range, label, kind for any `md://` URI.
-- **`proof pin`** + **`proof pin-list`** — register a figure with DaVinci invariants in `proof.toml`. Protection levels `warn` / `error` / `lock`. Invariant rules: `box-count`, `contains-text`, more.
+- **`mdloom compile`** — markdown compiler that resolves `mdloom:include` and `mdloom:layout` directives in `.source.md`, validates DaVinci invariants on each included figure, and writes compiled output. `--check`, `--cache-status`, `--no-cache`, snapshot save/restore/diff/list/prune/deploy.
+- **`mdloom layout`** — ASCII collage composer. N figures arranged side-by-side with height equalization, gap insertion, unicode-width-aware columns, multi-row wrapping, label centering, top/center/bottom alignment, optional borders. Invariants L-1 through L-9.
+- **`mdloom resolve`** — print element content, file path, line range, label, kind for any `md://` URI.
+- **`mdloom pin`** + **`mdloom pin-list`** — register a figure with DaVinci invariants in `mdloom.toml`. Protection levels `warn` / `error` / `lock`. Invariant rules: `box-count`, `contains-text`, more.
 - **Three-tier cache** (`THREE-TIER-CACHE.md`) and **cache snapshots** (`CACHE-SNAPSHOTS.md`) — content hash → resolution hash → render hash.
 
 ### Changed
 
-- Renamed binary `glint` → `proof`, library `glint_lib` → `proof_lib`, config `glint.toml` → `proof.toml`. Old config filename auto-migrates on first run.
+- Renamed binary `mdloom` → `mdloom`, library `mdloom_lib` → `mdloom_lib`, config `mdloom.toml` → `mdloom.toml`. Old config filename auto-migrates on first run.
 - README reframed: from "ASCII art linter" to "Document quality assurance for markdown corpora."
 
 ### What it enables
@@ -318,9 +333,9 @@ v0.1 told you what was wrong. v0.2 fixed it. Detection is mechanical (Rust); fix
 
 ### Added
 
-- **`proof check --format rich`** — diagnostics carry surrounding code blocks, expected vs. actual widths, adjacent lines. Designed as input for AI fix planners.
-- **`proof draft`** — pre-populated fix plan with errors grouped by file/region. Auto-fixable groups carry `decision: auto`; ambiguous groups carry `decision: needs_review` with rich context for AI triage.
-- **`proof fix --plan plan.json`** — applies a structured fix plan to the working tree. `--dry-run`, `--min-confidence high|medium|low`, `--no-verify`, `--no-signal-check`.
+- **`mdloom check --format rich`** — diagnostics carry surrounding code blocks, expected vs. actual widths, adjacent lines. Designed as input for AI fix planners.
+- **`mdloom draft`** — pre-populated fix plan with errors grouped by file/region. Auto-fixable groups carry `decision: auto`; ambiguous groups carry `decision: needs_review` with rich context for AI triage.
+- **`mdloom fix --plan plan.json`** — applies a structured fix plan to the working tree. `--dry-run`, `--min-confidence high|medium|low`, `--no-verify`, `--no-signal-check`.
 - **Bottom-up application order** — fixes apply highest-line-first so earlier line numbers stay valid. Stale-anchor detection skips and logs rather than corrupting.
 - **Signal-loss guard** — refuses fixes that remove non-whitespace content unless explicitly allowed.
 - **Three deterministic auto-fixes**: `link_directory` (bare text → markdown link), `box_col_pm1` (column off by one), `nested_box_col` (inner box edges aligned to outer frame). Pattern B and Pattern C detection.
@@ -349,10 +364,10 @@ The seed. A fast, schema-driven Rust linter that parsed every code block in a ma
 
 ### Added
 
-- **`proof check`** — lint files and report diagnostics. Three output formats: `text`, `json`, `rich` (planned).
+- **`mdloom check`** — lint files and report diagnostics. Three output formats: `text`, `json`, `rich` (planned).
 - **ASCII box / flow / tree validation** — `ascii_box_width`, `ascii_box_col`, `ascii_cell_padding`, `ascii_arrow_gap`, `ascii_connector_drift`. Borders that don't add up, columns that drift, missing whitespace inside cells, broken arrow bodies.
 - **Markdown structural rules** — H1 count, required H2s, duplicate-heading detection, heading order.
-- **Schema-driven, cascading `glint.toml`** — root config sets defaults; per-directory configs inherit and extend (lists additive, scalars use nearest). Effective config inspection via `proof config <path>`.
+- **Schema-driven, cascading `mdloom.toml`** — root config sets defaults; per-directory configs inherit and extend (lists additive, scalars use nearest). Effective config inspection via `mdloom config <path>`.
 - **Parallel file processing** via `rayon` — 2,000-file library completes in under 5 seconds.
 - **68 unit + integration tests**, fixtures for every check class.
 - **`design/SPEC.md`, `design/INVARIANTS.md`, `design/STYLE-GUIDE.md`** — designed-first, then implemented. Invariants I-01..I-10 specify what a "valid" ASCII box is at the parser level.
@@ -367,7 +382,7 @@ Catches silent ASCII art errors that render correctly in a monospace editor but 
 
 | Period | Binary | Library | Config |
 |--------|--------|---------|--------|
-| v0.1 — v0.2 | `glint` | `glint_lib` | `glint.toml` |
-| v0.3+ | `proof` | `proof_lib` | `proof.toml` |
+| v0.1 — v0.2 | `mdloom` | `mdloom_lib` | `mdloom.toml` |
+| v0.3+ | `mdloom` | `mdloom_lib` | `mdloom.toml` |
 
-The rename reflects the scope expansion: `glint` lints; `proof` certifies and compiles.
+The rename reflects the scope expansion: `mdloom` lints; `mdloom` certifies and compiles.

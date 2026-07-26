@@ -35,7 +35,7 @@ pub(crate) fn compile_chart(
                     format!("```\n{}\n```", rendered)
                 } else {
                     format!(
-                        "<!-- proof:compiled from=\"proof:chart\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+                        "<!-- mdloom:compiled from=\"mdloom:chart\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
                         rendered
                     )
                 }
@@ -68,7 +68,7 @@ pub(crate) fn compile_chart(
     }
 }
 
-/// Resolve a proof:chart directive's data from either an md:// table source or
+/// Resolve a mdloom:chart directive's data from either an md:// table source or
 /// the inline `label: value` directive body.
 pub(crate) fn resolve_chart_data(
     source: Option<&str>,
@@ -79,9 +79,9 @@ pub(crate) fn resolve_chart_data(
 ) -> std::result::Result<ChartData, String> {
     if let Some(uri) = source {
         let label_col = label_field
-            .ok_or_else(|| "proof:chart with source= requires label-field=".to_string())?;
+            .ok_or_else(|| "mdloom:chart with source= requires label-field=".to_string())?;
         let value_col = value_field
-            .ok_or_else(|| "proof:chart with source= requires value-field=".to_string())?;
+            .ok_or_else(|| "mdloom:chart with source= requires value-field=".to_string())?;
         let content = resolve_source_for_compile(uri, root)
             .map_err(|e| format!("chart source error: {}", e))?;
         chart_data_from_table(&content, label_col, value_col)

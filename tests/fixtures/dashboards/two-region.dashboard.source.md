@@ -8,10 +8,10 @@ dashboard:
     bottom: { x: 0, y: 3, width: 20, height: 3 }
 ---
 
-```proof:region name=top
+```mdloom:region name=top
 HEADER CONTENT
 ```
 
-```proof:region name=bottom
+```mdloom:region name=bottom
 FOOTER CONTENT
 ```

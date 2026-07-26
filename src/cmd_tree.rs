@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use colored::Colorize;
-use proof_lib::tree::dirtree::{generate as dirtree_generate, DirtreeOptions, SortOrder};
-use proof_lib::tree::schema::{
+use mdloom_lib::tree::dirtree::{generate as dirtree_generate, DirtreeOptions, SortOrder};
+use mdloom_lib::tree::schema::{
     generate_dependency, generate_org, generate_outline, generate_taxonomy, FieldMap,
 };
 use std::path::PathBuf;
@@ -116,8 +116,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
                 other => {
                     let src_uri = source.ok_or_else(|| {
                         anyhow::anyhow!(
-                            "proof tree generate --kind {} requires a source URI argument\n\
-                             Example: proof tree generate --kind org md://docs/team.md#:table:0",
+                            "mdloom tree generate --kind {} requires a source URI argument\n\
+                             Example: mdloom tree generate --kind org md://docs/team.md#:table:0",
                             other
                         )
                     })?;

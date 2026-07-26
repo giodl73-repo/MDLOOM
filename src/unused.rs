@@ -1,7 +1,7 @@
 //! Detect figure `.md` files that are never referenced by any `.source.md`.
 //!
 //! Authors create figures (typically as standalone `.md` files in a `figures/`
-//! directory) and pull them into prose via `proof:include` or `proof:layout`.
+//! directory) and pull them into prose via `mdloom:include` or `mdloom:layout`.
 //! Over time, drafts get reorganized and figures can be orphaned — they live
 //! in the repo but no source document references them. This module walks the
 //! corpus and reports those orphans as `unused_figure` warnings so the BOOK
@@ -19,10 +19,10 @@
 //!
 //! ## What counts as a reference
 //!
-//! A `.source.md` references a figure if any `proof:` directive in it carries
+//! A `.source.md` references a figure if any `mdloom:` directive in it carries
 //! an `md://` URI whose path resolves to that figure file. We honour the same
 //! extraction rules as `depends.rs` (info string, standalone body lines,
-//! `source=md://...` / `uri=md://...` attributes inside `proof:` fences).
+//! `source=md://...` / `uri=md://...` attributes inside `mdloom:` fences).
 
 use crate::diagnostic::Diagnostic;
 use std::collections::HashSet;
@@ -36,7 +36,7 @@ pub struct UnusedFigure {
 }
 
 /// Walk `root`, find every figure-candidate `.md` file, and return the ones
-/// that no `.source.md` references via `proof:include` / `proof:layout` /
+/// that no `.source.md` references via `mdloom:include` / `mdloom:layout` /
 /// `source=md://...`. Results are sorted by path.
 pub fn find_unused_figures(root: &Path) -> Vec<UnusedFigure> {
     let candidates = collect_figure_candidates(root);
@@ -130,7 +130,7 @@ fn collect_referenced_paths(root: &Path) -> HashSet<String> {
 /// Pull every `md://` URI out of a single source file and record its path
 /// component as a normalized lookup key.
 fn scan_source(content: &str, set: &mut HashSet<String>) {
-    let mut in_proof_fence = false;
+    let mut in_mdloom_fence = false;
     let mut in_other_fence = false;
 
     for line in content.lines() {
@@ -138,22 +138,22 @@ fn scan_source(content: &str, set: &mut HashSet<String>) {
 
         if trimmed.starts_with("```") {
             let info = trimmed[3..].trim();
-            if !in_proof_fence && !in_other_fence {
-                if info.starts_with("proof:") {
-                    in_proof_fence = true;
+            if !in_mdloom_fence && !in_other_fence {
+                if info.starts_with("mdloom:") {
+                    in_mdloom_fence = true;
                     extract_uri_paths(info, set);
                 } else {
                     in_other_fence = true;
                 }
-            } else if in_proof_fence {
-                in_proof_fence = false;
+            } else if in_mdloom_fence {
+                in_mdloom_fence = false;
             } else if in_other_fence {
                 in_other_fence = false;
             }
             continue;
         }
 
-        if in_proof_fence {
+        if in_mdloom_fence {
             let is_standalone_uri = trimmed.starts_with("md://");
             let has_attr = trimmed.contains("source=md://") || trimmed.contains("uri=md://");
             if is_standalone_uri || has_attr {
@@ -234,7 +234,7 @@ fn is_excluded_dir(path: &Path) -> bool {
         let s = c.as_os_str().to_string_lossy();
         matches!(
             s.as_ref(),
-            "node_modules" | ".git" | "target" | ".proof-cache"
+            "node_modules" | ".git" | "target" | ".mdloom-cache"
         )
     })
 }
@@ -253,13 +253,13 @@ mod tests {
     }
 
     #[test]
-    fn figure_referenced_via_proof_include_is_not_unused() {
+    fn figure_referenced_via_mdloom_include_is_not_unused() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         write(&root.join("figures/used.md"), "# Used figure\n\nbody\n");
         write(
             &root.join("doc.source.md"),
-            "# Doc\n\n```proof:include\nmd://figures/used.md#:0\n```\n",
+            "# Doc\n\n```mdloom:include\nmd://figures/used.md#:0\n```\n",
         );
 
         let unused = find_unused_figures(root);
@@ -283,20 +283,20 @@ mod tests {
     }
 
     #[test]
-    fn proof_layout_reference_counts() {
+    fn mdloom_layout_reference_counts() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         write(&root.join("figures/a.md"), "# A\n");
         write(&root.join("figures/b.md"), "# B\n");
         write(
             &root.join("doc.source.md"),
-            "# Doc\n\n```proof:layout gap=4\nmd://figures/a.md#:0\nmd://figures/b.md#:0\n```\n",
+            "# Doc\n\n```mdloom:layout gap=4\nmd://figures/a.md#:0\nmd://figures/b.md#:0\n```\n",
         );
 
         let unused = find_unused_figures(root);
         assert!(
             unused.is_empty(),
-            "both figures referenced via proof:layout: {:?}",
+            "both figures referenced via mdloom:layout: {:?}",
             unused
         );
     }
@@ -311,7 +311,7 @@ mod tests {
         );
         write(
             &root.join("doc.source.md"),
-            "```proof:row source=md://data/table.md\nproof:element field=a\n```\n",
+            "```mdloom:row source=md://data/table.md\nmdloom:element field=a\n```\n",
         );
 
         let unused = find_unused_figures(root);
@@ -339,8 +339,8 @@ mod tests {
     }
 
     #[test]
-    fn mention_outside_proof_fence_does_not_count_as_reference() {
-        // Prose mentioning md://figures/x.md in a paragraph (not inside a proof:
+    fn mention_outside_mdloom_fence_does_not_count_as_reference() {
+        // Prose mentioning md://figures/x.md in a paragraph (not inside a mdloom:
         // fence) must not save a figure from being marked unused.
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();

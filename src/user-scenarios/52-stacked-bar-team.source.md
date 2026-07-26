@@ -3,7 +3,7 @@
 Three series per quarter — Build / Review / Ops — sharing one bar so the
 total comes through alongside the breakdown.
 
-```proof:chart kind=stacked-bar width=60 title="Team-quarters by track"
+```mdloom:chart kind=stacked-bar width=60 title="Team-quarters by track"
 Q1: 30, 8, 4
 Q2: 26, 10, 6
 Q3: 22, 14, 6

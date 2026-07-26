@@ -9,8 +9,8 @@ with a named summary type.
 
 - Added `RunSummary` with named `diagnostics` and `files_checked` fields.
 - Replaced `Runner::run_with_count()` with `Runner::run_summary()`.
-- Exported `RunSummary` from `proof_lib`.
-- Updated `proof check` and `proof stats` to read named summary fields.
+- Exported `RunSummary` from `mdloom_lib`.
+- Updated `mdloom check` and `mdloom stats` to read named summary fields.
 
 ## Validation
 

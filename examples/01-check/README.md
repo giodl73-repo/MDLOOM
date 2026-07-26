@@ -1,12 +1,12 @@
-# Example 01 — Basic linting with `proof check`
+# Example 01 — Basic linting with `mdloom check`
 
-**What you'll learn:** Run `proof check`, read diagnostic output, create a `proof.toml` schema.
+**What you'll learn:** Run `mdloom check`, read diagnostic output, create a `mdloom.toml` schema.
 
 ## Setup
 
 ```bash
 cd examples/01-check
-proof check .
+mdloom check .
 ```
 
 You'll see errors in `guide.md` — a misaligned box, a table missing a required row,
@@ -26,20 +26,20 @@ FAIL — 1 files checked, 3 errors, 2 warnings
 
 ## Add a schema
 
-`proof.toml` is already here. Look at it — it requires specific headings and table rows.
+`mdloom.toml` is already here. Look at it — it requires specific headings and table rows.
 
 ```bash
-proof config guide.md   # show effective rules for this file
-proof check . --errors-only   # suppress warnings, focus on errors
-proof check . -f json   # machine-readable output
-proof stats . --by-code   # count by error code
+mdloom config guide.md   # show effective rules for this file
+mdloom check . --errors-only   # suppress warnings, focus on errors
+mdloom check . -f json   # machine-readable output
+mdloom stats . --by-code   # count by error code
 ```
 
 ## Fix the errors
 
 ```bash
-proof draft . -o draft.json   # generate a fix plan
-proof fix --plan draft.json --dry-run   # preview changes
-proof fix --plan draft.json   # apply
-proof check .   # should be clean now
+mdloom draft . -o draft.json   # generate a fix plan
+mdloom fix --plan draft.json --dry-run   # preview changes
+mdloom fix --plan draft.json   # apply
+mdloom check .   # should be clean now
 ```

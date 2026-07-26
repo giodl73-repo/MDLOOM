@@ -2,7 +2,7 @@
 
 ## By learning paradigm
 
-proof:bullets
+mdloom:bullets
 - Supervised Learning
   - Classification: Binary, Multi-class, Multi-label
   - Regression: Linear, Polynomial, Gaussian Process
@@ -17,7 +17,7 @@ proof:bullets
 
 ## Loss functions by task
 
-proof:bullets
+mdloom:bullets
 - Classification: Cross-entropy, Focal loss, Hinge
 - Regression: MSE, MAE, Huber
 - Generation: KL divergence, Wasserstein, Perceptual
@@ -27,6 +27,6 @@ proof:bullets
 
 Key tradeoff: model capacity $\propto$ expressiveness, but also $\propto$ overfitting risk.
 
-```proof:math
+```mdloom:math
 \text{Error} = \text{Bias}^2 + \text{Variance} + \text{Irreducible noise}
 ```

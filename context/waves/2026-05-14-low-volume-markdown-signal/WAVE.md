@@ -2,7 +2,7 @@
 
 ## Mission
 
-Close small remaining proof-owned Markdown false positives after the ASCII signal
+Close small remaining mdloom-owned Markdown false positives after the ASCII signal
 waves.
 
 ## Scope

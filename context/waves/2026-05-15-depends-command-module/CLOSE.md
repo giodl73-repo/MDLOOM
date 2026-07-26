@@ -3,16 +3,16 @@
 ## Mission
 
 Continue the command-module split by extracting the reverse dependency lookup
-command, `proof depends`.
+command, `mdloom depends`.
 
 ## Changes
 
 - Added `src/cmd_depends.rs`.
-- Moved reverse dependency lookup, proof-root discovery from the current
+- Moved reverse dependency lookup, mdloom-root discovery from the current
   directory, text rendering, and JSON rendering out of `main.rs`.
 - Preserved existing root handling: `--root` when supplied, nearest ancestor
-  `proof.toml` otherwise, and current directory as the fallback.
-- Added a CLI regression that scans a `.source.md` proof fence and verifies JSON
+  `mdloom.toml` otherwise, and current directory as the fallback.
+- Added a CLI regression that scans a `.source.md` mdloom fence and verifies JSON
   output reports the reference.
 
 ## Validation
@@ -27,5 +27,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof tree`, `proof spec-generate`, `proof compile`, and `proof layout` remain
+`mdloom tree`, `mdloom spec-generate`, `mdloom compile`, and `mdloom layout` remain
 in `main.rs`; `tree` is the next contained command-family extraction candidate.

@@ -1,10 +1,10 @@
 /// DaVinci — pinned figure validation.
 ///
-/// When `proof check --daVinci` runs, each `[[davinci]]` entry is:
+/// When `mdloom check --daVinci` runs, each `[[davinci]]` entry is:
 ///   1. Resolved via md:// URI using mdpath
 ///   2. Checked against all its invariants
 ///   3. Violations emitted as diagnostics with code `fig_invariant_violated`
-use crate::config::{DaVinciEntry, GlintConfig, Invariant, ProtectionTier};
+use crate::config::{DaVinciEntry, Invariant, MdloomConfig, ProtectionTier};
 use crate::diagnostic::{Diagnostic, Severity};
 use mdpath::{parse as parse_uri, resolve as resolve_uri};
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 /// Validate all DaVinci entries in a config against their invariants.
 /// Returns diagnostics — one per violated invariant.
 #[allow(non_snake_case)]
-pub fn check_daVinci(config: &GlintConfig, root: &Path) -> Vec<Diagnostic> {
+pub fn check_daVinci(config: &MdloomConfig, root: &Path) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
 
     for entry in &config.davinci {

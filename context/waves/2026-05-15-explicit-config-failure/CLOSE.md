@@ -2,9 +2,9 @@
 
 ## Outcome
 
-Made explicit `--config` authoritative across CLI paths that load proof config:
+Made explicit `--config` authoritative across CLI paths that load mdloom config:
 
-- `load_config` now returns `Result<GlintConfig>`.
+- `load_config` now returns `Result<MdloomConfig>`.
 - Explicit config load errors are propagated with context instead of warning and
   falling back to discovered/default config.
 - Check, stats, draft, compile, watch, pin-list, and spec-generate config loads

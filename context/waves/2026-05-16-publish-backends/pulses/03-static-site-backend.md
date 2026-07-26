@@ -28,13 +28,13 @@ plus a site manifest.
   - Site output directory.
   - `index.html`
   - Page HTML files.
-  - `proof-site.json`
-  - `.proof/artifacts.json` entries with `target = "site"`
+  - `mdloom-site.json`
+  - `.mdloom/artifacts.json` entries with `target = "site"`
 
 ## Pre-implementation scout
 
 - Inspect directory compile/output-dir behavior.
-- Decide whether `site` is a compile target or a separate `proof site` wrapper
+- Decide whether `site` is a compile target or a separate `mdloom site` wrapper
   over compile.
 - Identify minimal navigation from heading/title/path metadata.
 
@@ -53,7 +53,7 @@ plus a site manifest.
 - `cargo fmt --check`
 - `cargo test binary_compile_target_site_writes_static_site`
 - `cargo test --test integration_tests`
-- `proof compile <fixture-dir> --target site --output-dir <site-dir>`
+- `mdloom compile <fixture-dir> --target site --output-dir <site-dir>`
 - `git diff --check`
 
 ## Non-goals
@@ -65,14 +65,14 @@ plus a site manifest.
 
 ## Evidence
 
-- Added `proof compile --target site --output-dir <site-dir>`.
+- Added `mdloom compile --target site --output-dir <site-dir>`.
 - Generated per-source HTML pages through the existing HTML target path.
-- Added output `index.html` navigation and `proof-site.json` with page metadata.
+- Added output `index.html` navigation and `mdloom-site.json` with page metadata.
 - Added integration coverage for multi-page output, site manifest, and artifact
   manifest target.
 - Validation passed:
   - `cargo fmt --check`
   - `cargo test binary_compile_target_site_writes_static_site`
   - `cargo test --test integration_tests`
-  - `proof compile <fixture-dir> --target site --output-dir <site-dir>`
+  - `mdloom compile <fixture-dir> --target site --output-dir <site-dir>`
   - `git diff --check`

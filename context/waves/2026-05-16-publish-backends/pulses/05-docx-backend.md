@@ -26,7 +26,7 @@ document with stable basic structure.
   - `tests/integration_tests.rs`
 - Generated/user artifacts:
   - `*.docx`
-  - `.proof/artifacts.json` entries with `target = "docx"`
+  - `.mdloom/artifacts.json` entries with `target = "docx"`
 
 ## Pre-implementation scout
 
@@ -52,7 +52,7 @@ document with stable basic structure.
 - `cargo fmt --check`
 - `cargo test binary_compile_target_docx_writes_docx`
 - `cargo test --test integration_tests`
-- `proof compile <fixture>.source.md --target docx -o <out>.docx`
+- `mdloom compile <fixture>.source.md --target docx -o <out>.docx`
 - `git diff --check`
 
 ## Non-goals
@@ -64,7 +64,7 @@ document with stable basic structure.
 
 ## Evidence
 
-- Added `proof compile --target docx` with `.docx` output derivation and manifest
+- Added `mdloom compile --target docx` with `.docx` output derivation and manifest
   target records.
 - Generated native OOXML package parts: `[Content_Types].xml`, `_rels/.rels`,
   core/app properties, `word/document.xml`, relationships, styles, and numbering.
@@ -78,5 +78,5 @@ document with stable basic structure.
   - `cargo test --test integration_tests`
   - `cargo test`
   - `cargo build`
-  - `proof compile <fixture>.source.md --target docx -o <out>.docx`
+  - `mdloom compile <fixture>.source.md --target docx -o <out>.docx`
   - `git diff --check`

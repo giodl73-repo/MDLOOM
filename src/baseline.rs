@@ -1,8 +1,8 @@
-/// proof baseline — snapshot known issues so CI only fails on NEW regressions.
+/// mdloom baseline — snapshot known issues so CI only fails on NEW regressions.
 ///
 /// Workflow:
-///   proof baseline save .          → writes .proof-baseline.json (commit this)
-///   proof check --baseline .       → fails only on errors NOT in the baseline
+///   mdloom baseline save .          → writes .mdloom-baseline.json (commit this)
+///   mdloom check --baseline .       → fails only on errors NOT in the baseline
 ///
 /// Matching strategy: (file, code, line) with ±LINE_TOLERANCE lines of drift
 /// tolerance, so baseline entries survive small line-number shifts from edits.
@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const DEFAULT_BASELINE_FILE: &str = ".proof-baseline.json";
+pub const DEFAULT_BASELINE_FILE: &str = ".mdloom-baseline.json";
 const LINE_TOLERANCE: usize = 3; // match baseline entries within ±3 lines
 
 // ─────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ impl Baseline {
     pub fn save(&self, path: &Path) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         // Atomic write
-        let tmp = path.with_extension("proof_tmp");
+        let tmp = path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, &json)
             .with_context(|| format!("writing baseline {}", tmp.display()))?;
         std::fs::rename(&tmp, path)

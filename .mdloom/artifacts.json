@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "generated_by": "mdloom compile",
+  "config_root": "C:\\src\\TRACKER\\repos\\tools-infra\\proof",
+  "generated_at_ms": 1785042375986,
+  "artifacts": [
+    {
+      "source_path": "C:\\Users\\giodl\\AppData\\Local\\Temp\\.tmpWqBHnS\\guide.source.md",
+      "output_path": "C:\\Users\\giodl\\AppData\\Local\\Temp\\.tmpWqBHnS\\guide.html",
+      "target": "html",
+      "status": "cached",
+      "directives_resolved": 0,
+      "from_cache": true,
+      "resolved_files": [],
+      "diagnostics": []
+    }
+  ]
+}

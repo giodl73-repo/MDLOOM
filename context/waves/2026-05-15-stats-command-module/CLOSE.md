@@ -3,14 +3,14 @@
 ## Mission
 
 Begin the command-module split with the most self-contained command:
-`proof stats`.
+`mdloom stats`.
 
 ## Changes
 
 - Added `src/cmd_stats.rs`.
 - Moved the `stats` implementation out of `main.rs`.
 - Kept command dispatch, CLI argument parsing, and output behavior unchanged.
-- Reused `proof_lib::lint::lint_paths` from the prior orchestration wave.
+- Reused `mdloom_lib::lint::lint_paths` from the prior orchestration wave.
 
 ## Validation
 

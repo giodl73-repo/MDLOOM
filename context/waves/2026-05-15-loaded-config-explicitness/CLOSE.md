@@ -2,13 +2,13 @@
 
 ## Mission
 
-Separate parser-only TOML explicitness from proof's effective runtime config
+Separate parser-only TOML explicitness from mdloom's effective runtime config
 without changing the public config schema or cascade behavior.
 
 ## Changes
 
 - Removed `include_set` from `FilesConfig` and `enabled_set` from
-  `MarkdownConfig`, so `GlintConfig` is again a clean effective config shape.
+  `MarkdownConfig`, so `MdloomConfig` is again a clean effective config shape.
 - Added an internal `LoadedConfig` layer that carries `ConfigExplicitness` while
   resolving cascades.
 - Updated cascade merge to use TOML-loaded explicitness for ambiguous defaults:
@@ -41,4 +41,4 @@ build/test; this wave did not change sibling repository code.
 
 The next deeper config cleanup is a full raw/effective model where every TOML
 section is represented as optional raw fields before resolving to the complete
-runtime `GlintConfig`.
+runtime `MdloomConfig`.

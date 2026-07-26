@@ -1,6 +1,6 @@
-//! AI CLI caller for proof spec-generate and future AI-assisted commands.
+//! AI CLI caller for mdloom spec-generate and future AI-assisted commands.
 //!
-//! proof delegates AI work to an external CLI configured in `[ai]` in proof.toml.
+//! mdloom delegates AI work to an external CLI configured in `[ai]` in mdloom.toml.
 //! The default is `claude -p "{prompt}"` (Claude Code's non-interactive flag).
 //! Any CLI that accepts a prompt and writes its response to stdout works.
 //!
@@ -10,7 +10,7 @@
 //! If no arg contains `{prompt}`, the prompt is written to the process's stdin
 //! and the args are passed as-is.
 //!
-//! ## Examples (proof.toml)
+//! ## Examples (mdloom.toml)
 //!
 //! ```toml
 //! [ai]
@@ -98,7 +98,7 @@ pub fn call_ai(prompt: &str, config: &AiConfig) -> Result<String> {
 /// structure.
 pub fn spec_generate_prompt(uri: &str, content: &str) -> String {
     format!(
-        r#"You are analyzing an ASCII art figure that has been pinned as a DaVinci invariant in a proof documentation project.
+        r#"You are analyzing an ASCII art figure that has been pinned as a DaVinci invariant in a mdloom documentation project.
 
 Figure URI: {uri}
 
@@ -107,7 +107,7 @@ Figure content:
 {content}
 ```
 
-Generate a `[[davinci]]` TOML block for proof.toml that captures the key structural invariants of this figure. Focus on:
+Generate a `[[davinci]]` TOML block for mdloom.toml that captures the key structural invariants of this figure. Focus on:
 1. Visual width (box border width in characters)
 2. Box count (how many ASCII boxes are present)
 3. Required text strings that must always be present (key labels, headers)

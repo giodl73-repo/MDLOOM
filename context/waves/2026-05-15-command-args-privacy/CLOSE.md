@@ -17,7 +17,7 @@ command fields directly.
 
 ## Validation
 
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_help_documents_progress_only_for_compile`
 - `cargo test binary_stats_by_tag_reports_source_frontmatter`
 - `cargo test binary_layout_composes_file_sources`

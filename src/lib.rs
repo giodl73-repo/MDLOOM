@@ -63,6 +63,7 @@ pub mod frontmatter;
 pub mod layout;
 pub mod lint;
 pub mod math;
+mod pebble_output;
 pub mod publication;
 pub mod publish;
 pub mod runner;
@@ -72,7 +73,7 @@ pub mod symbol;
 pub mod tree;
 pub mod unused;
 
-pub use config::GlintConfig;
+pub use config::MdloomConfig;
 pub use diagnostic::{Diagnostic, RichContext, Severity};
 pub use diagnostic_registry::{lookup as lookup_diagnostic_code, DiagnosticCode, DIAGNOSTIC_CODES};
 pub use fix::{Confidence, Edit, Fix, FixOptions, FixPlan, FixResult};

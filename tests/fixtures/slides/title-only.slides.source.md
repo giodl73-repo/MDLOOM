@@ -5,7 +5,7 @@ slides:
   theme: minimal
 ---
 
-```proof:slide layout=title
+```mdloom:slide layout=title
 title: "Test Title"
 subtitle: "Test Subtitle"
 ```

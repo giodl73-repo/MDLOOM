@@ -1,4 +1,4 @@
-# proof field mapping — Shared Data Binding System
+# mdloom field mapping — Shared Data Binding System
 
 > **Status**: ✅ Implemented. `FieldMap`, `parse_md_table`, `parse_json_source` live in `src/tree/schema.rs`. URI query parameters all live: `?select=cols`, `?filter=col=val|col!=val|col>val|col<val` (compose with AND when repeated), `?count` (single-cell row-count synthetic table), `?top=N` and `?skip=N` (compose for paging — skip then top).
 
@@ -6,9 +6,9 @@
 
 ## What it is
 
-Field mapping is the system by which proof directives bind to source data.
-Every directive that consumes external data — `proof:chart`, `proof:tree`,
-`proof:element`, `proof:row`, `proof:region` — uses the same field mapping
+Field mapping is the system by which mdloom directives bind to source data.
+Every directive that consumes external data — `mdloom:chart`, `mdloom:tree`,
+`mdloom:element`, `mdloom:row`, `mdloom:region` — uses the same field mapping
 primitives described here.
 
 Individual specs declare **which roles** they need (e.g. `tree/org` needs a
@@ -39,15 +39,15 @@ The source format is auto-detected from the URI extension. Override with
 Declare which source column/key maps to each role using the directive attribute:
 
 ```
-proof:tree kind=org name="Employee" parent="Manager" label="Title"
+mdloom:tree kind=org name="Employee" parent="Manager" label="Title"
 ```
 
 ```
-proof:element kind=value field="Goals" format="{:.0}"
+mdloom:element kind=value field="Goals" format="{:.0}"
 ```
 
 ```
-proof:chart kind=bar item="Team" value="Goals"
+mdloom:chart kind=bar item="Team" value="Goals"
 ```
 
 The role name (left side) is defined by the directive spec. The field name
@@ -55,7 +55,7 @@ The role name (left side) is defined by the directive spec. The field name
 
 ### Auto-detection
 
-When no explicit mapping is provided, proof tries candidate names
+When no explicit mapping is provided, mdloom tries candidate names
 (case-insensitive, first match wins):
 
 | Role | Candidates tried (in order) |
@@ -70,15 +70,15 @@ When no explicit mapping is provided, proof tries candidate names
 **Override always wins.** If you declare `name="Employee"`, auto-detection is
 skipped for that role.
 
-### Row binding (`proof:row source=`)
+### Row binding (`mdloom:row source=`)
 
-In `proof:row`, `field=X` refers to the column `X` of the **current row** in
-the `proof:row` loop:
+In `mdloom:row`, `field=X` refers to the column `X` of the **current row** in
+the `mdloom:row` loop:
 
 ```
-proof:row source=md://stats.md#edm:table:0
-  proof:element kind=label field=name width=24
-  proof:element kind=value field=pts_82 width=6
+mdloom:row source=md://stats.md#edm:table:0
+  mdloom:element kind=label field=name width=24
+  mdloom:element kind=value field=pts_82 width=6
 ```
 
 Each iteration binds the current row as an implicit context. `field=name` extracts
@@ -131,7 +131,7 @@ md://stats.md#edm:table:0[row=-1]          # last row
 Combined with `field=` to extract a single scalar:
 
 ```
-proof:element kind=value field=pts_82
+mdloom:element kind=value field=pts_82
 md://stats.md#edm:table:0[row=McDavid]
 ```
 
@@ -168,7 +168,7 @@ The `format=` attribute uses Rust `std::fmt` specifiers:
 
 ## Type coercion
 
-When a field value is extracted, proof coerces it:
+When a field value is extracted, mdloom coerces it:
 
 | Target kind | Coercion |
 |------------|---------|
@@ -213,7 +213,7 @@ Each directive spec declares which roles it uses and their semantics:
 | `MAPPING-004` | warning | Multiple columns matched auto-detection — using first match; specify `field=` to be explicit |
 | `MAPPING-005` | error | Row selector `[row=X]` matched no rows |
 | `MAPPING-006` | warning | Filter matched 0 rows — source resolved to empty |
-| `MAPPING-007` | error | `proof:row source=` loop source has no rows — nothing to render |
+| `MAPPING-007` | error | `mdloom:row source=` loop source has no rows — nothing to render |
 
 ---
 
@@ -232,7 +232,7 @@ Each directive spec declares which roles it uses and their semantics:
 - Query parameter parser (`?select=`, `?filter=`, `?top=`, `?sort=`)
 - Row selector parser (`[row=N]`, `[row=label]`)
 - Type coercion (`f64`, string, series)
-- row source binding for `proof:row`
+- row source binding for `mdloom:row`
 
 ### File layout
 
@@ -244,7 +244,7 @@ src/mapping/
   query.rs      — ?filter=, ?select=, ?sort=, ?top=, ?skip= parsing
   selector.rs   — [row=N], [row=label] parsing
   coerce.rs     — type coercion (string → f64, etc.)
-  row.rs      — source binding + field resolution for proof:row
+  row.rs      — source binding + field resolution for mdloom:row
 ```
 
 ---
@@ -254,5 +254,5 @@ src/mapping/
 - [Chart Spec](./chart-spec.md) — field roles for chart kinds
 - [Tree Spec](./tree-spec.md) — field roles for tree kinds (org, taxonomy, etc.)
 - [Element Spec](./element-spec.md) — field roles for element kinds
-- [Dashboard Spec](./dashboard-spec.md) — proof:row source= and region content
+- [Dashboard Spec](./dashboard-spec.md) — mdloom:row source= and region content
 - [mdpath](../../mdpath/design/SPEC.md) — URI scheme (the addressing layer above mapping)

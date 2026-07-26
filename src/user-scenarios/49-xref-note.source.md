@@ -5,7 +5,7 @@
 For most queries, a covering index is sufficient. The query planner uses
 statistics to decide between index scans and table scans.
 
-```proof:xref uri="md://src/user-scenarios/49-xref-note.source.md#indexing-strategy" format=note
+```mdloom:xref uri="md://src/user-scenarios/49-xref-note.source.md#indexing-strategy" format=note
 ```
 
 ## Connection Pooling
@@ -13,7 +13,7 @@ statistics to decide between index scans and table scans.
 Pool size should be set to `CPU cores × 2 + disk spindles`. Larger pools
 create contention, not throughput.
 
-```proof:xref uri="md://src/user-scenarios/49-xref-note.source.md#performance-tuning" format=callout
+```mdloom:xref uri="md://src/user-scenarios/49-xref-note.source.md#performance-tuning" format=callout
 ```
 
 ## Indexing Strategy

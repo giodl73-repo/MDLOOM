@@ -7,7 +7,7 @@ use crate::checks::markdown::MarkdownCheck;
 use crate::checks::markdown_table::MarkdownTableCheck;
 use crate::checks::source_links::SourceLinkCheck;
 use crate::checks::Check;
-use crate::config::{GlintConfig, MarkdownConfig, SectionSchema};
+use crate::config::{MarkdownConfig, MdloomConfig, SectionSchema};
 use crate::diagnostic::Diagnostic;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use rayon::prelude::*;
@@ -18,10 +18,10 @@ use walkdir::WalkDir;
 
 pub struct Runner {
     root: PathBuf,
-    root_config: GlintConfig,
+    root_config: MdloomConfig,
     use_supplied_config: bool,
     /// Cache of per-directory resolved configs (dir path → resolved config)
-    config_cache: Arc<Mutex<HashMap<PathBuf, Arc<GlintConfig>>>>,
+    config_cache: Arc<Mutex<HashMap<PathBuf, Arc<MdloomConfig>>>>,
     include: GlobSet,
     exclude: GlobSet,
 }
@@ -34,7 +34,7 @@ pub struct RunSummary {
 }
 
 impl Runner {
-    pub fn new(root: &Path, config: GlintConfig) -> anyhow::Result<Self> {
+    pub fn new(root: &Path, config: MdloomConfig) -> anyhow::Result<Self> {
         let include = build_globset(&config.files.include)?;
         let exclude = build_globset(&config.files.exclude)?;
         Ok(Self {
@@ -49,7 +49,7 @@ impl Runner {
 
     /// Build a runner that applies the supplied config directly to every file.
     /// Used for explicit `--config`, which is documented to skip auto-cascade.
-    pub fn new_with_config(root: &Path, config: GlintConfig) -> anyhow::Result<Self> {
+    pub fn new_with_config(root: &Path, config: MdloomConfig) -> anyhow::Result<Self> {
         let include = build_globset(&config.files.include)?;
         let exclude = build_globset(&config.files.exclude)?;
         Ok(Self {
@@ -133,7 +133,7 @@ impl Runner {
 
     /// Resolve the effective config for a file by cascading from its directory up to root.
     /// Results are cached by directory path.
-    fn resolve_config_for(&self, file: &Path) -> Arc<GlintConfig> {
+    fn resolve_config_for(&self, file: &Path) -> Arc<MdloomConfig> {
         let dir = file.parent().unwrap_or(&self.root).to_path_buf();
 
         // Check cache first
@@ -148,7 +148,7 @@ impl Runner {
             self.root_config.clone()
         } else {
             // Resolve by cascading up to root
-            GlintConfig::resolve_for(file, &self.root)
+            MdloomConfig::resolve_for(file, &self.root)
         };
         let arc = Arc::new(resolved);
 
@@ -183,7 +183,7 @@ impl Runner {
 
 /// Build the set of checks for a file given its resolved config.
 /// Applies section_schemas additively for files that match their path globs.
-fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn Check>> {
+fn build_checks(config: &MdloomConfig, file: &Path, root: &Path) -> Vec<Box<dyn Check>> {
     let mut checks: Vec<Box<dyn Check>> = Vec::new();
 
     if config.ascii_barchart.enabled {
@@ -241,7 +241,7 @@ fn build_checks(config: &GlintConfig, file: &Path, root: &Path) -> Vec<Box<dyn C
 
 /// Compute the effective MarkdownConfig for a file by applying any matching
 /// section_schemas additively on top of the base markdown config.
-fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> MarkdownConfig {
+fn effective_markdown(config: &MdloomConfig, file: &Path, root: &Path) -> MarkdownConfig {
     let rel = file.strip_prefix(root).unwrap_or(file);
     // Normalize to forward slashes so glob patterns work on Windows too.
     // Glob patterns are always written as "languages/**" not "languages\\**".
@@ -252,14 +252,17 @@ fn effective_markdown(config: &GlintConfig, file: &Path, root: &Path) -> Markdow
         let include = match build_globset(&schema.paths) {
             Ok(gs) => gs,
             Err(e) => {
-                eprintln!("proof: invalid glob in section_schema paths: {}", e);
+                eprintln!("mdloom: invalid glob in section_schema paths: {}", e);
                 continue;
             }
         };
         let exclude = match build_globset(&schema.paths_exclude) {
             Ok(gs) => gs,
             Err(e) => {
-                eprintln!("proof: invalid glob in section_schema paths_exclude: {}", e);
+                eprintln!(
+                    "mdloom: invalid glob in section_schema paths_exclude: {}",
+                    e
+                );
                 continue;
             }
         };

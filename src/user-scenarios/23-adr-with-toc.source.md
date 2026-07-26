@@ -1,4 +1,4 @@
-# ADR-042 — Adopt proof as Documentation Compiler
+# ADR-042 — Adopt mdloom as Documentation Compiler
 
 **Status:** Accepted
 **Date:** 2026-04-28
@@ -6,7 +6,7 @@
 
 ## Table of Contents
 
-```proof:toc max-depth=2 style=numbered
+```mdloom:toc max-depth=2 style=numbered
 ```
 
 ## Context
@@ -17,12 +17,12 @@ files are reorganized. We need a documentation quality system.
 
 ## Decision
 
-Adopt `proof` as the official documentation compiler and linter for all
+Adopt `mdloom` as the official documentation compiler and linter for all
 markdown-heavy projects in the org.
 
 ## Rationale
 
-proof provides:
+mdloom provides:
 - Structural validation (ASCII art, tables, links, headings)
 - Compilation from `.source.md` → `.md` with resolved directives
 - LaTeX math rendering without external tooling
@@ -33,13 +33,13 @@ proof provides:
 
 ### Positive
 
-proof catches errors before they reach readers. Source documents are
+mdloom catches errors before they reach readers. Source documents are
 first-class artifacts, not just raw text. Math renders in any terminal.
 
 ### Negative
 
-Authors must learn the `.source.md` / `proof:` directive syntax. Initial
-setup per repository requires creating `proof.toml` and `scripts/build-guides.sh`.
+Authors must learn the `.source.md` / `mdloom:` directive syntax. Initial
+setup per repository requires creating `mdloom.toml` and `scripts/build-guides.sh`.
 
 ### Neutral
 
@@ -48,13 +48,13 @@ opt-in per document.
 
 ## Implementation Plan
 
-```proof:ol
-- Add proof.toml to each repository root
+```mdloom:ol
+- Add mdloom.toml to each repository root
 - Set up [[compile]] targets for guides and presentations
-- Run proof check . to find existing errors
-- Fix errors using proof fix --min-confidence high
+- Run mdloom check . to find existing errors
+- Fix errors using mdloom fix --min-confidence high
 - Train team on source document authoring
-- Add proof check to CI pipeline
+- Add mdloom check to CI pipeline
 ```
 
 ## Status History

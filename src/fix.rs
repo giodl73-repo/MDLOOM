@@ -1,9 +1,9 @@
-/// Fix plan: the data format shared between AI-generated plans and `proof fix`.
+/// Fix plan: the data format shared between AI-generated plans and `mdloom fix`.
 ///
 /// Workflow:
-///   1. `proof check --format rich` → rich.json
+///   1. `mdloom check --format rich` → rich.json
 ///   2. AI (fix-guide skill) reads rich.json → writes plan.json
-///   3. `proof fix --plan plan.json` applies edits to files
+///   3. `mdloom fix --plan plan.json` applies edits to files
 use anyhow::{Context, Result};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 // ─────────────────────────────────────────────────────────
-// Fix plan types (AI writes these; proof fix reads them)
+// Fix plan types (AI writes these; mdloom fix reads them)
 // ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Serialize)]

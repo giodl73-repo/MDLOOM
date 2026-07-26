@@ -1,11 +1,11 @@
-use crate::config::GlintConfig;
+use crate::config::MdloomConfig;
 use crate::runner::{RunSummary, Runner};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-pub fn load_config_for_path(path: &Path, override_path: &Option<PathBuf>) -> Result<GlintConfig> {
+pub fn load_config_for_path(path: &Path, override_path: &Option<PathBuf>) -> Result<MdloomConfig> {
     if let Some(ref cfg_path) = override_path {
-        return GlintConfig::load(cfg_path)
+        return MdloomConfig::load(cfg_path)
             .with_context(|| format!("loading explicit config: {}", cfg_path.display()));
     }
     let dir = if path.is_dir() {
@@ -13,7 +13,7 @@ pub fn load_config_for_path(path: &Path, override_path: &Option<PathBuf>) -> Res
     } else {
         path.parent().unwrap_or(path).to_path_buf()
     };
-    Ok(GlintConfig::load_or_default(&dir))
+    Ok(MdloomConfig::load_or_default(&dir))
 }
 
 pub fn lint_paths(paths: &[PathBuf], config_override: &Option<PathBuf>) -> Result<RunSummary> {
@@ -40,7 +40,11 @@ pub fn lint_paths(paths: &[PathBuf], config_override: &Option<PathBuf>) -> Resul
     Ok(aggregate)
 }
 
-fn runner_for(root: &Path, config: GlintConfig, override_path: &Option<PathBuf>) -> Result<Runner> {
+fn runner_for(
+    root: &Path,
+    config: MdloomConfig,
+    override_path: &Option<PathBuf>,
+) -> Result<Runner> {
     if override_path.is_some() {
         Runner::new_with_config(root, config)
     } else {

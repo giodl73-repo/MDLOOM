@@ -1,7 +1,7 @@
 /// Source document link checker.
 ///
-/// Scans `.source.md` files for `md://` URIs inside `proof:` directives and
-/// reports broken references as diagnostics — so `proof check` catches them
+/// Scans `.source.md` files for `md://` URIs inside `mdloom:` directives and
+/// reports broken references as diagnostics — so `mdloom check` catches them
 /// without requiring a full compile.
 use crate::checks::Check;
 use crate::diagnostic::Diagnostic;
@@ -25,47 +25,47 @@ impl Check for SourceLinkCheck {
 
         let mut diags = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
-        let mut in_proof_fence = false; // inside a ```proof:... fence
-        let mut in_other_fence = false; // inside a non-proof fence (skip its content)
+        let mut in_mdloom_fence = false; // inside a ```mdloom:... fence
+        let mut in_other_fence = false; // inside a non-mdloom fence (skip its content)
 
         for (i, &line) in lines.iter().enumerate() {
             let trimmed = line.trim_start();
 
             if trimmed.starts_with("```") {
                 let info = trimmed[3..].trim();
-                if !in_proof_fence && !in_other_fence {
+                if !in_mdloom_fence && !in_other_fence {
                     // Opening a fence
-                    if info.starts_with("proof:") {
-                        in_proof_fence = true;
+                    if info.starts_with("mdloom:") {
+                        in_mdloom_fence = true;
                         // Check the info string for md:// URIs
                         check_uris_in_text(info, i + 1, path, &self.root, &mut diags);
-                        // F42b: proof:row requires source=md://... — catch at lint time
-                        if info.starts_with("proof:row") && !info.contains("source=md://") {
+                        // F42b: mdloom:row requires source=md://... — catch at lint time
+                        if info.starts_with("mdloom:row") && !info.contains("source=md://") {
                             diags.push(crate::diagnostic::Diagnostic::error(
                                 path.to_path_buf(),
                                 i + 1,
                                 1,
                                 "md_missing_source",
-                                "proof:row requires a source=md://... attribute",
+                                "mdloom:row requires a source=md://... attribute",
                             ));
                         }
                     } else {
                         in_other_fence = true;
                     }
-                } else if in_proof_fence {
-                    in_proof_fence = false;
+                } else if in_mdloom_fence {
+                    in_mdloom_fence = false;
                 } else if in_other_fence {
                     in_other_fence = false;
                 }
                 continue;
             }
 
-            // Only scan specific body lines inside proof: directive fences:
-            // - Standalone md:// lines (for proof:include)
+            // Only scan specific body lines inside mdloom: directive fences:
+            // - Standalone md:// lines (for mdloom:include)
             // - Lines containing source=md:// attribute
             // Skip tree node labels, prose descriptions, and other body text
             // that may contain example URIs that aren't real references.
-            if in_proof_fence {
+            if in_mdloom_fence {
                 let is_standalone_uri = trimmed.starts_with("md://");
                 let has_source_attr = trimmed.contains("source=md://");
                 if is_standalone_uri || has_source_attr {
@@ -114,16 +114,16 @@ fn check_uris_in_text(
     }
 }
 
-/// Find the proof root by walking up from `start` until we find `proof.toml`.
+/// Find the mdloom root by walking up from `start` until we find `mdloom.toml`.
 /// Falls back to `start` if not found.
-fn find_proof_root(start: &Path) -> std::path::PathBuf {
+fn find_mdloom_root(start: &Path) -> std::path::PathBuf {
     let mut dir = if start.is_dir() {
         start.to_path_buf()
     } else {
         start.parent().unwrap_or(start).to_path_buf()
     };
     loop {
-        if dir.join("proof.toml").exists() {
+        if dir.join("mdloom.toml").exists() {
             return dir;
         }
         match dir.parent() {
@@ -155,10 +155,10 @@ fn validate_uri(
         }
     };
 
-    // Resolve against the proof root (where proof.toml lives), not the scan dir
-    let proof_root = find_proof_root(path);
-    let effective_root = if proof_root.join("proof.toml").exists() {
-        proof_root
+    // Resolve against the mdloom root (where mdloom.toml lives), not the scan dir
+    let mdloom_root = find_mdloom_root(path);
+    let effective_root = if mdloom_root.join("mdloom.toml").exists() {
+        mdloom_root
     } else {
         root.to_path_buf()
     };
@@ -335,18 +335,18 @@ mod tests {
     fn no_diags_for_non_source_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.md");
-        std::fs::write(&path, "```proof:tree kind=org\n```\n").unwrap();
+        std::fs::write(&path, "```mdloom:tree kind=org\n```\n").unwrap();
         let check = SourceLinkCheck {
             root: dir.path().to_path_buf(),
         };
-        let diags = check.check(&path, "```proof:tree kind=org\n```\n");
+        let diags = check.check(&path, "```mdloom:tree kind=org\n```\n");
         assert!(diags.is_empty());
     }
 
     #[test]
     fn missing_file_in_tree_source_produces_error() {
         let dir = tempfile::tempdir().unwrap();
-        let content = "# Test\n\n```proof:tree kind=taxonomy source=md://missing.md\n```\n";
+        let content = "# Test\n\n```mdloom:tree kind=taxonomy source=md://missing.md\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             !diags.is_empty(),
@@ -359,7 +359,7 @@ mod tests {
     fn existing_file_produces_no_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("data.md"), "# Data\n| a |\n|---|\n| 1 |\n").unwrap();
-        let content = "# Test\n\n```proof:tree kind=taxonomy source=md://data.md\n```\n";
+        let content = "# Test\n\n```mdloom:tree kind=taxonomy source=md://data.md\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.is_empty(),
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn missing_row_source_produces_error() {
         let dir = tempfile::tempdir().unwrap();
-        let content = "# Test\n\n```proof:row source=md://no-such-file.md foreach=row separator=\" | \"\nproof:element kind=label field=name width=10\n```\n";
+        let content = "# Test\n\n```mdloom:row source=md://no-such-file.md foreach=row separator=\" | \"\nmdloom:element kind=label field=name width=10\n```\n";
         let diags = check_source(content, dir.path());
         assert!(!diags.is_empty());
         assert_eq!(diags[0].code, "md_broken_uri");
@@ -382,7 +382,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("guide.md");
         // This is a compiled output file — should NOT be checked for source links
-        let content = "```proof:tree kind=org source=md://nonexistent.md\n```\n";
+        let content = "```mdloom:tree kind=org source=md://nonexistent.md\n```\n";
         std::fs::write(&path, content).unwrap();
         let check = SourceLinkCheck {
             root: dir.path().to_path_buf(),
@@ -401,7 +401,7 @@ mod tests {
             "# API\n\n## Authentication\n\nContent.\n",
         )
         .unwrap();
-        let content = "```proof:include\nmd://api.md#authentication\n```\n";
+        let content = "```mdloom:include\nmd://api.md#authentication\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.is_empty(),
@@ -418,7 +418,7 @@ mod tests {
             "# API\n\n## Overview\n\nContent.\n",
         )
         .unwrap();
-        let content = "```proof:include\nmd://api.md#nonexistent-section\n```\n";
+        let content = "```mdloom:include\nmd://api.md#nonexistent-section\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),
@@ -431,7 +431,7 @@ mod tests {
     fn heading_check_skipped_for_file_only_uri() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("data.md"), "# Data\n\nContent.\n").unwrap();
-        let content = "```proof:include\nmd://data.md\n```\n";
+        let content = "```mdloom:include\nmd://data.md\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.is_empty(),
@@ -448,7 +448,7 @@ mod tests {
             "# Title\n\n```\n## code-section\n```\n",
         )
         .unwrap();
-        let content = "```proof:include\nmd://doc.md#code-section\n```\n";
+        let content = "```mdloom:include\nmd://doc.md#code-section\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),
@@ -466,7 +466,7 @@ mod tests {
         )
         .unwrap();
         // md://guide.md#api-reference/authentication — both slugs must be found
-        let content = "```proof:include\nmd://guide.md#api-reference/authentication\n```\n";
+        let content = "```mdloom:include\nmd://guide.md#api-reference/authentication\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.is_empty(),
@@ -483,7 +483,7 @@ mod tests {
             "# Guide\n\n## API Reference\n\nContent only, no sub-headings.\n",
         )
         .unwrap();
-        let content = "```proof:include\nmd://guide.md#api-reference/missing-child\n```\n";
+        let content = "```mdloom:include\nmd://guide.md#api-reference/missing-child\n```\n";
         let diags = check_source(content, dir.path());
         assert!(
             diags.iter().any(|d| d.code == "md_broken_heading"),

@@ -7,12 +7,12 @@ dashboard:
     chart: { x: 0, y: 2, width: 60, height: 10 }
 ---
 
-```proof:region name=title
-PROOF release health
+```mdloom:region name=title
+MDLOOM release health
 ```
 
-```proof:region name=chart
-proof:chart kind=sparkline width=50 no-chrome
+```mdloom:region name=chart
+mdloom:chart kind=sparkline width=50 no-chrome
 v0.1: 12
 v0.2: 15
 v0.3: 20

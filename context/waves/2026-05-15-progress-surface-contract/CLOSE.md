@@ -4,9 +4,9 @@
 
 Aligned the progress option contract with the actual CLI surface:
 
-- `--progress` is a `proof compile` option, where it already shows a running
+- `--progress` is a `mdloom compile` option, where it already shows a running
   compiled/total count.
-- `proof check` does not expose `--progress`; the spec no longer advertises it
+- `mdloom check` does not expose `--progress`; the spec no longer advertises it
   as a check option.
 - Added a CLI help regression to ensure `check --help` does not list
   `--progress` while `compile --help` does.

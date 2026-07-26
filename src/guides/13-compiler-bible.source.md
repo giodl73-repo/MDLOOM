@@ -1,6 +1,6 @@
 # Compiler Bible
 
-proof treats documentation like source code: authored sources compile into
+mdloom treats documentation like source code: authored sources compile into
 reviewable artifacts, and each compiler phase has a narrow owner. This guide is
 the map for changing the compiler without turning `compile.rs` back into a
 catch-all module.
@@ -21,7 +21,7 @@ Good pulses:
 - run the smallest focused tests first, then the full validation gate
 - end with a commit that names the boundary
 
-```proof:tree kind=dependency
+```mdloom:tree kind=dependency
 root: Wave 8 directive module split
 - Pulse: directive parser facade
 - Pulse: public compile types
@@ -59,9 +59,9 @@ Focused modules own behavior families:
 | `compile_cache` | Tier 3 compile cache restore/store orchestration |
 | `compile_format` | Compiled traceability wrappers |
 | `compile_figure` | Source-backed include/table/layout rendering and validation |
-| `compile_element` | `proof:element` and `proof:row` data resolution/rendering |
+| `compile_element` | `mdloom:element` and `mdloom:row` data resolution/rendering |
 | `compile_chart` | Chart data resolution, rendering, diagnostics, and fallbacks |
-| `compile_tree` | `proof:tree`, inline tree/outline rendering, warnings, and fallbacks |
+| `compile_tree` | `mdloom:tree`, inline tree/outline rendering, warnings, and fallbacks |
 | `compile_toc` | TOC source resolution, heading collection, section scoping, and formatting |
 | `compile_prose` | Prose-only xref and blockquote rendering, diagnostics, and fallbacks |
 | `compile_symbol` | Symbol and shape rendering, diagnostics, and fallbacks |
@@ -100,7 +100,7 @@ src/user-scenarios/03-metrics-dashboard.dashboard.source.md
 Embedded dashboard directives intentionally use no-chrome rendering:
 
 ```text
-proof:region body
+mdloom:region body
   -> compile_region::render_region_body
   -> compile_region::render_one_directive_no_chrome
   -> raw glyph rows pasted into the dashboard canvas

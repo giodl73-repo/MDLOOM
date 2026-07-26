@@ -5,7 +5,7 @@ use crate::compile_directive::{collect_directives, Directive};
 use crate::compile_output::split_frontmatter;
 use crate::compile_region::render_region_body;
 use crate::compile_types::{CompileResult, CompileViolation, ViolationSeverity};
-use crate::config::GlintConfig;
+use crate::config::MdloomConfig;
 use crate::dashboard::region::{
     compile_dashboard, parse_dashboard_frontmatter, DashboardError, RegionGeometry,
 };
@@ -15,7 +15,7 @@ pub(crate) fn compile_dashboard_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
 ) -> Result<CompileResult> {
     let source_text = std::fs::read_to_string(source_path)
         .map_err(|e| anyhow::anyhow!("reading {}: {}", source_path.display(), e))?;
@@ -72,7 +72,7 @@ pub(crate) fn compile_dashboard_file(
                     figure_id: None,
                     invariant: String::new(),
                     message: format!(
-                        "proof:region {:?} has no matching front-matter declaration",
+                        "mdloom:region {:?} has no matching front-matter declaration",
                         name
                     ),
                     source_line: abs_line + 1,
@@ -146,11 +146,11 @@ pub(crate) fn compile_dashboard_file(
         format!(" title=\"{}\"", meta.title)
     };
     let output_text = format!(
-        "<!-- proof:compiled from=\"proof:dashboard\"{} -->\n```dashboard\n{}```\n<!-- /proof:compiled -->\n",
+        "<!-- mdloom:compiled from=\"mdloom:dashboard\"{} -->\n```dashboard\n{}```\n<!-- /mdloom:compiled -->\n",
         title_attr, canvas_text
     );
 
-    let tmp = output_path.with_extension("proof_tmp");
+    let tmp = output_path.with_extension("mdloom_tmp");
     std::fs::write(&tmp, &output_text)
         .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
     std::fs::rename(&tmp, output_path)
@@ -174,8 +174,8 @@ mod tests {
     fn temp_dashboard_paths(prefix: &str) -> (std::path::PathBuf, std::path::PathBuf) {
         let pid = std::process::id();
         let source_path =
-            std::env::temp_dir().join(format!("proof-{prefix}-{pid}.dashboard.source.md"));
-        let output_path = std::env::temp_dir().join(format!("proof-{prefix}-{pid}.dashboard.md"));
+            std::env::temp_dir().join(format!("mdloom-{prefix}-{pid}.dashboard.source.md"));
+        let output_path = std::env::temp_dir().join(format!("mdloom-{prefix}-{pid}.dashboard.md"));
         let _ = std::fs::remove_file(&source_path);
         let _ = std::fs::remove_file(&output_path);
         (source_path, output_path)
@@ -184,13 +184,13 @@ mod tests {
     #[test]
     fn dashboard_compile_two_regions_e2e() {
         let (source_path, output_path) = temp_dashboard_paths("dash");
-        let source = "---\ndashboard:\n  width: 20\n  height: 4\n  title: \"Test\"\n  regions:\n    top: { x: 0, y: 0, width: 20, height: 2 }\n    bot: { x: 0, y: 2, width: 20, height: 2 }\n---\n\n```proof:region name=top\nHEADER LINE\n```\n\n```proof:region name=bot\nFOOTER LINE\n```\n";
+        let source = "---\ndashboard:\n  width: 20\n  height: 4\n  title: \"Test\"\n  regions:\n    top: { x: 0, y: 0, width: 20, height: 2 }\n    bot: { x: 0, y: 2, width: 20, height: 2 }\n---\n\n```mdloom:region name=top\nHEADER LINE\n```\n\n```mdloom:region name=bot\nFOOTER LINE\n```\n";
         std::fs::File::create(&source_path)
             .expect("create tmp")
             .write_all(source.as_bytes())
             .expect("write tmp");
 
-        let cfg = GlintConfig::default();
+        let cfg = MdloomConfig::default();
         let result =
             compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
                 .expect("compile_dashboard_file ok");
@@ -243,13 +243,13 @@ mod tests {
     #[test]
     fn dashboard_unknown_region_emits_dashboard_004() {
         let (source_path, output_path) = temp_dashboard_paths("dash-bad");
-        let source = "---\ndashboard:\n  width: 20\n  height: 2\n  regions:\n    header: { x: 0, y: 0, width: 20, height: 2 }\n---\n\n```proof:region name=ghost\nNo such region\n```\n";
+        let source = "---\ndashboard:\n  width: 20\n  height: 2\n  regions:\n    header: { x: 0, y: 0, width: 20, height: 2 }\n---\n\n```mdloom:region name=ghost\nNo such region\n```\n";
         std::fs::File::create(&source_path)
             .expect("create tmp")
             .write_all(source.as_bytes())
             .expect("write tmp");
 
-        let cfg = GlintConfig::default();
+        let cfg = MdloomConfig::default();
         let result =
             compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
                 .expect("compile_dashboard_file ok");
@@ -274,7 +274,7 @@ mod tests {
             .write_all(source.as_bytes())
             .expect("write tmp");
 
-        let cfg = GlintConfig::default();
+        let cfg = MdloomConfig::default();
         let result =
             compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
                 .expect("compile_dashboard_file ok");
@@ -294,13 +294,13 @@ mod tests {
     fn dashboard_wide_canvas_emits_dashboard_006() {
         let (source_path, output_path) = temp_dashboard_paths("dash-wide");
         let source =
-            "---\ndashboard:\n  width: 300\n  height: 10\n---\n\n```proof:region name=r1\nhello\n```\n";
+            "---\ndashboard:\n  width: 300\n  height: 10\n---\n\n```mdloom:region name=r1\nhello\n```\n";
         std::fs::File::create(&source_path)
             .expect("create tmp")
             .write_all(source.as_bytes())
             .expect("write tmp");
 
-        let cfg = GlintConfig::default();
+        let cfg = MdloomConfig::default();
         let result =
             compile_dashboard_file(&source_path, &output_path, &std::env::temp_dir(), &cfg)
                 .expect("compile_dashboard_file ok");

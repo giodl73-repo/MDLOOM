@@ -1,6 +1,6 @@
 # US-98 — Include with inline pin reference
 
-<!-- proof:compiled from="md://src/data/diagnostic-codes.md#:table:0" -->
+<!-- mdloom:compiled from="md://src/data/diagnostic-codes.md#:table:0" -->
 ```
 code | severity | module | meaning
 ------ | ---------- | -------- | ---------
@@ -30,9 +30,9 @@ DASHBOARD-001 | error | dashboard | Region declared but not rendered
 DASHBOARD-002 | error | dashboard | Region content exceeds bounding box
 DASHBOARD-003 | error | dashboard | Two regions overlap
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-The `pin=test-fig` attribute references a `[[davinci]]` entry in proof.toml
-that may or may not exist. If it doesn't, proof emits a warning at compile
+The `pin=test-fig` attribute references a `[[davinci]]` entry in mdloom.toml
+that may or may not exist. If it doesn't, mdloom emits a warning at compile
 time alerting the author to register a pin if they want invariant
 protection on this figure.

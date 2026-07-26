@@ -17,7 +17,7 @@ finite differences with step size $h$.
 
 **Formula:**
 
-```proof:math
+```mdloom:math
 \frac{\partial f}{\partial x_i} \approx \frac{f(x + h e_i) - f(x - h e_i)}{2h}
 ```
 
@@ -31,7 +31,7 @@ Computes one step of Newton's method: $x_{k+1} = x_k - H^{-1} \nabla f(x_k)$
 
 **Formula:**
 
-```proof:math
+```mdloom:math
 x_{k+1} = x_k - \left[H_f(x_k)\right]^{-1} \nabla f(x_k)
 ```
 
@@ -44,7 +44,7 @@ $\|x_{k+1} - x^*\| \leq C \|x_k - x^*\|^2$ for some constant $C > 0$.
 
 Implements the Armijo condition: finds $\alpha > 0$ such that
 
-```proof:math
+```mdloom:math
 f(x_k + \alpha d_k) \leq f(x_k) + c_1 \alpha \nabla f(x_k)^T d_k
 ```
 

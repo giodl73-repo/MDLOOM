@@ -2,7 +2,7 @@
 
 ## Mission
 
-Close the remaining proof-owned ASCII false positives after the arrow/barchart
+Close the remaining mdloom-owned ASCII false positives after the arrow/barchart
 wave, focusing on residual barchart shape detection and bottom-border column
 warnings.
 

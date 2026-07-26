@@ -3,7 +3,7 @@
 Point events on a horizontal axis. Labels are auto-staggered to avoid
 overlap; markers are `◆`.
 
-```proof:chart kind=timeline width=70 title="2026 release milestones" x-label="quarter"
+```mdloom:chart kind=timeline width=70 title="2026 release milestones" x-label="quarter"
 Kickoff: 0
 v0.1 alpha: 1
 v0.2 beta: 2

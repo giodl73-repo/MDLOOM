@@ -1,19 +1,19 @@
-# proof Math — LaTeX Rendering for ASCII/Terminal
+# mdloom Math — LaTeX Rendering for ASCII/Terminal
 
-proof renders LaTeX math notation to Unicode symbols and ASCII art — no LaTeX
+mdloom renders LaTeX math notation to Unicode symbols and ASCII art — no LaTeX
 installation, no MathJax, no external tools. The renderer is a pure Rust
 subset parser that maps LaTeX constructs directly to terminal output.
 
 There are two entry points. **Inline** math uses `$...$` and expands anywhere
 in prose — in bullet labels, slide titles, callout text. **Display** math uses
-the `proof:math` fenced block and renders multi-line constructs like stacked
+the `mdloom:math` fenced block and renders multi-line constructs like stacked
 fractions, integrals with limits, and matrices.
 
 The renderer has three tiers. Tier 1 maps single LaTeX commands to Unicode
 characters directly (instant, no layout). Tier 2 handles single-line constructs
 like superscripts, square roots, and inline fractions. Tier 3 handles multi-line
-display math and is only available in `proof:math` blocks — if you use a Tier 3
-construct inside `$...$`, proof downgrades it to Tier 2 and emits a MATH-005
+display math and is only available in `mdloom:math` blocks — if you use a Tier 3
+construct inside `$...$`, mdloom downgrades it to Tier 2 and emits a MATH-005
 warning.
 
 ---
@@ -22,7 +22,7 @@ warning.
 
 Tier 1 is the simplest: single LaTeX commands map directly to single Unicode
 characters. These work everywhere — inline, in bullets, in slide titles. There
-is no rendering overhead; proof just does a table lookup at compile time.
+is no rendering overhead; mdloom just does a table lookup at compile time.
 Use these freely; they expand to well-supported Unicode characters that render
 correctly in any modern terminal.
 
@@ -53,7 +53,7 @@ $\partial$ $\nabla$ $\int$ $\oint$ $\sum$ $\prod$
 ## Tier 2 — Single-line ASCII art
 
 Tier 2 constructs produce more than one character but fit on a single line.
-They work in both inline `$...$` and `proof:math` blocks. Superscripts and
+They work in both inline `$...$` and `mdloom:math` blocks. Superscripts and
 subscripts use Unicode combining characters when possible (so `x²` is a real
 superscript, not `x^2`). Complex arguments fall back to bracket notation.
 Square roots, primes, and limit operators all render inline.
@@ -89,29 +89,29 @@ $\frac{df}{dx}$ — $\frac{n+1}{2}$
 ## Tier 3 — Multi-line display math
 
 Tier 3 constructs require multiple output lines and are only valid in
-`proof:math` blocks. If you try to use them inline in `$...$`, proof simplifies
+`mdloom:math` blocks. If you try to use them inline in `$...$`, mdloom simplifies
 them to a single-line form and emits MATH-005. The main Tier 3 constructs are
 stacked fractions, integrals and sums with limits, matrices, and cases.
 
 ### Stacked fractions
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 d         
 ── eˣ = eˣ
 dx        
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 n(n+1)
 ──────
   2   
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 a
 ─
@@ -119,77 +119,77 @@ b
 ─
 c
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Integrals with limits
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
     ∞     
     ⌠     
 ⌡ e dx = 1
     0     
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
     b    
     ⌠    
 ⌡ f(x) dx
     a    
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Sums and products
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
  n           
  ∑  i = \frac
 i=1          
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
  n        
  ∏  k = n!
 k=1       
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Matrices
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 ⎛ a  b ⎞
 ⎝ c  d ⎠
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 ⎡ 1  0 ⎤
 ⎣ 0  1 ⎦
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 | a  b |
 | c  d |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Cases
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 ⎧ n+1  \textif n is odd 
 ⎩ n/2  \textif n is even
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
@@ -197,19 +197,19 @@ k=1
 
 Control width and alignment:
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
                         n                                   
                         ∑  i2 = \frac                       
                        i=1                                  
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 α + β = γ                               
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ```
 π ≈ 3.14159
@@ -229,13 +229,13 @@ $G_{\mu\nu} + \Lambda g_{\mu\nu} = \frac{8\pi G}{c^4} T_{\mu\nu}$
 
 ### Normal distribution
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
   1                         
 ────── e^(-\frac(x-μ)^22σ^2)
 σ√(2π)                      
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Euler's identity
 
@@ -243,23 +243,23 @@ $e^{i\pi} + 1 = 0$
 
 ### Derivative definition
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
             f(x+h) - f(x)
 lim_(h → 0) ─────────────
                   h      
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ### Bayes' theorem
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
 P(A ∩ B)
 ────────
   P(B)  
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 

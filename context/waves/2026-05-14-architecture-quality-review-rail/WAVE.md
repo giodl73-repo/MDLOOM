@@ -10,13 +10,13 @@ source_request: "quality and arch review; fix findings; adopt waves and pulses; 
 
 ## Mission
 
-Turn the architecture/quality review into durable proof execution practice:
+Turn the architecture/quality review into durable mdloom execution practice:
 backfill wave/pulse history, repair stale public contracts, add missing tests,
-clean local warnings, and leave proof with an active planning rail.
+clean local warnings, and leave mdloom with an active planning rail.
 
 ## Claim Boundary
 
-This wave may edit proof skills, wave context, docs, tests, and local warning
+This wave may edit mdloom skills, wave context, docs, tests, and local warning
 cleanup. It may not rewrite release history wholesale, mutate sibling projects,
 or change MAXIM corpus content except through a later named pulse.
 
@@ -34,10 +34,10 @@ or change MAXIM corpus content except through a later named pulse.
 
 | Pulse | Status | Evidence |
 |---|---|---|
-| 01 - Wave/pulse system backfill | DONE | proof-native skills, `.claude/waves.json`, `context/waves/PHASES.md` |
+| 01 - Wave/pulse system backfill | DONE | mdloom-native skills, `.claude/waves.json`, `context/waves/PHASES.md` |
 | 02 - Docs and spec contract repair | DONE | `README.md`, `design/SPEC.md`, pitfall docs |
 | 03 - Coverage and warning cleanup | DONE | Rust tests for review gaps; local warnings removed |
-| 04 - Validation and closeout | DONE | cargo tests/build, proof smoke checks, `CLOSE.md` |
+| 04 - Validation and closeout | DONE | cargo tests/build, mdloom smoke checks, `CLOSE.md` |
 
 ## Validation Gates
 
@@ -50,13 +50,13 @@ git diff --check
 
 ## Done Criteria
 
-- proof has project-native wave, pulse, and plan skills.
+- mdloom has project-native wave, pulse, and plan skills.
 - Backfilled waves connect current execution to release history without
   rewriting `CHANGELOG.md`.
 - README and SPEC match implemented CLI/config/output behavior.
 - Pitfall docs cite existing tests or explicitly name missing tests.
 - Missing coverage from the review is added where implementation already exists.
-- Local proof warnings are cleaned or intentionally carried forward.
+- Local mdloom warnings are cleaned or intentionally carried forward.
 
 ## Non-Goals
 

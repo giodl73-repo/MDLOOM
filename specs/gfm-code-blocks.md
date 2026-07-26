@@ -25,7 +25,7 @@ GFM extends CommonMark in several areas:
 Fenced code blocks are **explicitly not extended** — the spec states them
 under "Leaf blocks" with no GFM-specific annotations.
 
-## Practical Implications for proof
+## Practical Implications for mdloom
 
 Since GFM = CommonMark for code blocks:
 - A CommonMark-compliant parser is GFM-compliant for code blocks
@@ -50,12 +50,12 @@ Liberation Mono, Menlo, Monaco, Courier New — in priority order depending on O
 ### Syntax Highlighting
 
 GitHub applies syntax highlighting based on the info string. This does NOT affect
-character widths or whitespace — it's purely visual (color). proof may use info
+character widths or whitespace — it's purely visual (color). mdloom may use info
 strings to enable language-specific validation in future.
 
-### Rendering Parity with proof
+### Rendering Parity with mdloom
 
-proof uses the `unicode-width` crate (Unicode East Asian Width standard) for
+mdloom uses the `unicode-width` crate (Unicode East Asian Width standard) for
 visual width calculation. This aligns with GitHub's rendering behavior for all
 characters in the Basic Multilingual Plane.
 

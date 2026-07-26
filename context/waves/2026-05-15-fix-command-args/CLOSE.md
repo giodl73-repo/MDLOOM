@@ -2,12 +2,12 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof fix` argument shape
+Continue modularizing the CLI shell by moving the `mdloom fix` argument shape
 into the fix command module.
 
 ## Changes
 
-- Added `cmd_fix::Args` with the clap argument definitions for `proof fix`.
+- Added `cmd_fix::Args` with the clap argument definitions for `mdloom fix`.
 - Replaced the inline `Command::Fix { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_fix::Args`.
 - Kept fix plan loading, dry-run/apply behavior, confidence parsing, and

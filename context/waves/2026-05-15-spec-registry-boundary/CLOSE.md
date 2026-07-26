@@ -2,12 +2,12 @@
 
 ## Outcome
 
-Created a diagnostic-code registry boundary so emitted proof diagnostics have a
+Created a diagnostic-code registry boundary so emitted mdloom diagnostics have a
 single discoverable contract:
 
 - Added `src/diagnostic_registry.rs` with code, default severity, owner family,
   and description entries.
-- Exported the registry through `proof_lib`.
+- Exported the registry through `mdloom_lib`.
 - Added an invariant test that scans source string literals and fails when a
   diagnostic-like code is not registered.
 - Updated `design/SPEC.md` to document the registry, larger command surface,

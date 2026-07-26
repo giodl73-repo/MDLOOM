@@ -1,7 +1,7 @@
-# proof md:// Query Parameters — Filter, Slice, Project Tables
+# mdloom md:// Query Parameters — Filter, Slice, Project Tables
 
-Every proof directive that pulls data from a markdown table — `proof:chart`,
-`proof:tree`, `proof:element`, `proof:row`, `proof:table`, `proof:include` —
+Every mdloom directive that pulls data from a markdown table — `mdloom:chart`,
+`mdloom:tree`, `mdloom:element`, `mdloom:row`, `mdloom:table`, `mdloom:include` —
 accepts a query string on the URI to transform the resolved content before
 the directive sees it. The query string follows the standard `?key=val&key=val`
 form and applies after mdpath element extraction.
@@ -22,46 +22,46 @@ compose with AND.
 
 Examples below use this 6-row fixture committed at `src/data/features.md`:
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0" -->
 ```
 name | category | status | directive | output
 ------ | ---------- | -------- | ----------- | --------
 LaTeX math inline | math | stable | $...$ | inline Unicode
-LaTeX math display | math | stable | proof:math | multi-line ASCII art
+LaTeX math display | math | stable | mdloom:math | multi-line ASCII art
 Symbol expansion | symbols | stable | [sym:name] | Unicode glyph
-Symbol block | symbols | stable | proof:symbol | ASCII art block
-Shape renderer | symbols | stable | proof:shape | ASCII art shape
-Element value | elements | stable | proof:element kind=value | numeric cell
-Element delta | elements | stable | proof:element kind=delta | delta with arrow
-Element sparkline | elements | stable | proof:element kind=sparkline | ASCII sparkline
-Element mini-bar | elements | stable | proof:element kind=mini-bar | ASCII bar chart
-Element label | elements | stable | proof:element kind=label | text label
-Element badge | elements | stable | proof:element kind=badge | bracketed badge
-Row compositor | elements | stable | proof:row | column-pinned row
-Slide title | slides | stable | proof:slide layout=title | title card
-Slide title-content | slides | stable | proof:slide layout=title-content | two-zone slide
-Slide two-column | slides | stable | proof:slide layout=two-column | split layout
-Slide section | slides | stable | proof:slide layout=section | section divider
-Slide stats | slides | stable | proof:slide layout=stats | stat row
-Slide blank | slides | stable | proof:slide layout=blank | empty canvas
-Slide bullets | slides | stable | proof:bullets | bullet list
-Slide callout | slides | stable | proof:callout | callout box
-Slide divider | slides | stable | proof:divider | horizontal rule
-Slide quote | slides | stable | proof:quote | attributed quote
-Slide centered | slides | stable | proof:centered | centered text
-Dashboard canvas | dashboard | stable | proof:region | canvas grid
-Tree dirtree | trees | stable | proof:tree kind=dirtree | filesystem tree
-Tree org | trees | stable | proof:tree kind=org | org chart
-Tree taxonomy | trees | stable | proof:tree kind=taxonomy | taxonomy tree
-Tree dependency | trees | stable | proof:tree kind=dependency | dependency graph
-Tree outline | trees | stable | proof:tree kind=outline | numbered outline
-Figure import | figures | beta | proof:include kind=figure | ASCII image
-DaVinci pin | figures | beta | proof pin | invariant storage
-Lint check | linting | stable | proof check | diagnostic report
-Auto-fix | linting | stable | proof fix | patched files
-Compile pipeline | compile | stable | proof compile | resolved output
+Symbol block | symbols | stable | mdloom:symbol | ASCII art block
+Shape renderer | symbols | stable | mdloom:shape | ASCII art shape
+Element value | elements | stable | mdloom:element kind=value | numeric cell
+Element delta | elements | stable | mdloom:element kind=delta | delta with arrow
+Element sparkline | elements | stable | mdloom:element kind=sparkline | ASCII sparkline
+Element mini-bar | elements | stable | mdloom:element kind=mini-bar | ASCII bar chart
+Element label | elements | stable | mdloom:element kind=label | text label
+Element badge | elements | stable | mdloom:element kind=badge | bracketed badge
+Row compositor | elements | stable | mdloom:row | column-pinned row
+Slide title | slides | stable | mdloom:slide layout=title | title card
+Slide title-content | slides | stable | mdloom:slide layout=title-content | two-zone slide
+Slide two-column | slides | stable | mdloom:slide layout=two-column | split layout
+Slide section | slides | stable | mdloom:slide layout=section | section divider
+Slide stats | slides | stable | mdloom:slide layout=stats | stat row
+Slide blank | slides | stable | mdloom:slide layout=blank | empty canvas
+Slide bullets | slides | stable | mdloom:bullets | bullet list
+Slide callout | slides | stable | mdloom:callout | callout box
+Slide divider | slides | stable | mdloom:divider | horizontal rule
+Slide quote | slides | stable | mdloom:quote | attributed quote
+Slide centered | slides | stable | mdloom:centered | centered text
+Dashboard canvas | dashboard | stable | mdloom:region | canvas grid
+Tree dirtree | trees | stable | mdloom:tree kind=dirtree | filesystem tree
+Tree org | trees | stable | mdloom:tree kind=org | org chart
+Tree taxonomy | trees | stable | mdloom:tree kind=taxonomy | taxonomy tree
+Tree dependency | trees | stable | mdloom:tree kind=dependency | dependency graph
+Tree outline | trees | stable | mdloom:tree kind=outline | numbered outline
+Figure import | figures | beta | mdloom:include kind=figure | ASCII image
+DaVinci pin | figures | beta | mdloom pin | invariant storage
+Lint check | linting | stable | mdloom check | diagnostic report
+Auto-fix | linting | stable | mdloom fix | patched files
+Compile pipeline | compile | stable | mdloom compile | resolved output
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 To run the examples in your own corpus, point them at any markdown file with
 a `#:table:N` element you can address.
@@ -73,7 +73,7 @@ a `#:table:N` element you can address.
 Drop columns you don't care about; keep ordering of the requested list. Use
 this when a chart or element only needs two columns from a wide table.
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0?select=name,status" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0?select=name,status" -->
 ```
 | name | status |
 |---|---|
@@ -112,7 +112,7 @@ this when a chart or element only needs two columns from a wide table.
 | Auto-fix | stable |
 | Compile pipeline | stable |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 If a column you reference doesn't exist, compile fails fast with a clear
 error naming the bad column — no silent column-mismatch.
@@ -127,7 +127,7 @@ sides to f64; equality is plain string compare.
 
 Single filter — keep only stable items:
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0?filter=status=stable&select=name,category" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0?filter=status=stable&select=name,category" -->
 ```
 | name | category |
 |---|---|
@@ -164,23 +164,23 @@ Single filter — keep only stable items:
 | Auto-fix | linting |
 | Compile pipeline | compile |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Multiple filters compose with AND — repeat the `?filter=` key:
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0?filter=status=stable&filter=category=elements&select=name,directive" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0?filter=status=stable&filter=category=elements&select=name,directive" -->
 ```
 | name | directive |
 |---|---|
-| Element value | proof:element kind=value |
-| Element delta | proof:element kind=delta |
-| Element sparkline | proof:element kind=sparkline |
-| Element mini-bar | proof:element kind=mini-bar |
-| Element label | proof:element kind=label |
-| Element badge | proof:element kind=badge |
-| Row compositor | proof:row |
+| Element value | mdloom:element kind=value |
+| Element delta | mdloom:element kind=delta |
+| Element sparkline | mdloom:element kind=sparkline |
+| Element mini-bar | mdloom:element kind=mini-bar |
+| Element label | mdloom:element kind=label |
+| Element badge | mdloom:element kind=badge |
+| Row compositor | mdloom:row |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Numeric comparison — useful when the value column carries a count or score:
 
@@ -195,7 +195,7 @@ md://stats.md#:table:0?filter=goals>50
 `?top=N` keeps the first N rows. `?skip=N` drops the first N. They compose
 into SQL-style paging when used together (skip first, then top):
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0?skip=2&top=3&select=name" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0?skip=2&top=3&select=name" -->
 ```
 | name |
 |---|
@@ -203,7 +203,7 @@ into SQL-style paging when used together (skip first, then top):
 | Symbol block |
 | Shape renderer |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Skip past the first two rows, then keep the next three.
 
@@ -212,16 +212,16 @@ Skip past the first two rows, then keep the next three.
 ## ?count — replace with a single-cell row count
 
 `?count` replaces the entire result with a one-cell synthetic table holding
-the row count. Useful when feeding `proof:element kind=value` from a count:
+the row count. Useful when feeding `mdloom:element kind=value` from a count:
 
-<!-- proof:compiled from="md://src/data/features.md#:table:0?filter=category=math&count" -->
+<!-- mdloom:compiled from="md://src/data/features.md#:table:0?filter=category=math&count" -->
 ```
 | name | category | status | directive | output |
 |---|---|---|---|---|
 | LaTeX math inline | math | stable | $...$ | inline Unicode |
-| LaTeX math display | math | stable | proof:math | multi-line ASCII art |
+| LaTeX math display | math | stable | mdloom:math | multi-line ASCII art |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 The synthetic table looks like `| count |\n|-------|\n| 2 |`.
 
@@ -233,7 +233,7 @@ A chart that shows only the top three stable elements by category — assuming
 your data table has a numeric `score` or `count` column to chart:
 
 ```text
-proof:chart kind=bar width=60 label-field=name value-field=score
+mdloom:chart kind=bar width=60 label-field=name value-field=score
             source=md://stats.md#:table:0?filter=status=stable&filter=category=elements&top=3
 ```
 
@@ -247,16 +247,16 @@ two named fields anyway.
 ## Where the transforms apply
 
 The query string runs at the URI-resolution layer, so it works for **every**
-md:// consumer in proof, not just one directive:
+md:// consumer in mdloom, not just one directive:
 
 | Directive | URI path | Notes |
 |-----------|----------|-------|
-| `proof:chart` | `source=md://...?...` | filter rows before charting |
-| `proof:tree` | `source=md://...?...` | drop rows from org/taxonomy/dependency tables |
-| `proof:element` | `source=md://...?...` | with `?count` to feed a numeric value |
-| `proof:row` | `source=md://...?...` | filter rows before per-row layout |
-| `proof:table` | body URI `?...` | filter the embedded table itself |
-| `proof:include` | inline `pin=md://...?...` | rare; mostly applies to data files |
+| `mdloom:chart` | `source=md://...?...` | filter rows before charting |
+| `mdloom:tree` | `source=md://...?...` | drop rows from org/taxonomy/dependency tables |
+| `mdloom:element` | `source=md://...?...` | with `?count` to feed a numeric value |
+| `mdloom:row` | `source=md://...?...` | filter rows before per-row layout |
+| `mdloom:table` | body URI `?...` | filter the embedded table itself |
+| `mdloom:include` | inline `pin=md://...?...` | rare; mostly applies to data files |
 
 The Tier-2 resolve cache keys on the *clean* URI (without the query string),
 so multiple queries against the same source share a single cache entry —

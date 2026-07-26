@@ -13,7 +13,7 @@ use crate::compile_symbol;
 use crate::compile_toc;
 use crate::compile_tree;
 pub use crate::compile_types::{CompileResult, CompileViolation, ViolationSeverity};
-use crate::config::GlintConfig;
+use crate::config::MdloomConfig;
 use crate::runner::Runner;
 
 use crate::compile_directive::{collect_directives, Directive};
@@ -30,7 +30,7 @@ pub fn compile_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
 ) -> Result<CompileResult> {
     // Dispatch: .slides.source.md files use the slide compositor.
     if source_path

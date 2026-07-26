@@ -1,4 +1,4 @@
-# SLIDE-IMPL-PLAN — proof:slide ASCII presentation composer
+# SLIDE-IMPL-PLAN — mdloom:slide ASCII presentation composer
 
 > Wave 1 (parser) is independent of the dashboard canvas.
 
@@ -44,7 +44,7 @@ pub struct Slide {
     pub author: Option<String>,
     pub date: Option<String>,
     pub body_content: String,  // raw body lines (after front-matter attrs)
-    pub notes_content: String, // raw proof:notes block content (may be empty)
+    pub notes_content: String, // raw mdloom:notes block content (may be empty)
     pub source_line: usize,    // line in source where this slide begins
 }
 
@@ -89,13 +89,13 @@ fn parse_front_matter(block: &str) -> Result<SlideMeta, String>
 /// Returns Vec of raw slide strings (one per slide).
 fn split_slides(body: &str) -> Vec<(usize, String)>  // (source_line, content)
 
-/// Parse a single slide block: extract ```proof:slide ...``` fence attrs and body.
+/// Parse a single slide block: extract ```mdloom:slide ...``` fence attrs and body.
 fn parse_slide(raw: &str, index: usize, source_line: usize) -> Result<Slide, SlideError>
 
-/// Parse layout= and ratio= from proof:slide info string.
+/// Parse layout= and ratio= from mdloom:slide info string.
 fn parse_slide_attrs(info: &str) -> (SlideLayout, Option<String>, Option<String>)
 
-/// Extract proof:notes block content from slide body; return (body_without_notes, notes).
+/// Extract mdloom:notes block content from slide body; return (body_without_notes, notes).
 fn extract_notes(body: &str) -> (String, String)
 ```
 
@@ -132,12 +132,12 @@ canvas and does not need to wait. `src/slide/mod.rs` and `layout.rs` import from
 | 6 | `layout=two-column ratio=60:40` parsed to `SlideLayout::TwoColumn { ratio: (60, 40) }` |
 | 7 | `ratio=60:50` → `SlideError::InvalidRatio` (SLIDE-002: parts don't sum to 100) |
 | 8 | Slide title from info string: `title="Foo Bar"` → `slide.title == Some("Foo Bar")` |
-| 9 | `proof:notes` block extracted to `notes_content`; absent from `body_content` |
+| 9 | `mdloom:notes` block extracted to `notes_content`; absent from `body_content` |
 | 10 | `body_content` for title layout: subtitle, author, date parsed from YAML attrs |
 | 11 | Empty file → SlideDoc with 1 empty slide, default SlideMeta |
 | 12 | `parse_slide_doc` on 5-slide file → `slides.len() == 5`, indices 1..=5 |
 
-**Exit criterion**: `cargo test -p proof-lib slide::parser::` is clean. `parse_slide_doc` on the
+**Exit criterion**: `cargo test -p mdloom-lib slide::parser::` is clean. `parse_slide_doc` on the
 example from SLIDE-SPEC.md produces 5 slides with correct layouts and titles.
 
 ---
@@ -171,7 +171,7 @@ pub fn render_slide(
 // ── Layout implementations ─────────────────────────────────
 
 /// title: vertically + horizontally center title, subtitle, author, date.
-/// No title bar. Centering is compositor-driven (not proof:centered).
+/// No title bar. Centering is compositor-driven (not mdloom:centered).
 fn render_title(slide: &Slide, canvas: &mut Canvas, meta: &SlideMeta)
 
 /// title-content: 3-row title bar (row 0..2) + separator + body fills rest.
@@ -195,10 +195,10 @@ fn render_two_column(
 )
 
 /// section: compositor-driven. Centers title (larger) and subtitle (smaller) vertically
-/// and horizontally. No proof:centered required from author.
+/// and horizontally. No mdloom:centered required from author.
 fn render_section(slide: &Slide, canvas: &mut Canvas, meta: &SlideMeta)
 
-/// stats: dedicated renderer. No proof:columns. No ratio= or divider=.
+/// stats: dedicated renderer. No mdloom:columns. No ratio= or divider=.
 /// Column width = floor(content_width / stat_count); remainder to rightmost.
 /// Each stat block independently centered within its allocated column width.
 fn render_stats(
@@ -209,7 +209,7 @@ fn render_stats(
 )
 
 /// blank: no structure. Body lines pasted starting at (0, 0). All positioning
-/// via proof: directives in the body.
+/// via mdloom: directives in the body.
 fn render_blank(
     slide: &Slide,
     canvas: &mut Canvas,
@@ -253,7 +253,7 @@ Wave 3 replaces this stub with the full directive-dispatching implementation.
 `SLIDE-003` (warning) and clip. Canvas `paste` handles clipping silently; the violation
 is emitted by the layout renderer before calling `paste`.
 
-**Ratio rounding** — `two_column` and `proof:columns`:
+**Ratio rounding** — `two_column` and `mdloom:columns`:
 
 // The correct formula: `floor(content_width × ratio_a / (ratio_a + ratio_b))` for
 // column A, remainder to column B.
@@ -298,8 +298,8 @@ without panic.
 ## Wave 3 — Slide-specific directives (~350 LOC)
 
 **Goal**: Implement the directive renderers that appear inside slide body blocks:
-`proof:bullets`, `proof:columns`, `proof:quote`, `proof:centered`, `proof:stat`,
-`proof:callout`, `proof:divider`. Also handle `proof:notes` extraction and linting contract.
+`mdloom:bullets`, `mdloom:columns`, `mdloom:quote`, `mdloom:centered`, `mdloom:stat`,
+`mdloom:callout`, `mdloom:divider`. Also handle `mdloom:notes` extraction and linting contract.
 
 ### New files
 
@@ -313,8 +313,8 @@ pub struct BulletConfig {
     pub indent_per_level: usize, // default: 2
 }
 
-/// Render a proof:bullets block body to lines.
-/// Input: raw lines after `proof:bullets` header (inside the fence).
+/// Render a mdloom:bullets block body to lines.
+/// Input: raw lines after `mdloom:bullets` header (inside the fence).
 /// Output: Vec<String> of rendered bullet lines.
 /// Emits SLIDE-001 if bullet count > max_bullets.
 /// Emits SLIDE-007 if depth > max_depth (renders at max_depth char).
@@ -338,7 +338,7 @@ pub struct ColumnsConfig {
     pub divider: bool,
 }
 
-/// Parse ## col: sections from a proof:columns or two-column body.
+/// Parse ## col: sections from a mdloom:columns or two-column body.
 /// Returns Vec of (col_index, content_lines).
 /// Emits SLIDE-004 if two-column body has < 2 ## col: sections.
 pub fn parse_col_sections(body: &str) -> Vec<(usize, Vec<String>)>
@@ -357,15 +357,15 @@ pub fn render_columns(
 **`src/slide/inline.rs`**
 
 ```rust
-/// proof:quote — centered block quote with curly-quote attribution.
+/// mdloom:quote — centered block quote with curly-quote attribution.
 /// Output is centered within available_width.
 pub fn render_quote(body: &str, attribution: Option<&str>, available_width: usize) -> Vec<String>
 
-/// proof:centered — horizontally center each non-empty line.
+/// mdloom:centered — horizontally center each non-empty line.
 /// SL-6: tie-break extra space on right.
 pub fn render_centered(body: &str, available_width: usize) -> Vec<String>
 
-/// proof:stat — large value with label and optional sublabel.
+/// mdloom:stat — large value with label and optional sublabel.
 /// SL-4: value right-aligned within width.
 /// Emits SLIDE-005 warning if value is non-numeric.
 pub fn render_stat(
@@ -376,33 +376,33 @@ pub fn render_stat(
     violations: &mut Vec<CompileViolation>,
 ) -> Vec<String>
 
-/// proof:callout — boxed or prefixed callout.
+/// mdloom:callout — boxed or prefixed callout.
 /// Styles: key=★, info=ℹ, warning=⚠, tip=→, note=◆
 pub fn render_callout(body: &str, style: &str, available_width: usize) -> Vec<String>
 
-/// proof:divider — horizontal rule.
+/// mdloom:divider — horizontal rule.
 /// Styles: thin=─, double=═, dotted=·, wave=~, approx=≈
 pub fn render_divider(style: &str, width: usize) -> String
 ```
 
-**proof:notes behavior**:
+**mdloom:notes behavior**:
 
-- `extract_notes` (Wave 1 parser) strips `proof:notes` block content from `body_content`
+- `extract_notes` (Wave 1 parser) strips `mdloom:notes` block content from `body_content`
   into `slide.notes_content` before layout rendering. Notes are never present in the slide
   canvas.
-- When `proof check` runs on a `.slides.source.md` file, notes content is passed through the
+- When `mdloom check` runs on a `.slides.source.md` file, notes content is passed through the
   full check pipeline. The check runner treats the notes block as inline body content. To
-  suppress: `proof check --no-notes` (planned, not implemented in this plan).
+  suppress: `mdloom check --no-notes` (planned, not implemented in this plan).
 - When compiling with `--format notes`, `compile_slides` emits `slide.notes_content` instead
   of the canvas render.
 - SL-5 is enforced at the canvas level: `render_slide` never reads `notes_content`.
 
 **Body directive dispatch** — inside `render_title_content`, `render_two_column`, and
-`render_blank`, the body string is scanned for inline `proof:*` directives using a
+`render_blank`, the body string is scanned for inline `mdloom:*` directives using a
 `render_body_lines` function:
 
 ```rust
-/// Render body content string into Vec<String>, dispatching proof: directives.
+/// Render body content string into Vec<String>, dispatching mdloom: directives.
 /// Directives are recognized as bare lines (not fenced) inside the slide body fence.
 /// Returns rendered lines for pasting into the canvas body region.
 fn render_body_lines(
@@ -413,11 +413,11 @@ fn render_body_lines(
 ) -> Vec<String>
 ```
 
-Directive dispatch order inside body: `proof:bullets`, `proof:columns`, `proof:quote`,
-`proof:centered`, `proof:stat`, `proof:callout`, `proof:divider`. Lines not matching any
+Directive dispatch order inside body: `mdloom:bullets`, `mdloom:columns`, `mdloom:quote`,
+`mdloom:centered`, `mdloom:stat`, `mdloom:callout`, `mdloom:divider`. Lines not matching any
 directive prefix are emitted as-is (plain text rendering).
 
-`proof:chart`, `proof:tree`, and `proof:element` inside slide body are passed through
+`mdloom:chart`, `mdloom:tree`, and `mdloom:element` inside slide body are passed through
 unchanged to the existing compile pipeline (their output is already plain text fenced blocks;
 inside a slide body they render as text lines).
 
@@ -441,8 +441,8 @@ inside a slide body they render as text lines).
 | 14 | `render_divider style=double` at width=40 → 40 `═` chars |
 | 15 | Notes excluded from canvas: `slide.notes_content` non-empty, canvas body empty of notes text (SL-5) |
 
-**Exit criterion**: `cargo test -p proof-lib slide::bullets slide::columns slide::inline` is
-clean. A slide body containing `proof:bullets` (3 levels) + `proof:divider` renders without
+**Exit criterion**: `cargo test -p mdloom-lib slide::bullets slide::columns slide::inline` is
+clean. A slide body containing `mdloom:bullets` (3 levels) + `mdloom:divider` renders without
 panic; output lines have correct bullet chars and divider.
 
 ---
@@ -450,7 +450,7 @@ panic; output lines have correct bullet chars and divider.
 ## Wave 4 — CLI + compile directive (~200 LOC)
 
 **Goal**: Wire the slide pipeline into `compile.rs` and `main.rs`. Implement the
-`proof:slide` directive handler, `--slide N`, `--format`, `--theme` CLI flags, and
+`mdloom:slide` directive handler, `--slide N`, `--format`, `--theme` CLI flags, and
 SLIDE-* diagnostic codes. Handle `.slides.source.md` path routing.
 
 ### Changes to existing files
@@ -460,14 +460,14 @@ SLIDE-* diagnostic codes. Handle `.slides.source.md` path routing.
 ```rust
 Slide {
     layout: String,
-    attrs_raw: String,   // full info string after "proof:slide"
+    attrs_raw: String,   // full info string after "mdloom:slide"
     body_lines: Vec<String>,
     line_start: usize,
     line_end: usize,
 }
 ```
 
-Extend `proof_directive_kind`:
+Extend `mdloom_directive_kind`:
 
 ```rust
 else if rest.starts_with("slide") { Some("slide") }
@@ -517,7 +517,7 @@ Implementation:
      `Json` → JSON object.
 4. Assemble output:
    - `Compiled` all slides: join with `SLIDE N ──── N/total` headers and `\n` between.
-   - Wrap in `<!-- proof:compiled from="proof:slides" count=N -->` ... `<!-- /proof:compiled -->`
+   - Wrap in `<!-- mdloom:compiled from="mdloom:slides" count=N -->` ... `<!-- /mdloom:compiled -->`
      (unless `no_chrome`).
 
 **`src/main.rs`** — extend `Command::Compile`:
@@ -570,7 +570,7 @@ pub fn derive_output_path(source: &Path) -> Option<PathBuf> {
 | `SLIDE-006` | Error | `compile_slide_doc`: `--slide N` > slide count |
 | `SLIDE-007` | Warning | `render_bullets`: depth > max_depth |
 
-**Integration with existing directives** — `proof:chart`, `proof:tree`, and `proof:element`
+**Integration with existing directives** — `mdloom:chart`, `mdloom:tree`, and `mdloom:element`
 inside a slide body fence are passed through `collect_directives` and compiled by their
 existing arms before the body lines are assembled for `render_body_lines`. The slide body
 is a synthetic `.source.md` string; the existing compile pipeline handles nested directives.
@@ -590,10 +590,10 @@ is a synthetic `.source.md` string; the existing compile pipeline handles nested
 | 9 | `--theme box` overrides front-matter theme; border chars present in output |
 | 10 | SLIDE-002 emitted for `ratio=60:50` — error, compile halts |
 | 11 | SLIDE-004 emitted for two-column slide with one `## col:` section |
-| 12 | `proof compile edm-preview.slides.source.md --slide 2` exits 0, output is 34 lines of 120 chars (SL-1) |
+| 12 | `mdloom compile edm-preview.slides.source.md --slide 2` exits 0, output is 34 lines of 120 chars (SL-1) |
 
-**Exit criterion**: `proof compile edm-preview.slides.source.md --slide 2` renders a valid
-`title-content` slide with `proof:bullets` and a chart. Output is exactly
+**Exit criterion**: `mdloom compile edm-preview.slides.source.md --slide 2` renders a valid
+`title-content` slide with `mdloom:bullets` and a chart. Output is exactly
 `meta.width × meta.height` characters per line. All SLIDE-* codes are reachable via test
 inputs.
 
@@ -630,10 +630,10 @@ src/slide/
   dependency on `dashboard::canvas::Canvas` — the slide canvas is self-contained.
 - `visual_width` from `src/layout.rs` is the only column-width measurer. `center_line`,
   `split_ratio`, and `render_columns` all use it for char-level measurement.
-- `## col:` sections inside a `proof:slide layout=two-column` or `proof:columns` fence are
+- `## col:` sections inside a `mdloom:slide layout=two-column` or `mdloom:columns` fence are
   structural delimiters, not document headings. The slide body compiler must suppress
   `md_h1_count` and heading checks for lines matching `## col:*` inside these fences.
-- `proof:notes` linting: the check runner in `src/runner.rs` needs a way to receive the
+- `mdloom:notes` linting: the check runner in `src/runner.rs` needs a way to receive the
   extracted notes text. The simplest approach: `parse_slide_doc` returns `notes_content`
   per slide; the check command joins all notes blocks and runs `runner.lint_content` on the
   aggregate. Planned `--no-notes` flag would skip this step.
@@ -641,8 +641,8 @@ src/slide/
   enum variant.
 - `derive_output_path` checks `.slides.source.md` before `.source.md` — same pattern as
   the planned `.dashboard.source.md` check. All three suffixes must be ordered longest-first.
-- IceLines integration: no proof changes beyond Wave 4 CLI flags. IceLines calls
-  `proof compile team.slides.source.md --slide N --width $COLUMNS --height $LINES --no-chrome`
+- IceLines integration: no mdloom changes beyond Wave 4 CLI flags. IceLines calls
+  `mdloom compile team.slides.source.md --slide N --width $COLUMNS --height $LINES --no-chrome`
   and renders the raw canvas string directly to the terminal.
 - `walkdir` in `cmd_compile` already catches `.slides.source.md` files because they end in
   `.source.md` — no filter change needed.

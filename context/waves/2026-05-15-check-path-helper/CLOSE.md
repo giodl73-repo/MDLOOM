@@ -8,7 +8,7 @@ command implementations.
 ## Changes
 
 - Added `cmd_paths::check_paths_or_cwd`.
-- Updated `cmd_check` to use the shared helper for both explicit `proof check`
+- Updated `cmd_check` to use the shared helper for both explicit `mdloom check`
   and default-check routing.
 - Removed the duplicate private path fallback helper from `cmd_check`.
 - Preserved check behavior: command paths win, top-level default-check paths are
@@ -17,7 +17,7 @@ command implementations.
 ## Validation
 
 - `cargo test binary_check_summary_file_count_honors_include_exclude`
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_stats_command_runs`
 - `cargo test runner_path_summary_counts_file_and_directory_inputs`
 

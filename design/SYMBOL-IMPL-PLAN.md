@@ -1,7 +1,7 @@
 # Symbol System Implementation Plan
 
 > **Spec**: `design/SYMBOL-SPEC.md`
-> **Target**: v1.0 MVP — core tier only, `[sym:name]` inline expansion, `proof:symbol` and `proof:shape` directives, `[[symbol]]` config parsing.
+> **Target**: v1.0 MVP — core tier only, `[sym:name]` inline expansion, `mdloom:symbol` and `mdloom:shape` directives, `[[symbol]]` config parsing.
 
 ---
 
@@ -106,7 +106,7 @@ pub struct CustomSymbolConfig {
 }
 ```
 
-Add `#[serde(default)] pub symbol: Vec<CustomSymbolConfig>` to `GlintConfig`.
+Add `#[serde(default)] pub symbol: Vec<CustomSymbolConfig>` to `MdloomConfig`.
 
 TOML single-quoted multiline (`'''`) preserves all whitespace literally — no escapes. Width × height are computed after parsing if not declared. Merge semantics: additive (child symbols extend parent's symbol list, matching `davinci` pattern).
 
@@ -137,11 +137,11 @@ TOML single-quoted multiline (`'''`) preserves all whitespace literally — no e
 
 ---
 
-## Wave 2 — proof:symbol and proof:shape Directives
+## Wave 2 — mdloom:symbol and mdloom:shape Directives
 
 **Files**: `src/symbol/shape.rs`, additions to `src/compile.rs`
 **Estimated LOC**: ~250
-**Exit criterion**: `proof:symbol name=star size=3` renders a 5×5 star block; `proof:shape name=banner style=double title="Test"` renders a double-border banner; `proof:shape name=badge label="MVP"` renders a rounded badge.
+**Exit criterion**: `mdloom:symbol name=star size=3` renders a 5×5 star block; `mdloom:shape name=banner style=double title="Test"` renders a double-border banner; `mdloom:shape name=badge label="MVP"` renders a rounded badge.
 
 ### `src/symbol/shape.rs`
 
@@ -187,9 +187,9 @@ Default style: `double`.
 
 Default style: `rounded`.
 
-### `proof:symbol` directive in `compile.rs`
+### `mdloom:symbol` directive in `compile.rs`
 
-Add to `proof_directive_kind`:
+Add to `mdloom_directive_kind`:
 ```rust
 else if rest.starts_with("symbol") { Some("symbol") }
 else if rest.starts_with("shape")  { Some("shape") }
@@ -211,16 +211,16 @@ Shape {
 },
 ```
 
-`proof:symbol size=1` emits a single Unicode character inline. `size=2..=5` emits a multi-line block: size maps to grid dimensions (1→1×1, 2→3×3, 3→5×5, 5→9×9). For symbols without an ASCII art form, the character is tiled in a diamond/cross pattern at the requested size (see SYMBOL-SPEC.md `star-shape` examples).
+`mdloom:symbol size=1` emits a single Unicode character inline. `size=2..=5` emits a multi-line block: size maps to grid dimensions (1→1×1, 2→3×3, 3→5×5, 5→9×9). For symbols without an ASCII art form, the character is tiled in a diamond/cross pattern at the requested size (see SYMBOL-SPEC.md `star-shape` examples).
 
-Output is wrapped in the standard `<!-- proof:compiled -->` block, matching the pattern in `format_include_block`.
+Output is wrapped in the standard `<!-- mdloom:compiled -->` block, matching the pattern in `format_include_block`.
 
 ### Tests
 
 | Test | Asserts |
 |------|---------|
-| `test_symbol_size1_renders_char` | `proof:symbol name=star size=1` → `★` |
-| `test_symbol_size3_renders_block` | `proof:symbol name=star size=3` → 5 lines |
+| `test_symbol_size1_renders_char` | `mdloom:symbol name=star size=1` → `★` |
+| `test_symbol_size3_renders_block` | `mdloom:symbol name=star size=3` → 5 lines |
 | `test_banner_double_width40` | title centered, double borders |
 | `test_banner_single_style` | single-line box characters |
 | `test_banner_rounded_style` | `╭╮╰╯` corners |
@@ -230,8 +230,8 @@ Output is wrapped in the standard `<!-- proof:compiled -->` block, matching the 
 | `test_badge_square` | `┌──┐` frame |
 | `test_shape_unknown_emits_symbol003` | SYMBOL-003 on bad shape name |
 | `test_shape_content_exceeds_width_warns_symbol004` | SYMBOL-004 warning |
-| `test_directive_symbol_parsed` | `proof:symbol` appears in `collect_directives` |
-| `test_directive_shape_parsed` | `proof:shape` appears in `collect_directives` |
+| `test_directive_symbol_parsed` | `mdloom:symbol` appears in `collect_directives` |
+| `test_directive_shape_parsed` | `mdloom:shape` appears in `collect_directives` |
 
 ---
 
@@ -239,7 +239,7 @@ Output is wrapped in the standard `<!-- proof:compiled -->` block, matching the 
 
 **Files**: `src/compile.rs` (prose expansion pass), `src/config.rs` (merge), integration tests
 **Estimated LOC**: ~150
-**Exit criterion**: End-to-end `compile_file` with `[sym:checkmark]` in a bullet label expands correctly; `proof:bullets bullet-1="★"` uses the symbol; `proof:callout symbol=trophy` resolves the symbol; `proof:element kind=label style=badge` uses the badge renderer.
+**Exit criterion**: End-to-end `compile_file` with `[sym:checkmark]` in a bullet label expands correctly; `mdloom:bullets bullet-1="★"` uses the symbol; `mdloom:callout symbol=trophy` resolves the symbol; `mdloom:element kind=label style=badge` uses the badge renderer.
 
 ### Prose expansion pass in compile pipeline
 
@@ -251,7 +251,7 @@ fn expand_prose_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolW
 
 This pass must skip:
 - Lines inside fenced code blocks (track state with a `in_fence: bool` flag)
-- `<!-- proof:compiled -->` blocks (already resolved)
+- `<!-- mdloom:compiled -->` blocks (already resolved)
 - Inline code spans (`` `backtick` ``)
 - URL tokens
 
@@ -271,17 +271,17 @@ symbol: {
 },
 ```
 
-### `proof:bullets` symbol config
+### `mdloom:bullets` symbol config
 
-`proof:bullets` directive already accepts `bullet-1=`, `bullet-2=`, `bullet-3=` attribute strings. In Wave 3, these values are passed through `expand_symbols` so that `bullet-1="[sym:star]"` is expanded before rendering. Literal characters like `★` continue to work unchanged — no behavioral regression.
+`mdloom:bullets` directive already accepts `bullet-1=`, `bullet-2=`, `bullet-3=` attribute strings. In Wave 3, these values are passed through `expand_symbols` so that `bullet-1="[sym:star]"` is expanded before rendering. Literal characters like `★` continue to work unchanged — no behavioral regression.
 
-### `proof:callout symbol=` attribute
+### `mdloom:callout symbol=` attribute
 
-When `symbol=name` is present on a `proof:callout`, resolve via `SymbolLibrary`. Emit the character prepended to the callout label line. If the symbol is width-2 (emoji), add one space of padding after to preserve alignment. SYMBOL-001 warning if not found.
+When `symbol=name` is present on a `mdloom:callout`, resolve via `SymbolLibrary`. Emit the character prepended to the callout label line. If the symbol is width-2 (emoji), add one space of padding after to preserve alignment. SYMBOL-001 warning if not found.
 
-### `proof:element kind=label style=badge`
+### `mdloom:element kind=label style=badge`
 
-`proof:element` with `kind=label style=badge` calls `render_badge(value, "rounded")` from `src/symbol/shape.rs`. This is the same renderer used by Wave 2 `proof:shape name=badge`. Coupling is intentional — documented in SYMBOL-SPEC.md custom symbol `style="badge"` note.
+`mdloom:element` with `kind=label style=badge` calls `render_badge(value, "rounded")` from `src/symbol/shape.rs`. This is the same renderer used by Wave 2 `mdloom:shape name=badge`. Coupling is intentional — documented in SYMBOL-SPEC.md custom symbol `style="badge"` note.
 
 ### Integration tests
 
@@ -289,7 +289,7 @@ When `symbol=name` is present on a `proof:callout`, resolve via `SymbolLibrary`.
 |------|---------|
 | `test_compile_sym_in_prose` | `[sym:checkmark] Passed` → `✓ Passed` in output |
 | `test_compile_sym_skipped_in_code_fence` | code block left unchanged |
-| `test_compile_sym_skipped_in_compiled_block` | `<!-- proof:compiled -->` blocks untouched |
+| `test_compile_sym_skipped_in_compiled_block` | `<!-- mdloom:compiled -->` blocks untouched |
 | `test_compile_unknown_sym_warns` | SYMBOL-001 in `CompileResult.violations` |
 | `test_compile_bullets_sym_expansion` | `bullet-1="[sym:star]"` → `★` prefix |
 | `test_compile_callout_symbol` | `symbol=warning` → `⚠` prepended |
@@ -304,7 +304,7 @@ When `symbol=name` is present on a `proof:callout`, resolve via `SymbolLibrary`.
 ```
 Wave 1 (symbol resolution, library, emoji)
     ↓
-Wave 2 (shape renderer, proof:symbol + proof:shape directives)
+Wave 2 (shape renderer, mdloom:symbol + mdloom:shape directives)
     ↓
 Wave 3 (prose expansion wired into compile pipeline, config merge)
 ```
@@ -317,5 +317,5 @@ Wave 2 depends on Wave 1 (`resolve`, `SymbolLibrary`). Wave 3 depends on both.
 - `visual_width()` is called on the fully-expanded string, never on the `[sym:name]` template — width budget accounting is always on rendered output.
 - Emoji in a width-1 budget always emits exactly 1 column — the fallback character. Width-2 budget emits exactly 2 columns. E-1 is never violated.
 - Resolution order is strict: custom `[[symbol]]` → built-in exact → built-in alias. A custom symbol can shadow a built-in of the same name.
-- `proof:shape` content exceeding declared `width × height` is SYMBOL-004 warning, not error — authors can declare a smaller frame and let content overflow visually.
-- `shape.rs` `render_badge` is the single implementation used by both `proof:shape name=badge` and `proof:element kind=label style=badge` — no duplication.
+- `mdloom:shape` content exceeding declared `width × height` is SYMBOL-004 warning, not error — authors can declare a smaller frame and let content overflow visually.
+- `shape.rs` `render_badge` is the single implementation used by both `mdloom:shape name=badge` and `mdloom:element kind=label style=badge` — no duplication.

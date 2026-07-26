@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub(crate) struct Args {
     /// The md:// URI to resolve
     uri: String,
-    /// Root directory (default: current directory, or where proof.toml lives)
+    /// Root directory (default: current directory, or where mdloom.toml lives)
     #[arg(short, long)]
     root: Option<PathBuf>,
     /// Output format: text (default) | json

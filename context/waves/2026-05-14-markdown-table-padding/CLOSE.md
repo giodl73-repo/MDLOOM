@@ -16,7 +16,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before wave | After |
 |---|---:|---:|
@@ -28,4 +28,4 @@ status: complete
 
 1. Remaining MAXIM warnings are now dominated by schema presence checks and
    intentionally strict ASCII barchart/arrow/padding families.
-2. Sibling `mdpath` warnings remain external to proof.
+2. Sibling `mdpath` warnings remain external to mdloom.

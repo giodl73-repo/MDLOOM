@@ -2,13 +2,13 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof compile` argument shape
+Continue modularizing the CLI shell by moving the `mdloom compile` argument shape
 into the compile command module.
 
 ## Changes
 
 - Added `cmd_compile::Args` with the clap argument definitions for
-  `proof compile`.
+  `mdloom compile`.
 - Replaced the inline `Command::Compile { ... }` fields in `main.rs` with a
   tuple variant that references `cmd_compile::Args`.
 - Kept default compile path normalization in `main.rs` while command behavior

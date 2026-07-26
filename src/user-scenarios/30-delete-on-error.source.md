@@ -1,6 +1,6 @@
-# CI Workflow — proof compile --delete-on-error
+# CI Workflow — mdloom compile --delete-on-error
 
-This scenario demonstrates `proof compile --delete-on-error` in a GitHub
+This scenario demonstrates `mdloom compile --delete-on-error` in a GitHub
 Actions pipeline. Stale compiled output is automatically removed when the
 source cannot be compiled, preventing docs from serving outdated content.
 
@@ -28,17 +28,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install proof
-        run: cargo install proof --locked
+      - name: Install mdloom
+        run: cargo install mdloom --locked
 
       - name: Lint source files
-        run: proof check src/ --fail-on-error
+        run: mdloom check src/ --fail-on-error
 
       - name: Compile docs
-        run: proof compile --delete-on-error
+        run: mdloom compile --delete-on-error
 
       - name: Verify no stale output
-        run: proof check docs/ --errors-only --fail-on-error
+        run: mdloom check docs/ --errors-only --fail-on-error
 
       - name: Deploy
         if: github.ref == 'refs/heads/main'
@@ -59,9 +59,9 @@ jobs:
 |------|---------|
 | 0 | All targets compiled successfully |
 | 1 | One or more targets failed; stale output deleted |
-| 2 | Configuration error (proof.toml unreadable, etc.) |
+| 2 | Configuration error (mdloom.toml unreadable, etc.) |
 
-## proof.toml configuration
+## mdloom.toml configuration
 
 ```toml
 [[compile]]
@@ -73,6 +73,6 @@ source_dir = "src/presentations"
 output_dir = "docs/presentations"
 ```
 
-Running `proof compile --delete-on-error` processes both targets. If either
+Running `mdloom compile --delete-on-error` processes both targets. If either
 fails, the corresponding output directory is cleaned before the process exits
 with code 1, ensuring the deploy step never runs with partial output.

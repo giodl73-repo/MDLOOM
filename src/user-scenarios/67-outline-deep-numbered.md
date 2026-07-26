@@ -1,9 +1,9 @@
 # US-67 — Outline tree: deep numbered hierarchy
 
-Three-level numbered bullets — proof auto-indents by dot depth so the
+Three-level numbered bullets — mdloom auto-indents by dot depth so the
 author types flat and the rendered output has consistent indentation.
 
-<!-- proof:compiled from="proof:tree kind=outline" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=outline" uri="" -->
 ```outline
 1. Discovery
     1.1 Stakeholder interviews
@@ -19,4 +19,4 @@ author types flat and the rendered output has consistent indentation.
     3.2 Phase 2: features
 4. Ship
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

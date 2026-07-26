@@ -13,35 +13,35 @@ dashboard:
     footer:  { x: 0,  y: 13, width: 80, height: 3  }
 ---
 
-```proof:region name=header
+```mdloom:region name=header
 DAILY METRICS BOARD                                              2026-04-28
 ```
 
-```proof:region name=kpi1
-proof:element kind=label value="99.9%" width=14
-proof:element kind=badge value="Uptime" width=8
+```mdloom:region name=kpi1
+mdloom:element kind=label value="99.9%" width=14
+mdloom:element kind=badge value="Uptime" width=8
 ```
 
-```proof:region name=kpi2
-proof:element kind=label value="142ms" width=14
-proof:element kind=badge value="P50" width=8
+```mdloom:region name=kpi2
+mdloom:element kind=label value="142ms" width=14
+mdloom:element kind=badge value="P50" width=8
 ```
 
-```proof:region name=kpi3
-proof:element kind=value value="1847" label="Req/sec" width=18
-proof:element kind=delta value="+203" width=8
+```mdloom:region name=kpi3
+mdloom:element kind=value value="1847" label="Req/sec" width=18
+mdloom:element kind=delta value="+203" width=8
 ```
 
-```proof:region name=kpi4
-proof:element kind=value value="0" label="Errors" width=12
-proof:element kind=badge value="clean" width=8
+```mdloom:region name=kpi4
+mdloom:element kind=value value="0" label="Errors" width=12
+mdloom:element kind=badge value="clean" width=8
 ```
 
-```proof:region name=trend
+```mdloom:region name=trend
 Throughput (7 days):
-proof:element kind=sparkline value="1200,1350,1100,1600,1750,1820,1847" width=78
+mdloom:element kind=sparkline value="1200,1350,1100,1600,1750,1820,1847" width=78
 ```
 
-```proof:region name=footer
-[sym:info] Auto-refresh every 60s  |  proof compile --watch  |  v0.5.0
+```mdloom:region name=footer
+[sym:info] Auto-refresh every 60s  |  mdloom compile --watch  |  v0.5.0
 ```

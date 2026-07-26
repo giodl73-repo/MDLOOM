@@ -1,6 +1,6 @@
 use anyhow::Result;
 use colored::Colorize;
-use proof_lib::backfill::{self, BackfillOptions};
+use mdloom_lib::backfill::{self, BackfillOptions};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -8,7 +8,7 @@ pub(crate) struct Args {
     /// Markdown files or directories to backfill
     paths: Vec<PathBuf>,
     /// Write generated .source.md files under DIR
-    #[arg(long, default_value = "proof-source")]
+    #[arg(long, default_value = "mdloom-source")]
     output_source: PathBuf,
     /// Write extraction and round-trip report
     #[arg(long, default_value = "backfill-report.json")]

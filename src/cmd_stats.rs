@@ -1,9 +1,9 @@
 use crate::cmd_context::GlobalOptions;
 use crate::cmd_paths::paths_or_cwd;
 use anyhow::Result;
-use proof_lib::frontmatter::{FrontmatterFilter, FrontmatterTagCounts};
-use proof_lib::lint::lint_paths;
-use proof_lib::Severity;
+use mdloom_lib::frontmatter::{FrontmatterFilter, FrontmatterTagCounts};
+use mdloom_lib::lint::lint_paths;
+use mdloom_lib::Severity;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 

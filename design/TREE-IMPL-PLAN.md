@@ -1,4 +1,4 @@
-# proof tree — Implementation Plan
+# mdloom tree — Implementation Plan
 
 > **Status**: ✅ Complete — all waves implemented.
 > **Spec**: [TREE-SPEC.md](./TREE-SPEC.md)
@@ -29,7 +29,7 @@ T-1 through T-6 and T-12. Wire into `runner.rs` and `config.rs`. No generation y
 |------|--------|
 | `src/checks/ascii_tree.rs` | New — parser + T-1/T-6/T-12 validator |
 | `src/checks/mod.rs` | Add `pub mod ascii_tree;` |
-| `src/config.rs` | Add `AsciiTreeConfig` struct + field on `GlintConfig` |
+| `src/config.rs` | Add `AsciiTreeConfig` struct + field on `MdloomConfig` |
 | `src/runner.rs` | Add `AsciiTreeCheck` to `build_checks()` |
 
 ### Key structs and functions
@@ -122,7 +122,7 @@ impl Default for AsciiTreeConfig {
 fn default_indent_width() -> usize { 4 }
 ```
 
-Add to `GlintConfig`:
+Add to `MdloomConfig`:
 ```rust
 #[serde(default)]
 pub ascii_tree: AsciiTreeConfig,
@@ -174,7 +174,7 @@ Test file: `src/checks/ascii_tree.rs` (inline tests, same pattern as `ascii_box.
 | `multiple_tree_blocks_in_file` | Two dirtree blocks — each checked independently |
 
 **Exit criterion**: `cargo test checks::ascii_tree` — 20+ tests pass, zero failures.
-`proof check` on a file with a valid dirtree emits no diagnostics. A broken tree
+`mdloom check` on a file with a valid dirtree emits no diagnostics. A broken tree
 (└ followed by ├ at same level) emits `tree_connector` on the correct line.
 
 ---
@@ -300,9 +300,9 @@ Location: `src/tree/dirtree.rs` + `src/checks/ascii_tree.rs`
 | `auto_fix_corner_to_tee` | `fix_tree_connector` swaps └ → ├ correctly |
 | `auto_fix_tee_to_corner` | `fix_tree_connector` swaps ├ → └ correctly |
 
-**Exit criterion**: `proof tree generate --kind dirtree --root src/` produces a
+**Exit criterion**: `mdloom tree generate --kind dirtree --root src/` produces a
 valid tree (zero `tree_connector` or `tree_indent` errors when re-checked).
-`proof tree check --verify-paths --root .` validates an existing tree against disk.
+`mdloom tree check --verify-paths --root .` validates an existing tree against disk.
 
 ---
 
@@ -450,16 +450,16 @@ Location: `src/tree/schema.rs`
 | `read_gfm_table_parses_header` | shared | Header row extracted |
 | `read_gfm_table_skips_separator` | shared | `|---|---| ` row excluded |
 
-**Exit criterion**: each schema parser has 10+ tests passing. `proof tree generate
+**Exit criterion**: each schema parser has 10+ tests passing. `mdloom tree generate
 --kind org md://docs/team.md#engineering-org:table:0` produces a valid tree (zero
 structural errors when re-checked). All schema error codes appear in at least one
 test.
 
 ---
 
-## Wave 4 — CLI + proof:tree compile directive
+## Wave 4 — CLI + mdloom:tree compile directive
 
-**Goal**: Full `proof tree` subcommand surface, `proof:tree` compile directive in
+**Goal**: Full `mdloom tree` subcommand surface, `mdloom:tree` compile directive in
 `compile.rs`, and mtime-based cache for dirtree generation.
 
 **Estimated LOC**: ~750 Rust + ~100 test lines
@@ -473,20 +473,20 @@ test.
 | `src/commands/mod.rs` | New — declares `pub mod tree;` |
 | `src/commands/tree.rs` | New — `cmd_tree()` dispatcher + subcommand handlers |
 | `src/main.rs` | Add `Tree` variant to `Command` enum; add `pub mod commands;` to `lib.rs` |
-| `src/compile.rs` | Add `Tree` variant to `Directive` enum; extend `proof_directive_kind()`, `collect_directives()`, and `compile_file()` |
+| `src/compile.rs` | Add `Tree` variant to `Directive` enum; extend `mdloom_directive_kind()`, `collect_directives()`, and `compile_file()` |
 | `src/tree/cache.rs` | New — mtime-based cache key for dirtree, Tier-2 key for schema |
 
 ### CLI surface in `src/commands/tree.rs`
 
 ```rust
-// Three subcommands under `proof tree`:
+// Three subcommands under `mdloom tree`:
 
 pub fn cmd_tree_check(
     uri: Option<String>,
     kind: Option<String>,
     verify_paths: bool,
     root: Option<PathBuf>,
-    config: &GlintConfig,
+    config: &MdloomConfig,
 ) -> anyhow::Result<()>
 // Lints the target file or URI for tree errors.
 // If kind is given, restrict to that kind's rules.
@@ -494,7 +494,7 @@ pub fn cmd_tree_check(
 
 pub fn cmd_tree_fix(
     uri: String,
-    config: &GlintConfig,
+    config: &MdloomConfig,
 ) -> anyhow::Result<()>
 // Run check, build draft plan, apply all auto-fixable groups.
 // Same flow as cmd_fix but scoped to tree_* diagnostic codes.
@@ -511,7 +511,7 @@ pub fn cmd_tree_generate(
     wrap_fence: bool,
     indent_width: usize,
     output: Option<PathBuf>,
-    config: &GlintConfig,
+    config: &MdloomConfig,
 ) -> anyhow::Result<()>
 // Dispatch to generate::generate() and write to output or stdout.
 ```
@@ -554,9 +554,9 @@ enum TreeCommand {
 }
 ```
 
-### `proof:tree` directive in `compile.rs`
+### `mdloom:tree` directive in `compile.rs`
 
-**`proof_directive_kind()` extension**:
+**`mdloom_directive_kind()` extension**:
 ```rust
 else if rest.starts_with("tree") { Some("tree") }
 ```
@@ -605,9 +605,9 @@ Directive::Tree { kind, attrs, source_uri, .. } => {
 **Output formatting**:
 ```rust
 fn format_tree_block(source: Option<&str>, content: &str, attrs: &TreeAttrs) -> String {
-    let from = source.unwrap_or(&format!("proof:tree kind={}", attrs.kind));
+    let from = source.unwrap_or(&format!("mdloom:tree kind={}", attrs.kind));
     format!(
-        "<!-- proof:compiled from=\"{}\" -->\n```dirtree\n{}\n```\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"{}\" -->\n```dirtree\n{}\n```\n<!-- /mdloom:compiled -->",
         from, content
     )
 }
@@ -634,23 +634,23 @@ Location: `src/commands/tree.rs` + `src/compile.rs` (existing test module)
 
 | Test | Covers |
 |------|--------|
-| `parse_tree_directive_dirtree` | `proof:tree kind=dirtree root=src/` parsed correctly |
-| `parse_tree_directive_org` | `proof:tree kind=org` + body URI parsed |
+| `parse_tree_directive_dirtree` | `mdloom:tree kind=dirtree root=src/` parsed correctly |
+| `parse_tree_directive_org` | `mdloom:tree kind=org` + body URI parsed |
 | `tree_attrs_parse_max_depth` | `max-depth=3` → `max_depth: Some(3)` |
 | `tree_attrs_parse_exclude` | `exclude=target/**,*.log` splits correctly |
 | `tree_attrs_parse_verify_paths` | `verify-paths` flag parsed |
 | `tree_attrs_parse_indent_width` | `indent-width=2` → `indent_width: 2` |
 | `compile_tree_directive_dirtree_e2e` | Write temp source.md → compile → check output |
-| `compile_tree_directive_org_e2e` | `proof:tree kind=org md://...` → resolved tree in output |
+| `compile_tree_directive_org_e2e` | `mdloom:tree kind=org md://...` → resolved tree in output |
 | `compile_tree_missing_source_error` | Bad URI → COMPILE-002 violation, no output written |
 | `dirtree_cache_key_stable` | Same dir twice → same key |
 | `dirtree_cache_key_changes_on_mtime` | After touching a file, key differs |
 
 **Exit criterion**: Full E2E test:
-1. Write a `.source.md` with a `proof:tree kind=dirtree root=src/` directive
-2. Run `proof compile`
-3. Output file contains a `<!-- proof:compiled -->` block with a valid dirtree
-4. `proof check` on the output emits zero `tree_*` errors
+1. Write a `.source.md` with a `mdloom:tree kind=dirtree root=src/` directive
+2. Run `mdloom compile`
+3. Output file contains a `<!-- mdloom:compiled -->` block with a valid dirtree
+4. `mdloom check` on the output emits zero `tree_*` errors
 
 ---
 
@@ -666,7 +666,7 @@ Wave 2  ────────────────────────
 Wave 3  ──────────────────────────────────►  schema parsers (org/taxonomy/dependency/outline/decision)
   │                                           generate.rs, kind-specific diagnostics
   ▼
-Wave 4  ──────────────────────────────────►  proof tree CLI, proof:tree compile directive, cache
+Wave 4  ──────────────────────────────────►  mdloom tree CLI, mdloom:tree compile directive, cache
 ```
 
 ---
@@ -701,10 +701,10 @@ connectors from structure. It does not trust the `connector` field on input node
 This means it is safe to use for auto-fix (Wave 2) and generation (Waves 2–3)
 without the caller caring about stale connector values.
 
-**`proof.toml` naming convention**: All `AsciiTreeConfig` fields use `snake_case`
+**`mdloom.toml` naming convention**: All `AsciiTreeConfig` fields use `snake_case`
 in TOML. CLI flags use `--kebab-case`. Directive attributes use `kebab-case`.
-This matches the convention established for all other proof directives.
+This matches the convention established for all other mdloom directives.
 
 **`md://` URI handling**: All Wave 3/4 source resolution goes through
-`mdpath::resolve()`, exactly as `compile.rs` does for `proof:include`. Wave 4's
+`mdpath::resolve()`, exactly as `compile.rs` does for `mdloom:include`. Wave 4's
 `compile.rs` additions reuse the existing `resolve_uri()` helper unchanged.

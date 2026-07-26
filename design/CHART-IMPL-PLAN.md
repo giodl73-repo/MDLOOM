@@ -1,8 +1,8 @@
-# proof chart — Implementation Plan
+# mdloom chart — Implementation Plan
 
 > **Spec**: `design/CHART-SPEC.md`
 > **Status**: ✅ Implemented — `src/chart/`. All ten roster kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. `sankey` is intentionally out of scope (see CHART-SPEC for rationale). The wave plan below is now historical context, not a forward plan.
-> **Implemented**: `proof:chart` compile directive live. `proof chart check` and `proof chart generate` CLI stubs present.
+> **Implemented**: `mdloom:chart` compile directive live. `mdloom chart check` and `mdloom chart generate` CLI stubs present.
 
 ---
 
@@ -11,8 +11,8 @@
 | Pattern | Source |
 |---------|--------|
 | `Check` trait | `src/checks/mod.rs` — `fn name() -> &'static str`, `fn check(path, content) -> Vec<Diagnostic>` |
-| Config struct | `src/config.rs` — `#[derive(Debug, Deserialize, Clone)]`, `Default` impl, wired into `GlintConfig` |
-| Compile directive | `src/compile.rs` — `Directive` enum variant, `proof_directive_kind()` match arm, `collect_directives()` branch, `compile_file()` arm, `format_*_block()` output |
+| Config struct | `src/config.rs` — `#[derive(Debug, Deserialize, Clone)]`, `Default` impl, wired into `MdloomConfig` |
+| Compile directive | `src/compile.rs` — `Directive` enum variant, `mdloom_directive_kind()` match arm, `collect_directives()` branch, `compile_file()` arm, `format_*_block()` output |
 | CLI subcommand | `src/main.rs` — `Command` enum variant + `cmd_*()` function; `clap` derive pattern |
 | Visual width | `src/layout.rs` → `visual_width()` (already handles box-drawing and CJK) |
 
@@ -155,7 +155,7 @@ pub struct AsciiChartConfig {
 }
 ```
 
-Add `ascii_chart: AsciiChartConfig` to `GlintConfig`. Merge: child wins (same as `ascii_barchart`).
+Add `ascii_chart: AsciiChartConfig` to `MdloomConfig`. Merge: child wins (same as `ascii_barchart`).
 
 ### `src/checks/ascii_chart.rs`
 
@@ -369,7 +369,7 @@ Target: 40+ unit tests total across ticks and graph.
 | Candlestick: wick + body placement, OHLC ordering error | 3 |
 | Axis draw: `┼` at origin in 4-quadrant, `└` in 1st-quadrant | 3 |
 
-**Wave 2 exit criterion**: `proof chart generate --kind line --x-min -3 --x-max 3 --y-min -2 --y-max 2` produces a valid 4-quadrant chart with `┼` at (0,0), tick labels padded to uniform width, 5–8 ticks per axis. 40+ tests green.
+**Wave 2 exit criterion**: `mdloom chart generate --kind line --x-min -3 --x-max 3 --y-min -2 --y-max 2` produces a valid 4-quadrant chart with `┼` at (0,0), tick labels padded to uniform width, 5–8 ticks per axis. 40+ tests green.
 
 ---
 
@@ -550,7 +550,7 @@ Chart {
 }
 ```
 
-Add `proof_directive_kind()` match arm: `"chart"` → `Some("chart")`.
+Add `mdloom_directive_kind()` match arm: `"chart"` → `Some("chart")`.
 
 ### Cache key
 
@@ -568,11 +568,11 @@ Target: 15+ unit tests.
 | Per-kind schema validation: missing column errors for 3 representative kinds | 6 |
 | `generate_from_source` smoke test for each category | 3 |
 
-**Wave 4 exit criterion**: `proof chart generate --kind bar md://data.md#:table:0` resolves, parses, and generates a valid bar chart; schema errors produce human-readable messages naming the missing/wrong column; all 3 category kinds generate from their respective source schemas.
+**Wave 4 exit criterion**: `mdloom chart generate --kind bar md://data.md#:table:0` resolves, parses, and generates a valid bar chart; schema errors produce human-readable messages naming the missing/wrong column; all 3 category kinds generate from their respective source schemas.
 
 ---
 
-## Wave 5 — `proof:chart` compile directive
+## Wave 5 — `mdloom:chart` compile directive
 
 **Target file**: additions to `src/compile.rs`
 **Estimated LOC**: ~180 (incremental — new enum variant + arm + format function)
@@ -581,7 +581,7 @@ Target: 15+ unit tests.
 ### Directive syntax (from spec)
 
 ````markdown
-```proof:chart kind=bar width=40
+```mdloom:chart kind=bar width=40
 md://data/benchmarks.md#results:table:0
 ```
 ````
@@ -626,7 +626,7 @@ impl ChartAttrs {
 }
 ```
 
-**3. `proof_directive_kind()` match arm:**
+**3. `mdloom_directive_kind()` match arm:**
 
 ```rust
 else if rest.starts_with("chart") { Some("chart") }
@@ -637,7 +637,7 @@ else if rest.starts_with("chart") { Some("chart") }
 ```rust
 "chart" => {
     let attrs_str = info_after_backticks
-        .strip_prefix("proof:chart").unwrap_or("").trim().to_string();
+        .strip_prefix("mdloom:chart").unwrap_or("").trim().to_string();
     let attrs = ChartAttrs::parse(&attrs_str);
     let uri = body.iter().find_map(|l| {
         let t = l.trim();
@@ -695,7 +695,7 @@ Directive::Chart { uri, attrs, .. } => {
 ```rust
 fn format_chart_block(uri: &str, kind: &str, chart_text: &str) -> String {
     format!(
-        "<!-- proof:compiled from=\"proof:chart kind={}\" uris=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:chart kind={}\" uris=\"{}\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
         kind, uri, chart_text
     )
 }
@@ -711,13 +711,13 @@ Target: 8+ new tests.
 
 | Test area | Count |
 |-----------|-------|
-| `proof_directive_kind("```proof:chart kind=bar")` returns `Some("chart")` | 1 |
+| `mdloom_directive_kind("```mdloom:chart kind=bar")` returns `Some("chart")` | 1 |
 | `ChartAttrs::parse` with kind, width, x-min, x-max | 2 |
-| `collect_directives` recognizes proof:chart block, extracts uri | 2 |
+| `collect_directives` recognizes mdloom:chart block, extracts uri | 2 |
 | `format_chart_block` traceability comment format | 1 |
 | compile integration: Chart directive produces fenced output | 2 |
 
-**Wave 5 exit criterion**: a `.source.md` file containing a `proof:chart kind=bar` directive with a valid `md://` source table compiles to a `.md` file with a fenced bar chart and correct traceability comment. Schema errors produce `COMPILE-007`. All existing compile tests pass.
+**Wave 5 exit criterion**: a `.source.md` file containing a `mdloom:chart kind=bar` directive with a valid `md://` source table compiles to a `.md` file with a fenced bar chart and correct traceability comment. Schema errors produce `COMPILE-007`. All existing compile tests pass.
 
 ---
 

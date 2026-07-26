@@ -2,12 +2,12 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof layout` argument shape
+Continue modularizing the CLI shell by moving the `mdloom layout` argument shape
 into the layout command module.
 
 ## Changes
 
-- Added `cmd_layout::Args` with the clap argument definitions for `proof layout`.
+- Added `cmd_layout::Args` with the clap argument definitions for `mdloom layout`.
 - Replaced the inline `Command::Layout { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_layout::Args`.
 - Kept layout behavior in `cmd_layout::run` unchanged.

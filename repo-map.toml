@@ -11,28 +11,12 @@ cargo_config = ".cargo/config.toml"
 [repos.this_repo]
 role = "current repository"
 relative = "."
-clone_url = "https://github.com/giodl73-repo/PROOF.git"
+clone_url = "https://github.com/giodl73-repo/MDLOOM.git"
 
 [repos.mdpath]
-role = "tracker dependency for proof"
+role = "tracker dependency for mdloom"
 relative = "..\\..\\standards-protocols\\mdpath"
 clone_url = "https://github.com/giodl73-repo/MDPATH.git"
 cargo_patches = [
   { package = "mdpath", source = "https://github.com/giodl73-repo/MDPATH", path = "." },
-]
-
-[repos.pebble]
-role = "tracker dependency for proof"
-relative = "..\\..\\standards-protocols\\pebble"
-clone_url = "https://github.com/giodl73-repo/PEBBLE.git"
-cargo_patches = [
-  { package = "pebble", source = "https://github.com/giodl73-repo/PEBBLE", path = "." },
-]
-
-[repos.slice]
-role = "tracker dependency for proof"
-relative = "..\\slice"
-clone_url = "https://github.com/giodl73-repo/SLICE.git"
-cargo_patches = [
-  { package = "slice-core", source = "https://github.com/giodl73-repo/SLICE", path = "crates/slice-core" },
 ]

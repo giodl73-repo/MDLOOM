@@ -2,11 +2,11 @@ use crate::cmd_context::GlobalOptions;
 use crate::cmd_paths::check_paths_or_cwd;
 use anyhow::Result;
 use colored::Colorize;
-use proof_lib::davinci::check_daVinci;
-use proof_lib::fix::{serialize_json, serialize_rich};
-use proof_lib::frontmatter::FrontmatterFilter;
-use proof_lib::lint::{lint_paths, load_config_for_path as load_config};
-use proof_lib::{Diagnostic, Severity};
+use mdloom_lib::davinci::check_daVinci;
+use mdloom_lib::fix::{serialize_json, serialize_rich};
+use mdloom_lib::frontmatter::FrontmatterFilter;
+use mdloom_lib::lint::{lint_paths, load_config_for_path as load_config};
+use mdloom_lib::{Diagnostic, Severity};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -26,7 +26,7 @@ pub(crate) struct Args {
     #[arg(long)]
     deduplicate: bool,
     /// Also report `.md` figures that no `.source.md` references via
-    /// `proof:include` / `proof:layout` / `source=md://...`. Emitted as
+    /// `mdloom:include` / `mdloom:layout` / `source=md://...`. Emitted as
     /// `unused_figure` warnings — useful for pruning orphaned drafts.
     #[arg(long)]
     unused: bool,
@@ -134,10 +134,10 @@ fn run(paths: Vec<PathBuf>, options: Options<'_>) -> Result<()> {
     let mut all_diags: Vec<Diagnostic> = Vec::new();
     let mut files_checked = 0usize;
 
-    // DaVinci root = the directory containing proof.toml (the proof root).
+    // DaVinci root = the directory containing mdloom.toml (the mdloom root).
     // Run once, not per-file, using the config's location as the URI root.
     if options.flags.da_vinci {
-        let proof_root = options
+        let mdloom_root = options
             .config_override
             .as_deref()
             .and_then(Path::parent)
@@ -154,9 +154,9 @@ fn run(paths: Vec<PathBuf>, options: Options<'_>) -> Result<()> {
                     })
                     .unwrap_or_else(|| std::env::current_dir().unwrap())
             });
-        let cfg = load_config(&proof_root, options.config_override)?;
+        let cfg = load_config(&mdloom_root, options.config_override)?;
         if !cfg.davinci.is_empty() {
-            let dv_diags = check_daVinci(&cfg, &proof_root);
+            let dv_diags = check_daVinci(&cfg, &mdloom_root);
             if dv_diags.is_empty() {
                 eprintln!(
                     "{} all {} DaVinci invariants satisfied",
@@ -198,7 +198,7 @@ fn run(paths: Vec<PathBuf>, options: Options<'_>) -> Result<()> {
             } else {
                 path.parent().unwrap_or(path).to_path_buf()
             };
-            all_diags.extend(proof_lib::unused::unused_diagnostics(&scan_root));
+            all_diags.extend(mdloom_lib::unused::unused_diagnostics(&scan_root));
         }
     }
 
@@ -287,7 +287,7 @@ fn run(paths: Vec<PathBuf>, options: Options<'_>) -> Result<()> {
         }
     }
 
-    // Write .proof/last-check.json so `proof status` can show cached results.
+    // Write .mdloom/last-check.json so `mdloom status` can show cached results.
     write_last_check_cache(&paths, files_checked, error_count, warn_count);
 
     if !options.no_fail && error_count > 0 {
@@ -307,7 +307,7 @@ fn write_last_check_cache(paths: &[PathBuf], files_checked: usize, errors: usize
             }
         })
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-    let cache_dir = root.join(".proof");
+    let cache_dir = root.join(".mdloom");
     if std::fs::create_dir_all(&cache_dir).is_ok() {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

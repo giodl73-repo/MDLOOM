@@ -1,6 +1,6 @@
 # Go Language Guide
 
-# Duplicate H1 — proof catches this
+# Duplicate H1 — mdloom catches this
 
 ## Overview
 
@@ -45,7 +45,7 @@ Multi-column table with misaligned separator:
 | Strength     | Strong     |
 | Type system  | Structural |
 
-<!-- Missing: Memory model row — proof.toml requires it -->
+<!-- Missing: Memory model row — mdloom.toml requires it -->
 
 ## Performance Notes
 

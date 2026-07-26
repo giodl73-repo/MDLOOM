@@ -4,7 +4,7 @@ When a package appears under multiple parents, the second occurrence is
 marked `(deduped ↑ N)` pointing at the first appearance — keeping the
 output bounded for diamond-shaped graphs.
 
-```proof:tree kind=dependency
+```mdloom:tree kind=dependency
 | package | depends_on | version |
 |---------|------------|---------|
 | app | core | 1.0 |

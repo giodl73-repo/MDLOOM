@@ -27,7 +27,7 @@ jobs:
         run: cargo build --release
 
       - name: Smoke-test release binary
-        run: ./target/release/proof --version
+        run: ./target/release/mdloom --version
 
       - name: Extract release notes for this tag
         id: notes
@@ -54,4 +54,4 @@ jobs:
           gh release create "${{ steps.notes.outputs.tag }}" \
             --title "${{ steps.notes.outputs.tag }}" \
             --notes-file /tmp/release-notes.md \
-            ./target/release/proof
+            ./target/release/mdloom

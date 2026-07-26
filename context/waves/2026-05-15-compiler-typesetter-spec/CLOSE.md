@@ -2,7 +2,7 @@
 
 ## Mission
 
-Update the project bible so future work is judged against proof as a staged
+Update the project bible so future work is judged against mdloom as a staged
 document compiler and LaTeX-style markdown-native typesetter, not only a linter.
 
 ## Changes
@@ -13,7 +13,7 @@ document compiler and LaTeX-style markdown-native typesetter, not only a linter.
 - Added a compiler/typesetter model covering source, resolve, compile/typeset,
   check, and plan/fix layers.
 - Made the CLI architecture boundary part of the spec:
-  `main.rs -> cli parser -> dispatch context -> command adapters -> proof_lib`.
+  `main.rs -> cli parser -> dispatch context -> command adapters -> mdloom_lib`.
 - Updated backlog, skills, documentation, tests, and non-goals toward corpus
   compile graphs, tag-driven operations, artifact manifests, and golden
   source-to-artifact tests.

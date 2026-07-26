@@ -46,7 +46,7 @@ pub(crate) fn compile_slides_file(source_path: &Path, output_path: &Path) -> Res
 
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
-        "<!-- proof:compiled from=\"proof:slides\" count={} -->",
+        "<!-- mdloom:compiled from=\"mdloom:slides\" count={} -->",
         total
     ));
     parts.push("```slides".to_string());
@@ -116,11 +116,11 @@ pub(crate) fn compile_slides_file(source_path: &Path, output_path: &Path) -> Res
         }
     }
     parts.push("```".to_string());
-    parts.push("<!-- /proof:compiled -->".to_string());
+    parts.push("<!-- /mdloom:compiled -->".to_string());
 
     let output_text = parts.join("\n") + "\n";
 
-    let tmp = output_path.with_extension("proof_tmp");
+    let tmp = output_path.with_extension("mdloom_tmp");
     std::fs::write(&tmp, &output_text)
         .map_err(|e| anyhow::anyhow!("writing {}: {}", tmp.display(), e))?;
     std::fs::rename(&tmp, output_path).map_err(|e| anyhow::anyhow!("renaming output: {}", e))?;

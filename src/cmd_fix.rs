@@ -1,9 +1,9 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{Context, Result};
 use colored::Colorize;
-use proof_lib::fix::FixOptions;
-use proof_lib::lint::lint_paths;
-use proof_lib::{Confidence, FixPlan, Severity};
+use mdloom_lib::fix::FixOptions;
+use mdloom_lib::lint::lint_paths;
+use mdloom_lib::{Confidence, FixPlan, Severity};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -65,7 +65,7 @@ pub(crate) fn run_with_globals(args: Args, globals: &GlobalOptions) -> Result<()
         "low" => Confidence::Low,
         other => {
             eprintln!(
-                "proof: unknown confidence level {:?} — use high, medium, or low",
+                "mdloom: unknown confidence level {:?} — use high, medium, or low",
                 other
             );
             process::exit(2);
@@ -180,12 +180,12 @@ impl FixApplicationLog {
         plan_path: &Path,
         dry_run: bool,
         min_confidence: &Confidence,
-        result: &proof_lib::FixResult,
+        result: &mdloom_lib::FixResult,
         verification: FixVerificationLog,
     ) -> Self {
         Self {
             schema_version: "1".to_string(),
-            generated_by: "proof fix".to_string(),
+            generated_by: "mdloom fix".to_string(),
             plan_path: plan_path.to_path_buf(),
             dry_run,
             min_confidence: min_confidence.to_string(),
@@ -199,7 +199,7 @@ impl FixApplicationLog {
 }
 
 fn write_last_fix_log(root: &Path, log: FixApplicationLog) -> Result<()> {
-    let dir = root.join(".proof");
+    let dir = root.join(".mdloom");
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = dir.join("last-fix.json");
     let json = serde_json::to_string_pretty(&log)?;
@@ -219,7 +219,7 @@ fn load_plan(path: &Path) -> Result<FixPlan> {
     }
 
     // Try DraftPlan (has "schema_version" + "groups" array).
-    if let Ok(draft) = serde_json::from_str::<proof_lib::draft::DraftPlan>(&content) {
+    if let Ok(draft) = serde_json::from_str::<mdloom_lib::draft::DraftPlan>(&content) {
         eprintln!(
             "{} converting draft plan to fix plan (auto+annotated groups only)",
             "info:".cyan()

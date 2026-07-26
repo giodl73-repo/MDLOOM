@@ -3,14 +3,14 @@
 ## Mission
 
 Continue modularizing the CLI shell by moving the reporting command argument
-shapes for `proof config`, `proof status`, and `proof stats` into their command
+shapes for `mdloom config`, `mdloom status`, and `mdloom stats` into their command
 modules.
 
 ## Changes
 
-- Added `cmd_config::Args` with the clap argument definitions for `proof config`.
-- Added `cmd_status::Args` with the clap argument definitions for `proof status`.
-- Added `cmd_stats::Args` with the clap argument definitions for `proof stats`.
+- Added `cmd_config::Args` with the clap argument definitions for `mdloom config`.
+- Added `cmd_status::Args` with the clap argument definitions for `mdloom status`.
+- Added `cmd_stats::Args` with the clap argument definitions for `mdloom stats`.
 - Replaced the inline `Command::Config { ... }`, `Command::Status { ... }`, and
   `Command::Stats { ... }` fields in `main.rs` with tuple variants that
   reference their command-module argument types.

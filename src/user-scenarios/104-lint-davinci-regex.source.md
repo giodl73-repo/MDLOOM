@@ -1,10 +1,10 @@
 # US-104 — DaVinci regex invariant in action
 
-This scenario assumes a `[[davinci]]` entry in proof.toml with a regex
+This scenario assumes a `[[davinci]]` entry in mdloom.toml with a regex
 invariant on a figure file. The figure must match the pattern; otherwise
 `fig_invariant_violated` fires.
 
-```proof:include pin=status-pinned
+```mdloom:include pin=status-pinned
 md://src/data/diagnostic-codes.md#:table:0
 ```
 

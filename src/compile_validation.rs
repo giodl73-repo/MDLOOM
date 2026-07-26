@@ -1,12 +1,12 @@
 use std::path::Path;
 
 use crate::compile_types::{CompileViolation, ViolationSeverity};
-use crate::config::{GlintConfig, ProtectionTier};
+use crate::config::{MdloomConfig, ProtectionTier};
 use crate::davinci::evaluate_invariant;
 use crate::diagnostic::Severity;
 use crate::runner::Runner;
 
-/// Validate figure content with the proof linter before embedding.
+/// Validate figure content with the mdloom linter before embedding.
 /// Emits COMPILE-007 warnings for each lint error found in the figure.
 pub(crate) fn lint_figure(
     uri: &str,
@@ -43,7 +43,7 @@ pub(crate) fn lint_figure(
 pub(crate) fn validate_davinci(
     uri: &str,
     content: &str,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     source_line: usize,
     violations: &mut Vec<CompileViolation>,
 ) {

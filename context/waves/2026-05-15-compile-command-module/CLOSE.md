@@ -3,7 +3,7 @@
 ## Mission
 
 Complete the command-module split for the largest remaining command,
-`proof compile`.
+`mdloom compile`.
 
 ## Changes
 

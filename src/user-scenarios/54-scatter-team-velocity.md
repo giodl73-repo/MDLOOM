@@ -3,7 +3,7 @@
 x = headcount, y = points-per-sprint. The label is descriptive (team name);
 not currently rendered alongside the marker but kept for future tooltips.
 
-<!-- proof:compiled from="proof:chart" -->
+<!-- mdloom:compiled from="mdloom:chart" -->
 ```
               Velocity vs headcount
 32 ┤                                       ●      ●
@@ -18,6 +18,6 @@ not currently rendered alongside the marker but kept for future tooltips.
 18 ┤ ●
    └──────────────────────────────────────────────
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Diminishing returns past 12 are visible at a glance — the markers flatten.

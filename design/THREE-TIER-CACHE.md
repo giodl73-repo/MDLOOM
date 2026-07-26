@@ -2,7 +2,7 @@
 
 > **Status**: ✅ All three tiers implemented — `src/cache.rs`.
 > - **Tier 1** (parse key): `PathIndex` + `get_or_compute_parse_key()` — content hash cached to disk, avoids re-hashing unchanged files.
-> - **Tier 2** (resolve): `ResolveCacheEntry`, `try_resolve_cache_hit()`, `store_resolve_cache()` — resolved figure content cached by `(figure_content_hash, uri)`. The main compile loop (`proof:include`, `proof:layout`, `proof:table`) uses `resolve_uri_cached()`. 5 Tier-2 tests.
+> - **Tier 2** (resolve): `ResolveCacheEntry`, `try_resolve_cache_hit()`, `store_resolve_cache()` — resolved figure content cached by `(figure_content_hash, uri)`. The main compile loop (`mdloom:include`, `mdloom:layout`, `mdloom:table`) uses `resolve_uri_cached()`. 5 Tier-2 tests.
 > - **Tier 3** (compile): `CompileCacheEntry`, `try_compile_cache_hit()`, `store_compile_cache()` — full compiled output keyed by source + all referenced figure content hashes.
 
 ## When you need this
@@ -25,10 +25,10 @@ For named snapshots and state switching, see [Cache Snapshots](./cache-snapshots
 | `CompileResult.from_cache` | exists, always `false` | `src/compile.rs:22` — wired but unset |
 | `mdpath::resolver::BatchResolver` | implemented | per-file `ParsedDocument` reuse, in-process only, no disk persistence |
 | `mdpath::parse_document` | implemented | re-runs on every `BatchResolver::new` — no parse cache between commands |
-| `.proof/cache/` directory | does not exist | not created on any current command |
-| `--no-cache` flag | not implemented | not on `proof compile` |
-| `--cache-status` flag | not implemented | not on `proof compile` |
-| `proof cache snapshot ...` | not implemented | no `cache` subcommand exists |
+| `.mdloom/cache/` directory | does not exist | not created on any current command |
+| `--no-cache` flag | not implemented | not on `mdloom compile` |
+| `--cache-status` flag | not implemented | not on `mdloom compile` |
+| `mdloom cache snapshot ...` | not implemented | no `cache` subcommand exists |
 | `src/cache/` module | does not exist | greenfield |
 
 What this means: this spec is greenfield design. There is no migration concern, no compatibility constraint, no behavior to preserve. The only existing primitive that survives is `BatchResolver`, which acts as the **in-memory** layer underneath Tier 1 (a single command resolving N URIs from one figure file parses that file once, regardless of disk-cache hit/miss).
@@ -49,8 +49,8 @@ source change
 └─────────────┘     └─────────────┘     └─────────────┘
   file content        parse_key of       source parse_key +
   hash +              target file +      sorted resolve_keys +
-  proof version       URI string +       layout config hash +
-                      proof version      proof version
+  mdloom version       URI string +       layout config hash +
+                      mdloom version      mdloom version
 ```
 
 A source file change misses all three tiers. A figure file change misses resolve and compile but hits parse of the source document. A layout config change misses only compile.
@@ -72,30 +72,30 @@ The parse cache stores the `ParsedDocument` for each `.md` file.
 | Input | Source | Why it matters |
 |-------|--------|---------------|
 | File content hash | SHA-256 of file bytes | Any content change invalidates |
-| proof version | `proof` binary version (`env!("CARGO_PKG_VERSION")`) | Parser upgrade may change structure |
+| mdloom version | `mdloom` binary version (`env!("CARGO_PKG_VERSION")`) | Parser upgrade may change structure |
 
 ### Key computation
 
 ```
 parse_key = hex(SHA-256(
     file_content_hash,    ← 32 bytes, raw
-    proof_version_bytes,  ← UTF-8 bytes, length-prefixed
+    mdloom_version_bytes,  ← UTF-8 bytes, length-prefixed
 ))
 ```
 
-Length-prefixing the version bytes prevents a `proof_version + content` boundary collision (e.g. version `"1.0"` + content `"foo"` vs. version `"1.0f"` + content `"oo"`).
+Length-prefixing the version bytes prevents a `mdloom_version + content` boundary collision (e.g. version `"1.0"` + content `"foo"` vs. version `"1.0f"` + content `"oo"`).
 
 ### Storage
 
-Content-addressed files in `.proof/cache/parse/`. Each entry is keyed by its `parse_key` hex string. The on-disk format is JSON:
+Content-addressed files in `.mdloom/cache/parse/`. Each entry is keyed by its `parse_key` hex string. The on-disk format is JSON:
 
 ```rust
 struct ParseCacheEntry {
     parse_key: String,
-    source_path: String,    // relative to proof.toml root, for diagnostic display only — NOT a key input
+    source_path: String,    // relative to mdloom.toml root, for diagnostic display only — NOT a key input
     content_hash: String,   // hex SHA-256 of original file bytes
     parsed: ParsedDocument, // serde-serialized mdpath::document::ParsedDocument
-    proof_version: String,
+    mdloom_version: String,
     created_at: u64,        // epoch ms
 }
 ```
@@ -111,7 +111,7 @@ The parse cache is content-addressed (keys are hashes of content), so there is n
 A **path index** is maintained alongside the cache:
 
 ```
-.proof/cache/parse-index.json
+.mdloom/cache/parse-index.json
 {
   "figures/foo.md":     { "parse_key": "abc123...", "mtime": 1714200000123, "size": 4321 },
   "languages/10-GO.md": { "parse_key": "def456...", "mtime": 1714200001456, "size": 8910 },
@@ -150,7 +150,7 @@ The resolve cache stores the resolved content of each `md://` URI.
 |-------|--------|---------------|
 | Target file `parse_key` | Tier 1 of the file the URI points to (looked up via path index) | Target file change cascades |
 | URI string | The full `md://` URI as written in the source | Different URI, different result |
-| proof version | `proof` binary version | Resolver upgrade re-resolves |
+| mdloom version | `mdloom` binary version | Resolver upgrade re-resolves |
 
 ### Key computation
 
@@ -158,13 +158,13 @@ The resolve cache stores the resolved content of each `md://` URI.
 resolve_key = hex(SHA-256(
     target_parse_key,      ← from Tier 1 of the target file (via path index)
     uri_bytes,             ← UTF-8 bytes, length-prefixed
-    proof_version_bytes,   ← UTF-8 bytes, length-prefixed
+    mdloom_version_bytes,   ← UTF-8 bytes, length-prefixed
 ))
 ```
 
 ### Storage
 
-`.proof/cache/resolve/{resolve_key}.json`:
+`.mdloom/cache/resolve/{resolve_key}.json`:
 
 ```rust
 struct ResolveCacheEntry {
@@ -173,7 +173,7 @@ struct ResolveCacheEntry {
     target_path: String,            // relative path of resolved file
     target_parse_key: String,       // for chain-debugging
     resolved: ResolvedElement,      // serde-serialized mdpath::ResolvedElement
-    proof_version: String,
+    mdloom_version: String,
     created_at: u64,
 }
 ```
@@ -201,7 +201,7 @@ The compile cache stores the full compiled output of a source document — the r
 | Source `parse_key` | Tier 1 of the source document | Source change invalidates |
 | Resolve keys | Tier 2 of all included URIs, in **source order**, **NOT deduplicated** | Figure change cascades |
 | Layout config hash | SHA-256 of normalized directive attributes | Layout / label / attr change re-compiles |
-| proof version | `proof` binary version | Compiler upgrade re-compiles |
+| mdloom version | `mdloom` binary version | Compiler upgrade re-compiles |
 
 ### Key computation
 
@@ -210,7 +210,7 @@ compile_key = hex(SHA-256(
     source_parse_key,
     resolve_keys_concatenated,  ← in source order, NOT deduplicated, length-prefixed
     layout_config_hash,
-    proof_version_bytes,
+    mdloom_version_bytes,
 ))
 ```
 
@@ -222,11 +222,11 @@ Order is also significant. `[A, B, A]` and `[A, A, B]` are different keys.
 
 #### `layout_config_hash` — what's in it (F02, F07, F10)
 
-The `layout_config_hash` covers **every directive attribute that affects rendering** across the whole source document, not just `proof:layout` blocks. Specifically:
+The `layout_config_hash` covers **every directive attribute that affects rendering** across the whole source document, not just `mdloom:layout` blocks. Specifically:
 
-- All `proof:layout` attributes: `gap`, `align`, `direction`, `cols`, `width`, `border`, **`labels`** (F07: labels are pure presentation, included here, not in resolve keys).
-- All `proof:include`, `proof:table`, `proof:tree`, `proof:element`, `proof:row`, `proof:symbol`, `proof:shape`, `proof:region` attributes that affect output.
-- The proof.toml `[ascii_box]`, `[markdown]`, and any other render-affecting config sections.
+- All `mdloom:layout` attributes: `gap`, `align`, `direction`, `cols`, `width`, `border`, **`labels`** (F07: labels are pure presentation, included here, not in resolve keys).
+- All `mdloom:include`, `mdloom:table`, `mdloom:tree`, `mdloom:element`, `mdloom:row`, `mdloom:symbol`, `mdloom:shape`, `mdloom:region` attributes that affect output.
+- The mdloom.toml `[ascii_box]`, `[markdown]`, and any other render-affecting config sections.
 
 **Normalization rule (F10):** before hashing, every attribute is normalized to a canonical form:
 
@@ -239,17 +239,17 @@ The `layout_config_hash` covers **every directive attribute that affects renderi
 
 ### Storage
 
-`.proof/cache/compile/{compile_key}.json`:
+`.mdloom/cache/compile/{compile_key}.json`:
 
 ```rust
 struct CompileCacheEntry {
     compile_key: String,
-    source_path: String,            // relative to proof.toml root
-    output_path: String,            // relative to proof.toml root
+    source_path: String,            // relative to mdloom.toml root
+    output_path: String,            // relative to mdloom.toml root
     compiled_text: String,          // the full compiled markdown, ready to write
     resolved_uris: Vec<String>,     // all md:// URIs embedded, in source order, not deduplicated
     davinci_violations: Vec<CompileViolation>,  // cached check results — see F06
-    proof_version: String,
+    mdloom_version: String,
     created_at: u64,
 }
 ```
@@ -277,10 +277,10 @@ The causal chain means changes cascade forward through the tiers:
 | Source document content | MISS | (no Tier 2 entries are keyed by source) | MISS | Source's parse_key changes |
 | Figure file content | HIT (source) MISS (figure) | MISS | MISS | Cascade through resolve_keys |
 | Layout / directive attribute | HIT | HIT | MISS | Only layout_config_hash differs |
-| `labels=` on proof:layout | HIT | HIT | MISS | Labels are presentation, in layout hash (F07) |
-| proof.toml render config | HIT | HIT | MISS | Folded into layout_config_hash |
-| proof binary upgrade | MISS | MISS | MISS | Version is in every tier's key |
-| DaVinci invariants only (proof.toml `[[davinci]]`) | HIT | HIT | MISS | Treated as render config (re-validate cheaply) |
+| `labels=` on mdloom:layout | HIT | HIT | MISS | Labels are presentation, in layout hash (F07) |
+| mdloom.toml render config | HIT | HIT | MISS | Folded into layout_config_hash |
+| mdloom binary upgrade | MISS | MISS | MISS | Version is in every tier's key |
+| DaVinci invariants only (mdloom.toml `[[davinci]]`) | HIT | HIT | MISS | Treated as render config (re-validate cheaply) |
 
 The key insight: **you never need to explicitly delete cache entries.** Content-addressed keys naturally miss when inputs change. Watch mode does NOT call any "invalidate" function (F27); it simply re-runs compile, which produces new keys for the changed files and naturally misses.
 
@@ -292,11 +292,11 @@ The key insight: **you never need to explicitly delete cache entries.** Content-
 
 Bypass all cache tiers. Forces full parse, resolve, and compile regardless of cached state. Reads and writes are skipped — the run does not pollute or warm any tier.
 
-The flag applies to the command it is passed to. `proof compile --no-cache` bypasses all three tiers for that compile invocation. It does not affect subsequent runs.
+The flag applies to the command it is passed to. `mdloom compile --no-cache` bypasses all three tiers for that compile invocation. It does not affect subsequent runs.
 
 ```bash
-proof compile source.md --no-cache        # bypass all cache tiers for this compile
-proof compile . --no-cache                # bypass for all source files
+mdloom compile source.md --no-cache        # bypass all cache tiers for this compile
+mdloom compile . --no-cache                # bypass for all source files
 ```
 
 ### `--cache-status`
@@ -304,7 +304,7 @@ proof compile . --no-cache                # bypass for all source files
 Report cache tier hits and misses without changing behavior. Shows per-file, per-tier status.
 
 ```bash
-proof compile . --cache-status
+mdloom compile . --cache-status
 # Output:
 # languages/10-GO.source.md:   parse HIT  | resolve HIT  | compile MISS (layout changed)
 # languages/09-RUST.source.md: parse HIT  | resolve HIT  | compile HIT
@@ -329,7 +329,7 @@ Atomic writes (temp then rename) prevent partial entries from corrupting the cac
 ### Directory layout
 
 ```
-.proof/cache/
+.mdloom/cache/
   parse/                ← Tier 1: ParsedDocument per .md file
     {key}.json
   parse-index.json      ← path → (parse_key, mtime, size)
@@ -342,11 +342,11 @@ Atomic writes (temp then rename) prevent partial entries from corrupting the cac
     canary/
 ```
 
-`.proof/` should be added to `.gitignore` by `proof init` (it is local build state).
+`.mdloom/` should be added to `.gitignore` by `mdloom init` (it is local build state).
 
 ### Garbage collection
 
-Cache entries are not automatically pruned. A separate command (out of scope for this spec) will prune entries not referenced by the current path index or any active snapshot. For now, the cache grows monotonically; users can `rm -rf .proof/cache/` at any time to start fresh.
+Cache entries are not automatically pruned. A separate command (out of scope for this spec) will prune entries not referenced by the current path index or any active snapshot. For now, the cache grows monotonically; users can `rm -rf .mdloom/cache/` at any time to start fresh.
 
 ---
 
@@ -462,7 +462,7 @@ On Tier 1 hit, the compile pipeline extracts directives from the cached `ParsedD
 
 ### F17 — Path index for "parse_key for this file path"
 
-The parse cache is content-addressed, but Tier 2 needs path → `parse_key` lookup. The path index at `.proof/cache/parse-index.json` provides this mapping, validated by `(mtime, size)` on access. See §"Path index" above.
+The parse cache is content-addressed, but Tier 2 needs path → `parse_key` lookup. The path index at `.mdloom/cache/parse-index.json` provides this mapping, validated by `(mtime, size)` on access. See §"Path index" above.
 
 ### F18 / F19 — Tier 3 hit avoids spurious file writes
 

@@ -22,7 +22,7 @@ Pebble chunk boundaries where practical, and PDF text output.
   - `docs/specs/publication-ast.md`
   - `tests/integration_tests.rs`
 - Generated/user artifacts:
-  - `*.proof-report.json`
+  - `*.mdloom-report.json`
   - `*.pebble.json`
   - `*.pdf`
 

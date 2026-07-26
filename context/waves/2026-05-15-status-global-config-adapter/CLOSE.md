@@ -2,7 +2,7 @@
 
 ## Mission
 
-Bring `proof status` into the config-aware command adapter pattern so explicit
+Bring `mdloom status` into the config-aware command adapter pattern so explicit
 global config overrides are reflected in status summaries.
 
 ## Changes
@@ -10,7 +10,7 @@ global config overrides are reflected in status summaries.
 - Added `cmd_status::run_with_globals`.
 - Routed `Command::Status` through global options in dispatch.
 - Preserved default status behavior when no explicit config is supplied.
-- Added a regression that `proof --config <path> status <dir>` reports the
+- Added a regression that `mdloom --config <path> status <dir>` reports the
   explicit config's section schema count.
 
 ## Validation
@@ -18,7 +18,7 @@ global config overrides are reflected in status summaries.
 - `cargo test binary_status_command_reports_project_summary`
 - `cargo test binary_status_command_honors_explicit_config`
 - `cargo test binary_config_prints_effective_cascaded_config`
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 
 The sibling `mdpath` crate still emits its known warning set during workspace
 test/build; this wave did not change sibling repository code.

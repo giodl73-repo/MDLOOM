@@ -1,7 +1,7 @@
 //! Reverse dependency lookup for `md://` URIs.
 //!
 //! Given an `md://` URI (figure, heading, table, etc.), find every `.source.md`
-//! file in the corpus that references it. Used by `proof depends` to answer
+//! file in the corpus that references it. Used by `mdloom depends` to answer
 //! "what will break if I rename this heading or move this figure?"
 //!
 //! ## Matching semantics
@@ -13,17 +13,17 @@
 //!   - The query has a heading path and the reference points to the same file
 //!     and starts with the same heading path (deeper selectors still match)
 //!
-//! This means `proof depends md://doc.md` finds every reference to that file,
-//! and `proof depends md://doc.md#section` finds every reference at or below
+//! This means `mdloom depends md://doc.md` finds every reference to that file,
+//! and `mdloom depends md://doc.md#section` finds every reference at or below
 //! that heading. Asking for an exact selector returns only exact matches.
 //!
 //! ## How references are extracted
 //!
 //! The scanner uses the same URI-extraction logic as `SourceLinkCheck`:
-//! it walks each `.source.md` file looking for fenced `proof:` directives,
+//! it walks each `.source.md` file looking for fenced `mdloom:` directives,
 //! and within them collects `md://` URIs from the info string, standalone
 //! body lines, and `source=md://...` attributes. Prose `md://` mentions
-//! outside `proof:` fences are intentionally skipped — they may be examples,
+//! outside `mdloom:` fences are intentionally skipped — they may be examples,
 //! not real references.
 
 use mdpath::uri::Selector;
@@ -82,7 +82,7 @@ pub fn find_dependents(target_uri: &str, root: &Path) -> Vec<Dependency> {
 /// Scan one `.source.md` file for references that match `target`.
 fn scan_source_file(path: &Path, content: &str, target: &MdUri, deps: &mut Vec<Dependency>) {
     let lines: Vec<&str> = content.lines().collect();
-    let mut in_proof_fence = false;
+    let mut in_mdloom_fence = false;
     let mut in_other_fence = false;
 
     for (i, &line) in lines.iter().enumerate() {
@@ -90,22 +90,22 @@ fn scan_source_file(path: &Path, content: &str, target: &MdUri, deps: &mut Vec<D
 
         if trimmed.starts_with("```") {
             let info = trimmed[3..].trim();
-            if !in_proof_fence && !in_other_fence {
-                if info.starts_with("proof:") {
-                    in_proof_fence = true;
+            if !in_mdloom_fence && !in_other_fence {
+                if info.starts_with("mdloom:") {
+                    in_mdloom_fence = true;
                     collect_matches_from_text(info, i + 1, path, target, deps);
                 } else {
                     in_other_fence = true;
                 }
-            } else if in_proof_fence {
-                in_proof_fence = false;
+            } else if in_mdloom_fence {
+                in_mdloom_fence = false;
             } else if in_other_fence {
                 in_other_fence = false;
             }
             continue;
         }
 
-        if in_proof_fence {
+        if in_mdloom_fence {
             let is_standalone_uri = trimmed.starts_with("md://");
             let has_source_attr = trimmed.contains("source=md://") || trimmed.contains("uri=md://");
             if is_standalone_uri || has_source_attr {
@@ -233,7 +233,7 @@ mod tests {
         write(
             dir.path(),
             "guide.source.md",
-            "# Guide\n\n```proof:include\nmd://fig.md#heading:0\n```\n",
+            "# Guide\n\n```mdloom:include\nmd://fig.md#heading:0\n```\n",
         );
 
         let deps = find_dependents("md://fig.md#heading:0", dir.path());
@@ -249,12 +249,12 @@ mod tests {
         write(
             dir.path(),
             "g1.source.md",
-            "```proof:include\nmd://fig.md#a:0\n```\n",
+            "```mdloom:include\nmd://fig.md#a:0\n```\n",
         );
         write(
             dir.path(),
             "g2.source.md",
-            "```proof:include\nmd://fig.md#a:0[box=1]\n```\n",
+            "```mdloom:include\nmd://fig.md#a:0[box=1]\n```\n",
         );
 
         let deps = find_dependents("md://fig.md", dir.path());
@@ -268,7 +268,7 @@ mod tests {
         write(
             dir.path(),
             "g.source.md",
-            "```proof:include\nmd://fig.md#top/sub:0\n```\n",
+            "```mdloom:include\nmd://fig.md#top/sub:0\n```\n",
         );
 
         let deps = find_dependents("md://fig.md#top", dir.path());
@@ -282,7 +282,7 @@ mod tests {
         write(
             dir.path(),
             "g.source.md",
-            "```proof:include\nmd://fig.md#:1\n```\n",
+            "```mdloom:include\nmd://fig.md#:1\n```\n",
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());
@@ -299,7 +299,7 @@ mod tests {
         write(
             dir.path(),
             "compiled.md",
-            "```proof:include\nmd://fig.md#:0\n```\n",
+            "```mdloom:include\nmd://fig.md#:0\n```\n",
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());
@@ -310,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_md_uris_inside_non_proof_code_fences() {
+    fn ignores_md_uris_inside_non_mdloom_code_fences() {
         let dir = tempfile::tempdir().unwrap();
         write(dir.path(), "fig.md", "```\nx\n```\n");
         write(
@@ -322,18 +322,18 @@ mod tests {
         let deps = find_dependents("md://fig.md#:0", dir.path());
         assert!(
             deps.is_empty(),
-            "URIs in non-proof fences are examples, not refs"
+            "URIs in non-mdloom fences are examples, not refs"
         );
     }
 
     #[test]
-    fn finds_uri_in_proof_directive_info_string() {
+    fn finds_uri_in_mdloom_directive_info_string() {
         let dir = tempfile::tempdir().unwrap();
         write(dir.path(), "data.md", "| h |\n|---|\n| 1 |\n");
         write(
             dir.path(),
             "g.source.md",
-            "```proof:tree kind=org source=md://data.md\nname: x\nparent: y\n```\n",
+            "```mdloom:tree kind=org source=md://data.md\nname: x\nparent: y\n```\n",
         );
 
         let deps = find_dependents("md://data.md", dir.path());
@@ -351,12 +351,12 @@ mod tests {
         write(
             dir.path(),
             "b.source.md",
-            "```proof:include\nmd://fig.md#:0\n```\n",
+            "```mdloom:include\nmd://fig.md#:0\n```\n",
         );
         write(
             dir.path(),
             "a.source.md",
-            "```proof:include\nmd://fig.md#:0\n```\n\n```proof:include\nmd://fig.md#:0\n```\n",
+            "```mdloom:include\nmd://fig.md#:0\n```\n\n```mdloom:include\nmd://fig.md#:0\n```\n",
         );
 
         let deps = find_dependents("md://fig.md#:0", dir.path());

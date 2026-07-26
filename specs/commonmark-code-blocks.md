@@ -4,7 +4,7 @@ source: https://spec.commonmark.org/0.31.2/#fenced-code-blocks
 retrieved: 2026-04-25
 version: "0.31.2"
 relevance: >
-  Defines the authoritative syntax for fenced code blocks. proof restricts
+  Defines the authoritative syntax for fenced code blocks. mdloom restricts
   ASCII art validation to content inside fenced code blocks; this spec governs
   what counts as a code block, how indentation is stripped, and what content
   is preserved verbatim.
@@ -87,19 +87,19 @@ aaa
 ```
 → content: `aaa\naaa\n` (1 space stripped where present)
 
-## Relevance to proof
+## Relevance to mdloom
 
-1. **Code block detection** — proof's `code_blocks_only = true` mode (default) must
+1. **Code block detection** — mdloom's `code_blocks_only = true` mode (default) must
    correctly identify fenced block boundaries using CommonMark rules.
 
-2. **Info string** — proof may use info strings to select language-specific checks
+2. **Info string** — mdloom may use info strings to select language-specific checks
    (future feature).
 
 3. **Indentation stripping** — when a code block is indented inside a list or
-   blockquote, proof must strip leading indentation before measuring visual widths.
+   blockquote, mdloom must strip leading indentation before measuring visual widths.
    *(Current implementation does not strip — known limitation.)*
 
 4. **Blank lines** — blank lines inside a code block are valid content.
-   proof must not report `ascii_box_width: row width 0` for blank lines that
+   mdloom must not report `ascii_box_width: row width 0` for blank lines that
    appear between two unrelated diagram elements.
    *(This was fixed by skipping width checks on rows with no vertical separators.)*

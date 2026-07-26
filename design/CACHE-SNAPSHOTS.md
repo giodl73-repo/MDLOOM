@@ -1,6 +1,6 @@
 # Cache Snapshots — Named Compile States for Safe Experimentation
 
-> **Status**: ✅ Implemented — `src/cache.rs` (snapshot_save / restore / list / diff / prune / deploy). CLI surface lives at `proof cache snapshot {save|restore|list|diff|prune|deploy}`. Integrity hash covers manifest + per-file tier keys; tampered snapshots are rejected with `COMPILE-004`. Snapshots live under `.proof/cache/snapshots/<name>/` and capture parse + resolve + compile tiers.
+> **Status**: ✅ Implemented — `src/cache.rs` (snapshot_save / restore / list / diff / prune / deploy). CLI surface lives at `mdloom cache snapshot {save|restore|list|diff|prune|deploy}`. Integrity hash covers manifest + per-file tier keys; tampered snapshots are rejected with `COMPILE-004`. Snapshots live under `.mdloom/cache/snapshots/<name>/` and capture parse + resolve + compile tiers.
 
 ## When you need this
 
@@ -31,7 +31,7 @@ deploy "production" --to ./dist/  ← materialize compiled output without recomp
 
 Cache snapshots solve a problem that every long-lived build system eventually hits: **how do you reason about compile state across time?** Without snapshots, the cache is a black box — you know it speeds things up, but you can't name a state, compare two states, or go back to a previous one. With snapshots, the cache becomes a versioned store with the same mental model as git.
 
-This matters for proof because editing large figure libraries is risky. When an author rewires figures that dozens of source documents include, a bad edit breaks compiled output across the whole library. Without snapshots, rollback means recompiling everything from scratch. With snapshots, rollback is a restore operation that completes in seconds.
+This matters for mdloom because editing large figure libraries is risky. When an author rewires figures that dozens of source documents include, a bad edit breaks compiled output across the whole library. Without snapshots, rollback means recompiling everything from scratch. With snapshots, rollback is a restore operation that completes in seconds.
 
 The integrity hash prevents corruption (the obvious purpose), but it also makes snapshots **portable**. Because the hash covers the manifest and all cache keys, a snapshot that passes verification is guaranteed to be complete and self-consistent, regardless of how it arrived on disk.
 
@@ -39,10 +39,10 @@ The integrity hash prevents corruption (the obvious purpose), but it also makes 
 
 ## Snapshot structure
 
-A snapshot is a named copy of cache entries stored under `.proof/cache/snapshots/{name}/`:
+A snapshot is a named copy of cache entries stored under `.mdloom/cache/snapshots/{name}/`:
 
 ```
-.proof/cache/snapshots/
+.mdloom/cache/snapshots/
   production/
     manifest.json       ← SnapshotManifest
     parse/              ← copied parse cache entries
@@ -64,7 +64,7 @@ A snapshot is a named copy of cache entries stored under `.proof/cache/snapshots
 struct SnapshotManifest {
     name: String,
     created_at: u64,                              // epoch ms
-    proof_version: String,
+    mdloom_version: String,
     files: Vec<SourceFileRef>,                    // which source documents are captured
     tiers: HashMap<String, TieredCacheKeys>,      // per-file, three-tier keys
     total_size: u64,                              // bytes
@@ -86,7 +86,7 @@ struct TieredCacheKeys {
 
 ## Save — capturing a snapshot
 
-`proof cache snapshot save "production"` copies current cache entries to a named snapshot directory.
+`mdloom cache snapshot save "production"` copies current cache entries to a named snapshot directory.
 
 ```
 save_snapshot("production", cache_dir)
@@ -106,7 +106,7 @@ save_snapshot("production", cache_dir)
     ├── Compute integrity hash
     │       → SHA-256 over manifest + all cache entry keys
     │
-    └── Atomic rename: temp dir → .proof/cache/snapshots/{name}/
+    └── Atomic rename: temp dir → .mdloom/cache/snapshots/{name}/
 ```
 
 ### Crash safety
@@ -117,16 +117,16 @@ Save uses an atomic temp-then-rename protocol. If the process crashes mid-save, 
 
 ## Restore — switching to a snapshot
 
-`proof cache snapshot restore "production"` restores cached compiled artifacts to a
+`mdloom cache snapshot restore "production"` restores cached compiled artifacts to a
 snapshot's state. **This is a cache operation, not a file system rollback.** Working
 files (source documents and figure files) are not touched. After restore, files that
 were edited since the snapshot was saved will naturally miss the restored cache and
-recompile on the next `proof compile .`.
+recompile on the next `mdloom compile .`.
 
 ```
 restore_snapshot("production", cache_dir)
     │
-    ├── Read manifest from .proof/cache/snapshots/production/manifest.json
+    ├── Read manifest from .mdloom/cache/snapshots/production/manifest.json
     │
     ├── Verify integrity hash
     │       → recompute SHA-256 over manifest + cache entry keys
@@ -159,7 +159,7 @@ If verification fails, the restore is rejected with `COMPILE-004` and the active
 
 ## Deploy — materializing artifacts
 
-`proof cache snapshot deploy "production" --to ./dist/` writes compiled artifacts to a target directory without recompiling.
+`mdloom cache snapshot deploy "production" --to ./dist/` writes compiled artifacts to a target directory without recompiling.
 
 ```
 deploy_snapshot("production", target_dir)
@@ -177,13 +177,13 @@ This enables build-once-deploy-many patterns. CI compiles the library, saves a s
 
 ## Diff — comparing two snapshots
 
-`proof cache snapshot diff "before" "after"` shows which source files differ between
+`mdloom cache snapshot diff "before" "after"` shows which source files differ between
 two named snapshots. To diff against the current live cache without creating a snapshot,
 use `--vs-current`:
 
 ```bash
-proof cache snapshot diff "before-redesign" "after-redesign"  # two named snapshots
-proof cache snapshot diff "before-redesign" --vs-current      # named vs. live cache
+mdloom cache snapshot diff "before-redesign" "after-redesign"  # two named snapshots
+mdloom cache snapshot diff "before-redesign" --vs-current      # named vs. live cache
 ```
 
 ```rust
@@ -198,7 +198,7 @@ struct SnapshotDiff {
 The comparison is per-file, per-tier. A file is "changed" if any of its three tier keys differ.
 
 ```bash
-proof cache snapshot diff "before-redesign" "after-redesign"
+mdloom cache snapshot diff "before-redesign" "after-redesign"
 # Output:
 # Only in before: (none)
 # Only in after: (none)
@@ -210,10 +210,10 @@ proof cache snapshot diff "before-redesign" "after-redesign"
 
 ## Prune — cleaning up old snapshots
 
-`proof cache snapshot prune --keep 3` removes all but the N most recent snapshots, ordered by `created_at`.
+`mdloom cache snapshot prune --keep 3` removes all but the N most recent snapshots, ordered by `created_at`.
 
 ```bash
-proof cache snapshot prune --keep 3
+mdloom cache snapshot prune --keep 3
 # Removed: backup-20260401, test-20260330
 # Kept: production, canary, staging
 ```
@@ -226,24 +226,24 @@ Returns the list of deleted snapshot names.
 
 ```
 1. Before risky edits — save a baseline
-       proof cache snapshot save "before-redesign"
+       mdloom cache snapshot save "before-redesign"
 
 2. Edit figures, source documents
        # ... make changes ...
 
 3. Recompile
-       proof compile .
+       mdloom compile .
 
 4. Check what changed
-       proof cache snapshot diff "before-redesign" --vs-current
+       mdloom cache snapshot diff "before-redesign" --vs-current
        # See which source documents were affected
 
 5a. Changes look good — save as new baseline
-       proof cache snapshot save "production"
+       mdloom cache snapshot save "production"
 
 5b. Changes broke things — instant rollback
-       proof cache snapshot restore "before-redesign"
-       # Next proof compile . returns to pre-edit state
+       mdloom cache snapshot restore "before-redesign"
+       # Next mdloom compile . returns to pre-edit state
 ```
 
 ---
@@ -251,13 +251,13 @@ Returns the list of deleted snapshot names.
 ## CLI commands
 
 ```bash
-proof cache snapshot save <name>                     # capture current state
-proof cache snapshot restore <name>                  # switch to snapshot
-proof cache snapshot deploy <name> --to <dir>        # materialize compiled output
-proof cache snapshot list                            # show snapshots with dates + sizes
-proof cache snapshot diff <name-a> <name-b>          # compare two named snapshots
-proof cache snapshot diff <name-a> --vs-current      # compare snapshot vs. live cache
-proof cache snapshot prune --keep <n>                # remove old snapshots
+mdloom cache snapshot save <name>                     # capture current state
+mdloom cache snapshot restore <name>                  # switch to snapshot
+mdloom cache snapshot deploy <name> --to <dir>        # materialize compiled output
+mdloom cache snapshot list                            # show snapshots with dates + sizes
+mdloom cache snapshot diff <name-a> <name-b>          # compare two named snapshots
+mdloom cache snapshot diff <name-a> --vs-current      # compare snapshot vs. live cache
+mdloom cache snapshot prune --keep <n>                # remove old snapshots
 ```
 
 ---

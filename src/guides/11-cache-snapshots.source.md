@@ -1,4 +1,4 @@
-# proof Cache Snapshots — Named Compile States
+# mdloom Cache Snapshots — Named Compile States
 
 Cache snapshots let you name a compile state and come back to it. Think of
 each snapshot as a git ref pointing at a sealed copy of the three-tier cache
@@ -22,11 +22,11 @@ This is the right tool for any of these:
 ## Save — capture the current state
 
 ```text
-proof cache snapshot save production
+mdloom cache snapshot save production
 ```
 
 Copies all current cache entries (parse, resolve, compile) into
-`.proof/cache/snapshots/production/`. Writes a manifest carrying the
+`.mdloom/cache/snapshots/production/`. Writes a manifest carrying the
 per-file three-tier keys plus an integrity hash over everything.
 
 The save is atomic: a temp directory is built up, then renamed into place.
@@ -44,14 +44,14 @@ Saved snapshot "production" (12 files, 84231 bytes, integrity 4b8a3f0c1e92...)
 ## Restore — switch back to a snapshot
 
 ```text
-proof cache snapshot restore production
+mdloom cache snapshot restore production
 ```
 
 Verifies the snapshot's integrity hash, then copies its cache entries back
 into the active cache directories. **Working files (source documents and
 figures on disk) are not touched.** After restore, files you've edited
 since the snapshot will naturally miss the restored cache and recompile on
-the next `proof compile .`.
+the next `mdloom compile .`.
 
 If the integrity hash doesn't match what's stored, restore is rejected with
 `COMPILE-004` and the active cache stays untouched. This catches partial
@@ -63,7 +63,7 @@ directly), and silent disk corruption.
 ## List — see what's saved
 
 ```text
-proof cache snapshot list
+mdloom cache snapshot list
 ```
 
 Shows all snapshots, newest first, with file count and total bytes.
@@ -80,7 +80,7 @@ before-redesign                   5      31002
 ## Diff — compare two snapshots
 
 ```text
-proof cache snapshot diff before-redesign production
+mdloom cache snapshot diff before-redesign production
 ```
 
 Per-file comparison of the three tier keys. Each file falls into one of
@@ -103,7 +103,7 @@ means the directive output would differ.
 ## Prune — remove old snapshots
 
 ```text
-proof cache snapshot prune --keep 3
+mdloom cache snapshot prune --keep 3
 ```
 
 Keeps the N most recent snapshots (ordered by save time), removes everything
@@ -118,7 +118,7 @@ Removed: backup-20260401, test-20260330
 ## Deploy — materialize compiled output
 
 ```text
-proof cache snapshot deploy production --to ./dist/
+mdloom cache snapshot deploy production --to ./dist/
 ```
 
 Verifies the snapshot, then writes each cached compile entry's
@@ -137,25 +137,25 @@ A risky redesign of shared figures:
 
 ```text
 # 1. Baseline before any edits
-proof cache snapshot save before-redesign
+mdloom cache snapshot save before-redesign
 
 # 2. Make changes to figures, source documents
 $EDITOR src/figures/team-org.md
 
 # 3. Recompile to produce new artifacts
-proof compile .
+mdloom compile .
 
 # 4. See what changed
-proof cache snapshot save after-redesign
-proof cache snapshot diff before-redesign after-redesign
+mdloom cache snapshot save after-redesign
+mdloom cache snapshot diff before-redesign after-redesign
 
 # 5a. Looks good — keep "after" as the new baseline
-proof cache snapshot save production
-proof cache snapshot prune --keep 3
+mdloom cache snapshot save production
+mdloom cache snapshot prune --keep 3
 
 # 5b. Looks broken — instant rollback
-proof cache snapshot restore before-redesign
-# Next `proof compile .` returns to the pre-edit state.
+mdloom cache snapshot restore before-redesign
+# Next `mdloom compile .` returns to the pre-edit state.
 ```
 
 ---
@@ -163,7 +163,7 @@ proof cache snapshot restore before-redesign
 ## Where snapshots live
 
 ```text
-.proof/cache/snapshots/
+.mdloom/cache/snapshots/
   production/
     manifest.json      ← name, created_at, files, tier keys, integrity_hash
     parse/             ← copied parse-tier entries
@@ -176,8 +176,8 @@ proof cache snapshot restore before-redesign
     ...
 ```
 
-Snapshot directories are independent — wiping `.proof/cache/` doesn't touch
-`.proof/cache/snapshots/`. To clean snapshots specifically, use `prune` or
+Snapshot directories are independent — wiping `.mdloom/cache/` doesn't touch
+`.mdloom/cache/snapshots/`. To clean snapshots specifically, use `prune` or
 delete a single named directory.
 
 ---

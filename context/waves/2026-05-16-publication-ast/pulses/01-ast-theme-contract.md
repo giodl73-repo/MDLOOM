@@ -38,7 +38,7 @@ backend behavior yet.
 - [x] Add schema/version constants and stable theme names.
 - [x] Add L0 tests for defaults, theme lookup, serialization, and block
       construction.
-- [x] Export the module from `proof_lib`.
+- [x] Export the module from `mdloom_lib`.
 - [x] Keep backend behavior unchanged in this pulse.
 
 ## Validation gates
@@ -58,11 +58,11 @@ backend behavior yet.
 
 ## Evidence
 
-- Added `src/publication.rs` with `proof.publication_ast.v1`, typed document,
+- Added `src/publication.rs` with `mdloom.publication_ast.v1`, typed document,
   block, inline, note, list item, and theme structures.
 - Added built-in `plain`, `professional`, and `dense` theme token definitions
   covering fonts, colors, spacing, typography, and slide defaults.
-- Exported `proof_lib::publication` without migrating any backend behavior yet.
+- Exported `mdloom_lib::publication` without migrating any backend behavior yet.
 - Validation:
   - `cargo fmt --check`
   - `cargo test publication_theme_lookup_returns_builtin_tokens`

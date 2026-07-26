@@ -11,5 +11,5 @@ project/
   └── README.md
 ```
 
-Running `proof check` on this file should fire `tree_indent` warnings on
+Running `mdloom check` on this file should fire `tree_indent` warnings on
 the inconsistent rows. Compile passes (lint warnings don't fail compile).

@@ -3,7 +3,7 @@
 ## Mission
 
 Continue the command-module split by extracting the AI-assisted fix application
-command, `proof fix`.
+command, `mdloom fix`.
 
 ## Changes
 
@@ -28,6 +28,6 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof resolve` and `proof depends` are now the smallest remaining command
+`mdloom resolve` and `mdloom depends` are now the smallest remaining command
 extractions; they share mdpath URI/root behavior and can be split in either
 order.

@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=2 -->
+<!-- mdloom:compiled from="mdloom:slides" count=2 -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────────────────────────── 1/2
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -35,7 +35,7 @@ SLIDE 2 ────────────────────────
 │─────────────────────────────────────────────────────────────────────────────…│
 │● The theme draws a frame around the content area                            …│
 │● Footer (slide N/M) renders inside the frame on the bottom                  …│
-│● Authors don't write the frame characters — proof inserts them              …│
+│● Authors don't write the frame characters — mdloom inserts them              …│
 │                                                                             …│
 │                                                                             …│
 │                                                                             …│
@@ -55,4 +55,4 @@ SLIDE 2 ────────────────────────
 │                                                                             …│
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

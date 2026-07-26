@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub(crate) struct Args {
     /// The md:// URI to look up
     uri: String,
-    /// Root directory to scan (default: current directory, or where proof.toml lives)
+    /// Root directory to scan (default: current directory, or where mdloom.toml lives)
     #[arg(short, long)]
     root: Option<PathBuf>,
     /// Output format: text (default) | json
@@ -17,10 +17,10 @@ pub(crate) struct Args {
 pub(crate) fn run(args: Args) -> Result<()> {
     let Args { uri, root, format } = args;
     let scan_root = root
-        .or_else(find_proof_root_for_cwd)
+        .or_else(find_mdloom_root_for_cwd)
         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
-    let deps = proof_lib::depends::find_dependents(&uri, &scan_root);
+    let deps = mdloom_lib::depends::find_dependents(&uri, &scan_root);
 
     match format.as_str() {
         "json" => {
@@ -76,11 +76,11 @@ pub(crate) fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-/// Walk up from cwd looking for proof.toml so `proof depends` works from any subdir.
-fn find_proof_root_for_cwd() -> Option<PathBuf> {
+/// Walk up from cwd looking for mdloom.toml so `mdloom depends` works from any subdir.
+fn find_mdloom_root_for_cwd() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("proof.toml").exists() {
+        if dir.join("mdloom.toml").exists() {
             return Some(dir);
         }
         match dir.parent() {

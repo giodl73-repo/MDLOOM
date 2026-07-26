@@ -1,14 +1,14 @@
-# proof.toml — Schema Reference
+# mdloom.toml — Schema Reference
 
-Complete reference for every field in `proof.toml`. Grouped by config block in source order. Each section gives a one-paragraph description of what the block controls, then a table of fields with type, default, and description. A complete annotated example sits at the end.
+Complete reference for every field in `mdloom.toml`. Grouped by config block in source order. Each section gives a one-paragraph description of what the block controls, then a table of fields with type, default, and description. A complete annotated example sits at the end.
 
 ---
 
 ## File discovery
 
-`proof` looks for a config file using these names, in order: `proof.toml`, `.proof.toml`, `.proof/config.toml`. The first match wins; `--config <path>` overrides discovery.
+`mdloom` looks for a config file using these names, in order: `mdloom.toml`, `.mdloom.toml`, `.mdloom/config.toml`. The first match wins; `--config <path>` overrides discovery.
 
-When checking `path/to/file.md`, configs **cascade up** the directory tree from the file's location toward the project root. Each `proof.toml` found contributes rules; a config marked `files.root = true` stops the cascade. Use `extends = "../shared.toml"` (top-level) to pull in an explicit parent config that lives outside the cascade chain.
+When checking `path/to/file.md`, configs **cascade up** the directory tree from the file's location toward the project root. Each `mdloom.toml` found contributes rules; a config marked `files.root = true` stops the cascade. Use `extends = "../shared.toml"` (top-level) to pull in an explicit parent config that lives outside the cascade chain.
 
 ---
 
@@ -27,13 +27,13 @@ When checking `path/to/file.md`, configs **cascade up** the directory tree from 
 | `[[section_schemas]]`, `[[custom_rules]]`, `[[davinci]]` | **Additive** |
 | `[[compile]]` | Child wins if it declares any; else inherits parent's |
 
-**Path prefixing:** in a directory-level `proof.toml`, `paths` and `paths_exclude` under `[[section_schemas]]` are auto-prefixed with that directory's path relative to root. Write `paths = ["02-*.md"]`, not `paths = ["languages/02-*.md"]`.
+**Path prefixing:** in a directory-level `mdloom.toml`, `paths` and `paths_exclude` under `[[section_schemas]]` are auto-prefixed with that directory's path relative to root. Write `paths = ["02-*.md"]`, not `paths = ["languages/02-*.md"]`.
 
 ---
 
 ## `[meta]`
 
-Project metadata — purely informational, no validation effect. Use this to name the config so `proof config` output and diagnostics carry a recognizable label.
+Project metadata — purely informational, no validation effect. Use this to name the config so `mdloom config` output and diagnostics carry a recognizable label.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -44,7 +44,7 @@ Project metadata — purely informational, no validation effect. Use this to nam
 
 ## `[files]`
 
-Controls which files `proof check .` discovers. `include` is a child-wins glob list; `exclude` is additive across cascade (children cannot un-exclude). Setting `root = true` is the equivalent of `tsconfig`'s `root` — proof stops walking up looking for parent configs at this level. Use this when you want to be sure no surprise grandparent config silently changes the rules.
+Controls which files `mdloom check .` discovers. `include` is a child-wins glob list; `exclude` is additive across cascade (children cannot un-exclude). Setting `root = true` is the equivalent of `tsconfig`'s `root` — mdloom stops walking up looking for parent configs at this level. Use this when you want to be sure no surprise grandparent config silently changes the rules.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -132,7 +132,7 @@ Validates tree-structured code blocks — directory listings, taxonomies, org ch
 | `check_dir_slash` | bool | `true` | In `dirtree`: directories must end with `/`, files must not |
 | `check_duplicates` | bool | `true` | Flag duplicate entry names under the same parent |
 | `verify_paths` | bool | `false` | Resolve each `dirtree` path against disk and flag missing entries |
-| `verify_root` | string? | none | Filesystem root for `verify_paths`; defaults to the directory containing `proof.toml` |
+| `verify_root` | string? | none | Filesystem root for `verify_paths`; defaults to the directory containing `mdloom.toml` |
 
 Use `verify_paths = true` on a section landing page that catalogs an actual directory layout — the check then becomes a live "is the README still accurate?" guard.
 
@@ -248,7 +248,7 @@ Free-form regex rules. Each rule is applied to every file (or a glob subset via 
 
 ## `[[compile]]`
 
-Declares source/output directory pairs for `proof compile`. Each entry maps one source directory containing `.source.md` files to one output directory of compiled `.md` files. Multiple `[[compile]]` blocks declare multiple targets, all built by a single `proof compile` invocation. Paths are relative to the proof root.
+Declares source/output directory pairs for `mdloom compile`. Each entry maps one source directory containing `.source.md` files to one output directory of compiled `.md` files. Multiple `[[compile]]` blocks declare multiple targets, all built by a single `mdloom compile` invocation. Paths are relative to the mdloom root.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -269,11 +269,11 @@ output_dir = "docs/presentations"
 
 ## `[[davinci]]`
 
-Pin a specific figure to an `md://` URI and attach invariants that must hold across edits. Protects canonical diagrams from silent drift when guide content gets refactored. Register entries via `proof pin "md://..." --id <name>` (recommended) or write directly in `proof.toml`. DaVinci entries are additive across cascade — a root config can establish library-wide pins, and per-directory configs add their own.
+Pin a specific figure to an `md://` URI and attach invariants that must hold across edits. Protects canonical diagrams from silent drift when guide content gets refactored. Register entries via `mdloom pin "md://..." --id <name>` (recommended) or write directly in `mdloom.toml`. DaVinci entries are additive across cascade — a root config can establish library-wide pins, and per-directory configs add their own.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `id` | string | required | Stable identifier (used in `proof pin list` and diagnostics) |
+| `id` | string | required | Stable identifier (used in `mdloom pin list` and diagnostics) |
 | `uri` | string | required | `md://path#heading:selector` — resolved via mdpath |
 | `description` | string | `""` | Human-readable purpose |
 | `template` | string? | none | Template name to inherit base invariants from |
@@ -315,7 +315,7 @@ A single invariant rule on a pinned element. Many parameters are mutually releva
 
 ---
 
-## Annotated example — full `proof.toml`
+## Annotated example — full `mdloom.toml`
 
 ```toml
 # Top-level: optional explicit parent. Path is relative to this file's dir.
@@ -406,7 +406,7 @@ verify_link_targets  = true
 paths           = ["computing/**", "ai-engineering/**"]
 required_h2_all = ["The Big Picture", "Common Confusion Points"]
 
-# In a directory-level proof.toml, paths auto-prefix with that directory:
+# In a directory-level mdloom.toml, paths auto-prefix with that directory:
 # [[section_schemas]]
 # paths           = ["*.md"]              # → languages/*.md
 # paths_exclude   = ["00-OVERVIEW.md"]
@@ -427,7 +427,7 @@ severity    = "warning"
 id          = "package-layer-stack"
 uri         = "md://computing/01-PACKAGE.md#the-big-picture:0"
 description = "Canonical 5-level package manager hierarchy"
-protection  = "error"             # fails `proof check --davinci`
+protection  = "error"             # fails `mdloom check --davinci`
 
   [[davinci.invariant]]
   rule = "box-width"
@@ -447,7 +447,7 @@ protection  = "error"             # fails `proof check --davinci`
 
 ## `[ai]`
 
-Configures the external CLI used by `proof spec-generate --ai` and future AI-assisted commands. proof shells out to any CLI that accepts a prompt and writes its response to stdout — no API client code, no SDK. Configure once, use everywhere.
+Configures the external CLI used by `mdloom spec-generate --ai` and future AI-assisted commands. mdloom shells out to any CLI that accepts a prompt and writes its response to stdout — no API client code, no SDK. Configure once, use everywhere.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -481,17 +481,17 @@ args    = ["{prompt}"]
 Usage:
 
 ```bash
-proof spec-generate "md://figures/arch.md:figure:goroutine-scheduler" --ai
+mdloom spec-generate "md://figures/arch.md:figure:goroutine-scheduler" --ai
 ```
 
-Without `--ai`, `proof spec-generate` uses static heuristic analysis (no CLI required).
+Without `--ai`, `mdloom spec-generate` uses static heuristic analysis (no CLI required).
 
 ---
 
 ## See also
 
-- `proof config <file>` — print effective merged config for any file (single source of truth when debugging cascade)
-- `schemas/default.toml` — minimal starter (run `proof init` to copy)
+- `mdloom config <file>` — print effective merged config for any file (single source of truth when debugging cascade)
+- `schemas/default.toml` — minimal starter (run `mdloom init` to copy)
 - `schemas/reference.toml` — full real-world example
-- `design/COMPILE-SPEC.md` — `proof compile` pipeline and source-file directives
+- `design/COMPILE-SPEC.md` — `mdloom compile` pipeline and source-file directives
 - `design/STYLE-GUIDE.md` — style rules referenced by checks (S-01 wide chars, etc.)

@@ -20,7 +20,7 @@ line-ending guarantees.
 |---|---|---|
 | 01 - Schema disable compatibility decision | DONE | child `markdown.enabled=false` test and merge change |
 | 02 - MAXIM `md_unexpected_section` signal reduction | DONE | corpus classified by code; schema policy carry-forward |
-| 03 - Sibling mdpath warning cleanup decision | DONE | tracked as sibling-repo carry-forward, not proof worktree mutation |
+| 03 - Sibling mdpath warning cleanup decision | DONE | tracked as sibling-repo carry-forward, not mdloom worktree mutation |
 | 04 - Fix CRLF preservation test | DONE | `fix::tests::apply_fix_preserves_crlf_line_endings` |
 
 ## Done Criteria
@@ -28,7 +28,7 @@ line-ending guarantees.
 - Schema merge behavior has an accepted compatibility path.
 - MAXIM warning volume is reduced or explicitly classified by schema policy.
 - mdpath warnings are either fixed in the sibling repo or tracked there.
-- `proof fix` has CRLF preservation coverage or a documented blocker.
+- `mdloom fix` has CRLF preservation coverage or a documented blocker.
 
 ## Non-Goals
 

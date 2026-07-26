@@ -1,6 +1,6 @@
-<!-- proof:compiled from="proof:dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" -->
 ```dashboard
-PROOF release-health dashboard
+MDLOOM release-health dashboard
 
 Tests passing:                          Chart kinds:
 793                                     10
@@ -17,4 +17,4 @@ v0.7  │ ███████████████████████�
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

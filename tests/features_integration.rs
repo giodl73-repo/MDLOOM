@@ -1,26 +1,30 @@
 /// L1 + L2 integration tests for features completed in the current milestone:
-/// - proof:toc directive
-/// - proof compile --output-dir
-/// - [[compile]] multi-target (proof.toml)
-/// - proof spec-generate
-/// - proof layout command
-/// - proof compile --watch initial pass
-use proof_lib::compile::{compile_file, ViolationSeverity};
-use proof_lib::layout::{layout, Align, Direction, LayoutConfig};
-use proof_lib::spec_gen;
-use proof_lib::GlintConfig;
+/// - mdloom:toc directive
+/// - mdloom compile --output-dir
+/// - [[compile]] multi-target (mdloom.toml)
+/// - mdloom spec-generate
+/// - mdloom layout command
+/// - mdloom compile --watch initial pass
+use mdloom_lib::compile::{compile_file, ViolationSeverity};
+use mdloom_lib::layout::{layout, Align, Direction, LayoutConfig};
+use mdloom_lib::spec_gen;
+use mdloom_lib::MdloomConfig;
 use std::path::Path;
 
 // ─────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────
 
-fn proof_bin() -> std::path::PathBuf {
-    if let Some(bin) = option_env!("CARGO_BIN_EXE_proof") {
+fn mdloom_bin() -> std::path::PathBuf {
+    if let Some(bin) = option_env!("CARGO_BIN_EXE_mdloom") {
         return std::path::PathBuf::from(bin);
     }
 
-    let exe = if cfg!(windows) { "proof.exe" } else { "proof" };
+    let exe = if cfg!(windows) {
+        "mdloom.exe"
+    } else {
+        "mdloom"
+    };
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let bin = manifest.join("target").join("debug").join(exe);
     if bin.exists() {
@@ -32,13 +36,13 @@ fn proof_bin() -> std::path::PathBuf {
     workspace.join("target").join("debug").join(exe)
 }
 
-fn run_proof(args: &[&str], cwd: &Path) -> (std::process::Output, String, String) {
-    let bin = proof_bin();
+fn run_mdloom(args: &[&str], cwd: &Path) -> (std::process::Output, String, String) {
+    let bin = mdloom_bin();
     let out = std::process::Command::new(&bin)
         .args(args)
         .current_dir(cwd)
         .output()
-        .unwrap_or_else(|e| panic!("failed to run proof binary at {:?}: {}", bin, e));
+        .unwrap_or_else(|e| panic!("failed to run mdloom binary at {:?}: {}", bin, e));
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     (out, stdout, stderr)
@@ -48,24 +52,24 @@ fn compile_str(
     src: &str,
     filename: &str,
     root: &Path,
-) -> (String, Vec<proof_lib::compile::CompileViolation>) {
+) -> (String, Vec<mdloom_lib::compile::CompileViolation>) {
     let src_path = root.join(filename);
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), root, &cfg).unwrap();
     let content = std::fs::read_to_string(out_file.path()).unwrap_or_default();
     (content, result.violations)
 }
 
 // ─────────────────────────────────────────────────────────
-// L1: proof:toc directive
+// L1: mdloom:toc directive
 // ─────────────────────────────────────────────────────────
 
 #[test]
 fn toc_directive_generates_outline_in_output() {
     let dir = tempfile::tempdir().unwrap();
-    let src = "# Getting Started\n\n```proof:toc max-depth=3 style=list\n```\n\n## Install\n## Usage\n### Quick start\n## Examples\n";
+    let src = "# Getting Started\n\n```mdloom:toc max-depth=3 style=list\n```\n\n## Install\n## Usage\n### Quick start\n## Examples\n";
     let (out, violations) = compile_str(src, "test.source.md", dir.path());
     assert!(violations
         .iter()
@@ -83,7 +87,7 @@ fn toc_directive_generates_outline_in_output() {
 #[test]
 fn backlinks_directive_renders_default_crop_side_info() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("backlinks.json"),
@@ -107,7 +111,7 @@ fn backlinks_directive_renders_default_crop_side_info() {
     .unwrap();
 
     let src =
-        "# Reference\n\n```proof:backlinks target=\"md://reference.source.md#reference\"\n```\n";
+        "# Reference\n\n```mdloom:backlinks target=\"md://reference.source.md#reference\"\n```\n";
     let (out, violations) = compile_str(src, "reference.source.md", dir.path());
 
     assert!(violations
@@ -120,7 +124,7 @@ fn backlinks_directive_renders_default_crop_side_info() {
 #[test]
 fn backlinks_directive_supports_count_table_and_empty_formats() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("backlinks.json"),
@@ -139,7 +143,7 @@ fn backlinks_directive_supports_count_table_and_empty_formats() {
     .unwrap();
 
     let count_src =
-        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=count\n```\n";
+        "# Reference\n\n```mdloom:backlinks target=\"reference.source.md\" format=count\n```\n";
     let (count_out, count_violations) = compile_str(count_src, "reference.source.md", dir.path());
     assert!(count_violations
         .iter()
@@ -147,7 +151,7 @@ fn backlinks_directive_supports_count_table_and_empty_formats() {
     assert!(count_out.contains("\n1\n"));
 
     let table_src =
-        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=table\n```\n";
+        "# Reference\n\n```mdloom:backlinks target=\"reference.source.md\" format=table\n```\n";
     let (table_out, table_violations) = compile_str(table_src, "reference.source.md", dir.path());
     assert!(table_violations
         .iter()
@@ -156,7 +160,7 @@ fn backlinks_directive_supports_count_table_and_empty_formats() {
     assert!(table_out
         .contains("| [guide.source.md](guide.source.md) | `reference.source.md#reference` |"));
 
-    let empty_src = "# Empty\n\n```proof:backlinks target=\"empty.source.md\"\n```\n";
+    let empty_src = "# Empty\n\n```mdloom:backlinks target=\"empty.source.md\"\n```\n";
     let (empty_out, empty_violations) = compile_str(empty_src, "empty.source.md", dir.path());
     assert!(empty_violations
         .iter()
@@ -167,7 +171,7 @@ fn backlinks_directive_supports_count_table_and_empty_formats() {
 #[test]
 fn backlinks_directive_tracks_default_side_info_as_resolved_file() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     let backlinks_path = side_info.join("backlinks.json");
     std::fs::write(
@@ -187,11 +191,11 @@ fn backlinks_directive_tracks_default_side_info_as_resolved_file() {
     let src_path = dir.path().join("reference.source.md");
     std::fs::write(
         &src_path,
-        "# Reference\n\n```proof:backlinks target=\"reference.source.md\"\n```\n",
+        "# Reference\n\n```mdloom:backlinks target=\"reference.source.md\"\n```\n",
     )
     .unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
 
@@ -225,11 +229,11 @@ fn backlinks_directive_tracks_explicit_side_info_as_resolved_file() {
     let src_path = dir.path().join("reference.source.md");
     std::fs::write(
         &src_path,
-        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" side-info=\"reports/custom-backlinks.json\"\n```\n",
+        "# Reference\n\n```mdloom:backlinks target=\"reference.source.md\" side-info=\"reports/custom-backlinks.json\"\n```\n",
     )
     .unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
 
@@ -243,7 +247,7 @@ fn backlinks_directive_tracks_explicit_side_info_as_resolved_file() {
 #[test]
 fn backlinks_side_info_changes_invalidate_compile_cache() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     let backlinks_path = side_info.join("backlinks.json");
     std::fs::write(
@@ -264,10 +268,10 @@ fn backlinks_side_info_changes_invalidate_compile_cache() {
     let out_path = dir.path().join("reference.md");
     std::fs::write(
         &src_path,
-        "# Reference\n\n```proof:backlinks target=\"reference.source.md\" format=count\n```\n",
+        "# Reference\n\n```mdloom:backlinks target=\"reference.source.md\" format=count\n```\n",
     )
     .unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
     assert!(!first.from_cache);
@@ -304,7 +308,7 @@ fn backlinks_side_info_changes_invalidate_compile_cache() {
 #[test]
 fn headings_directive_renders_default_crop_side_info() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("headings.json"),
@@ -319,7 +323,7 @@ fn headings_directive_renders_default_crop_side_info() {
     )
     .unwrap();
 
-    let src = "# Guide\n\n```proof:headings source=\"md://guide.source.md#install\"\n```\n";
+    let src = "# Guide\n\n```mdloom:headings source=\"md://guide.source.md#install\"\n```\n";
     let (out, violations) = compile_str(src, "guide.source.md", dir.path());
 
     assert!(violations
@@ -333,7 +337,7 @@ fn headings_directive_renders_default_crop_side_info() {
 #[test]
 fn headings_directive_supports_count_table_and_empty_formats() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("headings.json"),
@@ -346,14 +350,14 @@ fn headings_directive_supports_count_table_and_empty_formats() {
     )
     .unwrap();
 
-    let count_src = "# Guide\n\n```proof:headings source=\"guide.source.md\" format=count\n```\n";
+    let count_src = "# Guide\n\n```mdloom:headings source=\"guide.source.md\" format=count\n```\n";
     let (count_out, count_violations) = compile_str(count_src, "guide.source.md", dir.path());
     assert!(count_violations
         .iter()
         .all(|v| v.severity != ViolationSeverity::Error));
     assert!(count_out.contains("\n2\n"));
 
-    let table_src = "# Guide\n\n```proof:headings source=\"guide.source.md\" format=table\n```\n";
+    let table_src = "# Guide\n\n```mdloom:headings source=\"guide.source.md\" format=table\n```\n";
     let (table_out, table_violations) = compile_str(table_src, "guide.source.md", dir.path());
     assert!(table_violations
         .iter()
@@ -361,7 +365,7 @@ fn headings_directive_supports_count_table_and_empty_formats() {
     assert!(table_out.contains("| Level | Heading | URI |"));
     assert!(table_out.contains("| 2 | Install | `md://guide.source.md#install` |"));
 
-    let empty_src = "# Missing\n\n```proof:headings source=\"missing.source.md\"\n```\n";
+    let empty_src = "# Missing\n\n```mdloom:headings source=\"missing.source.md\"\n```\n";
     let (empty_out, empty_violations) = compile_str(empty_src, "missing.source.md", dir.path());
     assert!(empty_violations
         .iter()
@@ -372,7 +376,7 @@ fn headings_directive_supports_count_table_and_empty_formats() {
 #[test]
 fn headings_directive_tracks_side_info_and_invalidates_compile_cache() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     let headings_path = side_info.join("headings.json");
     std::fs::write(
@@ -388,10 +392,10 @@ fn headings_directive_tracks_side_info_and_invalidates_compile_cache() {
     let out_path = dir.path().join("guide.md");
     std::fs::write(
         &src_path,
-        "# Guide\n\n```proof:headings source=\"guide.source.md\" format=count\n```\n",
+        "# Guide\n\n```mdloom:headings source=\"guide.source.md\" format=count\n```\n",
     )
     .unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
     assert!(!first.from_cache);
@@ -424,7 +428,7 @@ fn headings_directive_tracks_side_info_and_invalidates_compile_cache() {
 #[test]
 fn frontmatter_directive_renders_default_crop_side_info() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("frontmatter.json"),
@@ -434,19 +438,19 @@ fn frontmatter_directive_renders_default_crop_side_info() {
     {
       "source": "guide.source.md",
       "keys": ["status", "tags", "title"],
-      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Guide" }
+      "fields": { "status": "ready", "tags": "[mdloom, guide]", "title": "Guide" }
     },
     {
       "source": "draft.source.md",
       "keys": ["status", "tags", "title"],
-      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+      "fields": { "status": "draft", "tags": "[mdloom]", "title": "Draft" }
     }
   ]
 }"#,
     )
     .unwrap();
 
-    let src = "# Guide\n\n```proof:frontmatter field=tags value=guide\n```\n";
+    let src = "# Guide\n\n```mdloom:frontmatter field=tags value=guide\n```\n";
     let (out, violations) = compile_str(src, "guide.source.md", dir.path());
 
     assert!(violations
@@ -459,7 +463,7 @@ fn frontmatter_directive_renders_default_crop_side_info() {
 #[test]
 fn frontmatter_directive_supports_count_table_and_empty_formats() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("frontmatter.json"),
@@ -468,12 +472,12 @@ fn frontmatter_directive_supports_count_table_and_empty_formats() {
     {
       "source": "guide.source.md",
       "keys": ["status", "tags", "title"],
-      "fields": { "status": "ready", "tags": "[proof, guide]", "title": "Guide" }
+      "fields": { "status": "ready", "tags": "[mdloom, guide]", "title": "Guide" }
     },
     {
       "source": "draft.source.md",
       "keys": ["status", "tags", "title"],
-      "fields": { "status": "draft", "tags": "[proof]", "title": "Draft" }
+      "fields": { "status": "draft", "tags": "[mdloom]", "title": "Draft" }
     }
   ]
 }"#,
@@ -481,22 +485,22 @@ fn frontmatter_directive_supports_count_table_and_empty_formats() {
     .unwrap();
 
     let count_src =
-        "# Guide\n\n```proof:frontmatter field=status value=ready op=eq format=count\n```\n";
+        "# Guide\n\n```mdloom:frontmatter field=status value=ready op=eq format=count\n```\n";
     let (count_out, count_violations) = compile_str(count_src, "guide.source.md", dir.path());
     assert!(count_violations
         .iter()
         .all(|v| v.severity != ViolationSeverity::Error));
     assert!(count_out.contains("\n1\n"));
 
-    let table_src = "# Guide\n\n```proof:frontmatter field=tags value=proof format=table\n```\n";
+    let table_src = "# Guide\n\n```mdloom:frontmatter field=tags value=mdloom format=table\n```\n";
     let (table_out, table_violations) = compile_str(table_src, "guide.source.md", dir.path());
     assert!(table_violations
         .iter()
         .all(|v| v.severity != ViolationSeverity::Error));
     assert!(table_out.contains("| Source | tags |"));
-    assert!(table_out.contains("| [guide.source.md](guide.source.md) | `[proof, guide]` |"));
+    assert!(table_out.contains("| [guide.source.md](guide.source.md) | `[mdloom, guide]` |"));
 
-    let empty_src = "# Missing\n\n```proof:frontmatter field=tags value=missing\n```\n";
+    let empty_src = "# Missing\n\n```mdloom:frontmatter field=tags value=missing\n```\n";
     let (empty_out, empty_violations) = compile_str(empty_src, "missing.source.md", dir.path());
     assert!(empty_violations
         .iter()
@@ -507,7 +511,7 @@ fn frontmatter_directive_supports_count_table_and_empty_formats() {
 #[test]
 fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     let frontmatter_path = side_info.join("frontmatter.json");
     std::fs::write(
@@ -527,10 +531,10 @@ fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
     let out_path = dir.path().join("guide.md");
     std::fs::write(
         &src_path,
-        "# Guide\n\n```proof:frontmatter field=status value=ready op=eq format=count\n```\n",
+        "# Guide\n\n```mdloom:frontmatter field=status value=ready op=eq format=count\n```\n",
     )
     .unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
     assert!(!first.from_cache);
@@ -571,7 +575,7 @@ fn frontmatter_directive_tracks_side_info_and_invalidates_compile_cache() {
 #[test]
 fn links_directive_renders_default_crop_side_info() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("links.json"),
@@ -586,7 +590,7 @@ fn links_directive_renders_default_crop_side_info() {
     )
     .unwrap();
 
-    let src = "# Guide\n\n```proof:links source=\"md://guide.source.md#guide\"\n```\n";
+    let src = "# Guide\n\n```mdloom:links source=\"md://guide.source.md#guide\"\n```\n";
     let (out, violations) = compile_str(src, "guide.source.md", dir.path());
 
     assert!(violations
@@ -602,7 +606,7 @@ fn links_directive_renders_default_crop_side_info() {
 #[test]
 fn links_directive_supports_count_table_and_empty_formats() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     std::fs::write(
         side_info.join("links.json"),
@@ -615,14 +619,14 @@ fn links_directive_supports_count_table_and_empty_formats() {
     )
     .unwrap();
 
-    let count_src = "# Guide\n\n```proof:links status=broken format=count\n```\n";
+    let count_src = "# Guide\n\n```mdloom:links status=broken format=count\n```\n";
     let (count_out, count_violations) = compile_str(count_src, "guide.source.md", dir.path());
     assert!(count_violations
         .iter()
         .all(|v| v.severity != ViolationSeverity::Error));
     assert!(count_out.contains("\n1\n"));
 
-    let table_src = "# Guide\n\n```proof:links status=broken format=table\n```\n";
+    let table_src = "# Guide\n\n```mdloom:links status=broken format=table\n```\n";
     let (table_out, table_violations) = compile_str(table_src, "guide.source.md", dir.path());
     assert!(table_violations
         .iter()
@@ -631,7 +635,7 @@ fn links_directive_supports_count_table_and_empty_formats() {
     assert!(table_out
         .contains("| `guide.source.md` | `missing.source.md` | `broken` | `` | missing target |"));
 
-    let empty_src = "# Missing\n\n```proof:links source=\"missing.source.md\"\n```\n";
+    let empty_src = "# Missing\n\n```mdloom:links source=\"missing.source.md\"\n```\n";
     let (empty_out, empty_violations) = compile_str(empty_src, "missing.source.md", dir.path());
     assert!(empty_violations
         .iter()
@@ -642,7 +646,7 @@ fn links_directive_supports_count_table_and_empty_formats() {
 #[test]
 fn links_directive_tracks_side_info_and_invalidates_compile_cache() {
     let dir = tempfile::tempdir().unwrap();
-    let side_info = dir.path().join(".proof").join("side-info");
+    let side_info = dir.path().join(".mdloom").join("side-info");
     std::fs::create_dir_all(&side_info).unwrap();
     let links_path = side_info.join("links.json");
     std::fs::write(
@@ -658,10 +662,10 @@ fn links_directive_tracks_side_info_and_invalidates_compile_cache() {
     let out_path = dir.path().join("guide.md");
     std::fs::write(
         &src_path,
-        "# Guide\n\n```proof:links status=broken format=count\n```\n",
+        "# Guide\n\n```mdloom:links status=broken format=count\n```\n",
     )
     .unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
     assert!(!first.from_cache);
@@ -708,14 +712,14 @@ fn source_frontmatter_is_stripped_from_compile_output() {
 #[test]
 fn toc_directive_respects_max_depth() {
     let dir = tempfile::tempdir().unwrap();
-    let src = "# Title\n\n```proof:toc max-depth=2 style=list\n```\n\n## Section\n### Subsection\n#### Deep\n";
+    let src = "# Title\n\n```mdloom:toc max-depth=2 style=list\n```\n\n## Section\n### Subsection\n#### Deep\n";
     let (out, _) = compile_str(src, "test.source.md", dir.path());
     // Extract just the compiled TOC block
     let toc_block = out
-        .split("<!-- proof:compiled from=\"proof:toc\" -->")
+        .split("<!-- mdloom:compiled from=\"mdloom:toc\" -->")
         .nth(1)
         .unwrap_or("")
-        .split("<!-- /proof:compiled -->")
+        .split("<!-- /mdloom:compiled -->")
         .next()
         .unwrap_or("");
     assert!(toc_block.contains("Section"), "H2 should be in TOC");
@@ -738,7 +742,7 @@ fn toc_directive_from_source_file() {
         "# Reference\n## API\n### parse\n### resolve\n## Errors\n",
     )
     .unwrap();
-    let src = "# My Docs\n\nTable of contents for the reference:\n\n```proof:toc source=md://reference.md max-depth=3 style=list\n```\n";
+    let src = "# My Docs\n\nTable of contents for the reference:\n\n```mdloom:toc source=md://reference.md max-depth=3 style=list\n```\n";
     let (out, violations) = compile_str(src, "test.source.md", dir.path());
     assert!(
         violations
@@ -757,7 +761,7 @@ fn toc_directive_from_source_file() {
 #[test]
 fn toc_missing_source_emits_error() {
     let dir = tempfile::tempdir().unwrap();
-    let src = "# Test\n\n```proof:toc source=md://nonexistent.md\n```\n";
+    let src = "# Test\n\n```mdloom:toc source=md://nonexistent.md\n```\n";
     let (_, violations) = compile_str(src, "test.source.md", dir.path());
     assert!(
         violations
@@ -768,7 +772,7 @@ fn toc_missing_source_emits_error() {
 }
 
 // ─────────────────────────────────────────────────────────
-// L1: proof compile --output-dir
+// L1: mdloom compile --output-dir
 // ─────────────────────────────────────────────────────────
 
 #[test]
@@ -781,7 +785,7 @@ fn output_dir_routes_compiled_files_correctly() {
 
     std::fs::write(src_dir.join("guide.source.md"), "# Guide\n\nHello world.\n").unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     } // skip if binary not built
@@ -815,7 +819,7 @@ fn output_dir_created_if_missing() {
 
     std::fs::write(dir.path().join("test.source.md"), "# Test\n").unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
@@ -837,7 +841,7 @@ fn output_dir_created_if_missing() {
 }
 
 // ─────────────────────────────────────────────────────────
-// L1: [[compile]] multi-target in proof.toml
+// L1: [[compile]] multi-target in mdloom.toml
 // ─────────────────────────────────────────────────────────
 
 #[test]
@@ -855,12 +859,12 @@ fn multi_target_compile_routes_each_source_dir() {
     std::fs::write(guides_src.join("01-intro.source.md"), "# Intro\n").unwrap();
     std::fs::write(
         pres_src.join("deck.slides.source.md"),
-        "---\nwidth: 40\nheight: 6\n---\n\n```proof:slide layout=title\ntitle: Deck\n```\n",
+        "---\nwidth: 40\nheight: 6\n---\n\n```mdloom:slide layout=title\ntitle: Deck\n```\n",
     )
     .unwrap();
 
     std::fs::write(
-        dir.path().join("proof.toml"),
+        dir.path().join("mdloom.toml"),
         r#"
 [files]
 root = true
@@ -876,7 +880,7 @@ output_dir = "docs/presentations"
     )
     .unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
@@ -899,7 +903,7 @@ output_dir = "docs/presentations"
 }
 
 // ─────────────────────────────────────────────────────────
-// L1: proof spec-generate
+// L1: mdloom spec-generate
 // ─────────────────────────────────────────────────────────
 
 #[test]
@@ -973,7 +977,7 @@ fn spec_generate_empty_content_still_produces_line_count() {
 }
 
 // ─────────────────────────────────────────────────────────
-// L1: proof layout
+// L1: mdloom layout
 // ─────────────────────────────────────────────────────────
 
 #[test]
@@ -1085,15 +1089,15 @@ fn layout_empty_figures_no_panic() {
 // ─────────────────────────────────────────────────────────
 
 #[test]
-fn cli_proof_version_exits_zero() {
-    let bin = proof_bin();
+fn cli_mdloom_version_exits_zero() {
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
-    let (out, stdout, _) = run_proof(&["--version"], Path::new("."));
-    assert!(out.status.success(), "proof --version should exit 0");
+    let (out, stdout, _) = run_mdloom(&["--version"], Path::new("."));
+    assert!(out.status.success(), "mdloom --version should exit 0");
     assert!(
-        stdout.contains("proof") || stdout.contains("0."),
+        stdout.contains("mdloom") || stdout.contains("0."),
         "should print version"
     );
 }
@@ -1104,12 +1108,12 @@ fn cli_compile_output_dir_flag() {
     std::fs::write(dir.path().join("test.source.md"), "# Hello\n").unwrap();
     let out_dir = dir.path().join("output");
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
 
-    let (out, _, stderr) = run_proof(
+    let (out, _, stderr) = run_mdloom(
         &[
             "compile",
             "--output-dir",
@@ -1138,12 +1142,12 @@ fn cli_spec_generate_outputs_toml() {
     )
     .unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
 
-    let (out, stdout, stderr) = run_proof(
+    let (out, stdout, stderr) = run_mdloom(
         &[
             "spec-generate",
             "md://fig.md",
@@ -1170,17 +1174,17 @@ fn cli_check_exits_nonzero_on_md_broken_uri() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("test.source.md"),
-        "# Test\n\n```proof:tree kind=taxonomy source=md://missing.md\n```\n",
+        "# Test\n\n```mdloom:tree kind=taxonomy source=md://missing.md\n```\n",
     )
     .unwrap();
-    std::fs::write(dir.path().join("proof.toml"), "[files]\nroot = true\n").unwrap();
+    std::fs::write(dir.path().join("mdloom.toml"), "[files]\nroot = true\n").unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
 
-    let (out, _, stderr) = run_proof(&["check", "test.source.md"], dir.path());
+    let (out, _, stderr) = run_mdloom(&["check", "test.source.md"], dir.path());
     // Should exit non-zero due to md_broken_uri error
     assert!(
         !out.status.success(),
@@ -1199,18 +1203,18 @@ fn cli_toc_compiles_correctly() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("doc.source.md"),
-        "# Title\n\n```proof:toc max-depth=2 style=list\n```\n\n## Install\n## Usage\n",
+        "# Title\n\n```mdloom:toc max-depth=2 style=list\n```\n\n## Install\n## Usage\n",
     )
     .unwrap();
-    std::fs::write(dir.path().join("proof.toml"), "[files]\nroot = true\n").unwrap();
+    std::fs::write(dir.path().join("mdloom.toml"), "[files]\nroot = true\n").unwrap();
 
-    let bin = proof_bin();
+    let bin = mdloom_bin();
     if !bin.exists() {
         return;
     }
 
     let out_path = dir.path().join("doc.md");
-    let (out, _, stderr) = run_proof(
+    let (out, _, stderr) = run_mdloom(
         &[
             "compile",
             "--root",
@@ -1223,7 +1227,7 @@ fn cli_toc_compiles_correctly() {
     );
     assert!(
         out.status.success(),
-        "proof:toc compile should succeed, stderr: {}",
+        "mdloom:toc compile should succeed, stderr: {}",
         stderr
     );
     let content = std::fs::read_to_string(&out_path).unwrap();
@@ -1238,21 +1242,21 @@ fn cli_toc_compiles_correctly() {
 }
 
 // ─────────────────────────────────────────────────────────
-// Regression: proof:tree directive counted in directives_resolved (issue #3)
+// Regression: mdloom:tree directive counted in directives_resolved (issue #3)
 // ─────────────────────────────────────────────────────────
 
 #[test]
 fn tree_directive_counted_in_resolved_directives() {
     let dir = tempfile::tempdir().unwrap();
-    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n";
+    let src = "# Doc\n\n```mdloom:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n";
     let src_path = dir.path().join("doc.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
     assert_eq!(
         result.directives_resolved, 1,
-        "expected 1 resolved directive for a single proof:tree, got {}",
+        "expected 1 resolved directive for a single mdloom:tree, got {}",
         result.directives_resolved
     );
 }
@@ -1281,15 +1285,15 @@ fn write_table_fixture(dir: &Path) -> std::path::PathBuf {
 fn compile_with_chart_using_uri(
     dir: &Path,
     uri: &str,
-) -> (String, Vec<proof_lib::compile::CompileViolation>, usize) {
-    // Build a proof:table directive — it just emits the resolved table verbatim,
+) -> (String, Vec<mdloom_lib::compile::CompileViolation>, usize) {
+    // Build a mdloom:table directive — it just emits the resolved table verbatim,
     // so query-param transforms surface directly in the compiled output (we can
-    // grep for row labels). proof:chart would render visual bars and lose the names.
-    let src = format!("# Doc\n\n```proof:table\n{}\n```\n", uri);
+    // grep for row labels). mdloom:chart would render visual bars and lose the names.
+    let src = format!("# Doc\n\n```mdloom:table\n{}\n```\n", uri);
     let src_path = dir.join("doc.source.md");
     std::fs::write(&src_path, &src).unwrap();
     let out = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out.path(), dir, &cfg).unwrap();
     let content = std::fs::read_to_string(out.path()).unwrap_or_default();
     (content, result.violations, result.directives_resolved)
@@ -1419,15 +1423,15 @@ fn query_skip_then_top() {
 
 #[test]
 fn query_count_returns_single_cell() {
-    use proof_lib::compile::compile_file;
+    use mdloom_lib::compile::compile_file;
     let dir = tempfile::tempdir().unwrap();
     write_table_fixture(dir.path());
-    // ?count needs a directive that just embeds the table — proof:table fits.
-    let src = "# Doc\n\n```proof:table\nmd://data.md#:table:0?count\n```\n";
+    // ?count needs a directive that just embeds the table — mdloom:table fits.
+    let src = "# Doc\n\n```mdloom:table\nmd://data.md#:table:0?count\n```\n";
     let src_path = dir.path().join("doc.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out.path(), dir.path(), &cfg).unwrap();
     let content = std::fs::read_to_string(out.path()).unwrap_or_default();
     let errs: Vec<_> = result
@@ -1472,20 +1476,20 @@ fn query_combined_filter_top() {
 }
 
 // ─────────────────────────────────────────────────────────
-// Regression: multi-line directives inside proof:region (issue #6)
+// Regression: multi-line directives inside mdloom:region (issue #6)
 // ─────────────────────────────────────────────────────────
 
 #[test]
-fn region_renders_proof_chart_with_inline_body() {
-    // Reproduces the icelines bug from issue #6: a proof:chart with inline
-    // data inside a proof:region body must render to a sparkline, not be
+fn region_renders_mdloom_chart_with_inline_body() {
+    // Reproduces the icelines bug from issue #6: a mdloom:chart with inline
+    // data inside a mdloom:region body must render to a sparkline, not be
     // dropped silently. Uses fenceless directive syntax per DASHBOARD-SPEC.
     let dir = tempfile::tempdir().unwrap();
     let src = "---\n\
         dashboard:\n  width: 30\n  height: 4\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 4 }\n\
         ---\n\n\
-        ```proof:region name=main\n\
-        proof:chart kind=sparkline width=20 no-chrome\n\
+        ```mdloom:region name=main\n\
+        mdloom:chart kind=sparkline width=20 no-chrome\n\
         - 21-22: 44\n\
         - 22-23: 64\n\
         - 23-24: 32\n\
@@ -1495,7 +1499,7 @@ fn region_renders_proof_chart_with_inline_body() {
     let src_path = dir.path().join("d.dashboard.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
     let errs: Vec<_> = result
         .violations
@@ -1524,20 +1528,20 @@ fn region_renders_proof_chart_with_inline_body() {
     );
     // The literal directive header text must NOT appear in canvas output.
     assert!(
-        !out.contains("proof:chart kind=sparkline"),
+        !out.contains("mdloom:chart kind=sparkline"),
         "directive header should be replaced by rendered chart, got:\n{}",
         out,
     );
 }
 
 #[test]
-fn region_renders_proof_tree_with_inline_body() {
+fn region_renders_mdloom_tree_with_inline_body() {
     let dir = tempfile::tempdir().unwrap();
     let src = "---\n\
         dashboard:\n  width: 40\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 40, height: 6 }\n\
         ---\n\n\
-        ```proof:region name=main\n\
-        proof:tree kind=taxonomy\n\
+        ```mdloom:region name=main\n\
+        mdloom:tree kind=taxonomy\n\
         root: R\n\
         - A\n\
           - A1\n\
@@ -1546,7 +1550,7 @@ fn region_renders_proof_tree_with_inline_body() {
     let src_path = dir.path().join("d.dashboard.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
     let errs: Vec<_> = result
         .violations
@@ -1577,9 +1581,9 @@ fn region_mixes_literals_and_directives() {
     let src = "---\n\
         dashboard:\n  width: 30\n  height: 6\n  regions:\n    main: { x: 0, y: 0, width: 30, height: 6 }\n\
         ---\n\n\
-        ```proof:region name=main\n\
+        ```mdloom:region name=main\n\
         Trend:\n\
-        proof:chart kind=sparkline width=20 no-chrome\n\
+        mdloom:chart kind=sparkline width=20 no-chrome\n\
         a: 1\n\
         b: 2\n\
         c: 3\n\
@@ -1587,7 +1591,7 @@ fn region_mixes_literals_and_directives() {
     let src_path = dir.path().join("d.dashboard.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
     let errs: Vec<_> = result
         .violations
@@ -1618,11 +1622,11 @@ fn directives_resolved_persists_through_cache_hit() {
     // cached output contained correctly-rendered directives. The count must
     // round-trip through the cache.
     let dir = tempfile::tempdir().unwrap();
-    let src = "# Doc\n\n```proof:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n\n```proof:blockquote\nQ.\n```\n";
+    let src = "# Doc\n\n```mdloom:tree kind=taxonomy\nroot: R\n- a\n- b\n```\n\n```mdloom:blockquote\nQ.\n```\n";
     let src_path = dir.path().join("doc.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_path = dir.path().join("doc.md");
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
 
     // First compile: cold cache → real count.
     let first = compile_file(&src_path, &out_path, dir.path(), &cfg).unwrap();
@@ -1646,13 +1650,13 @@ fn mixed_tree_and_other_directives_counted() {
     let dir = tempfile::tempdir().unwrap();
     // Two trees + one blockquote = 3 resolved
     let src = "# Doc\n\n\
-        ```proof:tree kind=taxonomy\nroot: R1\n- a\n```\n\n\
-        ```proof:blockquote\nQuote text.\n```\n\n\
-        ```proof:tree kind=org\nroot: R2\n- b\n```\n";
+        ```mdloom:tree kind=taxonomy\nroot: R1\n- a\n```\n\n\
+        ```mdloom:blockquote\nQuote text.\n```\n\n\
+        ```mdloom:tree kind=org\nroot: R2\n- b\n```\n";
     let src_path = dir.path().join("doc.source.md");
     std::fs::write(&src_path, src).unwrap();
     let out_file = tempfile::NamedTempFile::new().unwrap();
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     let result = compile_file(&src_path, out_file.path(), dir.path(), &cfg).unwrap();
     assert_eq!(
         result.directives_resolved, 3,

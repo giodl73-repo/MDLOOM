@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" -->
 ```dashboard
 Site structure:
 docs
@@ -11,4 +11,4 @@ docs
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

@@ -1,8 +1,8 @@
-<!-- proof:compiled from="proof:dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" -->
 ```dashboard
 Line 1
 Line 2
 Line 3
 Line 4
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

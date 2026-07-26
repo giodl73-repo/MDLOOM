@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=5 -->
+<!-- mdloom:compiled from="mdloom:slides" count=5 -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────────────────────────── 1/5
 
@@ -126,4 +126,4 @@ SLIDE 5 ────────────────────────
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

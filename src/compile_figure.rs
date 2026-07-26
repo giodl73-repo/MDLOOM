@@ -6,7 +6,7 @@ use crate::compile_format;
 use crate::compile_output;
 use crate::compile_source;
 use crate::compile_types::{CompileViolation, ViolationSeverity};
-use crate::config::GlintConfig;
+use crate::config::MdloomConfig;
 use crate::layout::{self, extract_content_lines};
 use crate::runner::Runner;
 
@@ -15,7 +15,7 @@ pub(crate) fn compile_include(
     uri: &str,
     pin: Option<&String>,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     path_index: &mut PathIndex,
     line_start: usize,
@@ -61,7 +61,7 @@ pub(crate) fn compile_include(
 pub(crate) fn compile_table(
     uri: &str,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     path_index: &mut PathIndex,
     line_start: usize,
@@ -97,7 +97,7 @@ pub(crate) fn compile_layout(
     uris: &[String],
     attrs: &LayoutAttrs,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     path_index: &mut PathIndex,
     line_start: usize,
@@ -149,7 +149,7 @@ pub(crate) fn compile_layout(
 fn resolve_validated(
     uri: &str,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     path_index: &mut PathIndex,
     line_start: usize,
@@ -178,7 +178,7 @@ fn resolve_validated(
 fn warn_missing_pin(
     uri: &str,
     pin_id: &str,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     line_start: usize,
     source_line_offset: usize,
     violations: &mut Vec<CompileViolation>,
@@ -194,7 +194,7 @@ fn warn_missing_pin(
         figure_id: Some(pin_id.to_string()),
         invariant: String::new(),
         message: format!(
-            "Figure '{}' declares pin={:?} but no [[davinci]] entry with that ID exists — run `proof pin {} --id {}`",
+            "Figure '{}' declares pin={:?} but no [[davinci]] entry with that ID exists — run `mdloom pin {} --id {}`",
             uri, pin_id, uri, pin_id
         ),
         source_line: line_start + 1 + source_line_offset,
@@ -228,11 +228,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("myfig.md"), "```\ncontent\n```\n").unwrap();
 
-        let cfg = GlintConfig::default();
+        let cfg = MdloomConfig::default();
         let runner = Runner::new(dir.path(), cfg.clone()).expect("runner");
         let mut path_index = PathIndex::new();
         let mut violations = Vec::new();
-        let source_lines = vec!["```proof:include pin=my-pin", "md://myfig.md", "```"];
+        let source_lines = vec!["```mdloom:include pin=my-pin", "md://myfig.md", "```"];
         let mut resolved_count = 0usize;
 
         let rendered = compile_include(

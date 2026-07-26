@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::checks::markdown_table::parse_tables;
 use crate::compile::compile_file;
-use crate::GlintConfig;
+use crate::MdloomConfig;
 
 #[derive(Debug, Clone)]
 pub struct BackfillOptions {
@@ -128,7 +128,7 @@ pub struct BackfillRoundTrip {
 pub fn run(options: BackfillOptions) -> Result<BackfillReport> {
     let mut report = BackfillReport {
         schema_version: "1".to_string(),
-        generated_by: "proof backfill".to_string(),
+        generated_by: "mdloom backfill".to_string(),
         summary: BackfillSummary::default(),
         files: Vec::new(),
     };
@@ -754,7 +754,7 @@ fn looks_diagram_like(line: &str) -> bool {
 
 fn literal_source(original_path: &Path, original: &str) -> String {
     format!(
-        "---\ntags: [backfill]\nops: [backfill]\ncontent_tags: [markdown]\nproof_original: \"{}\"\n---\n{}",
+        "---\ntags: [backfill]\nops: [backfill]\ncontent_tags: [markdown]\nmdloom_original: \"{}\"\n---\n{}",
         original_path.display().to_string().replace('\\', "/"),
         original
     )
@@ -763,7 +763,7 @@ fn literal_source(original_path: &Path, original: &str) -> String {
 fn check_roundtrip(source_path: &Path, original: &str) -> Result<BackfillRoundTrip> {
     let temp_dir = unique_temp_dir()?;
     let output_path = temp_dir.join("roundtrip.md");
-    let cfg = GlintConfig::default();
+    let cfg = MdloomConfig::default();
     compile_file(source_path, &output_path, &temp_dir, &cfg)
         .with_context(|| format!("round-trip compiling {}", source_path.display()))?;
     let compiled = std::fs::read_to_string(&output_path)
@@ -790,7 +790,8 @@ fn unique_temp_dir() -> Result<PathBuf> {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("proof-backfill-{}-{}", std::process::id(), nanos));
+    let dir =
+        std::env::temp_dir().join(format!("mdloom-backfill-{}-{}", std::process::id(), nanos));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     Ok(dir)
 }

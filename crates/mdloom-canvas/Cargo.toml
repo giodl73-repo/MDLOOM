@@ -1,0 +1,12 @@
+[package]
+name = "mdloom-canvas"
+version = "0.1.0"
+edition = "2021"
+description = "Fixed-width ASCII character grid for terminal and TUI composition"
+license = "MIT"
+repository = "https://github.com/giodl73-repo/MDLOOM"
+keywords = ["terminal", "tui", "ascii", "canvas", "grid"]
+categories = ["text-processing", "rendering"]
+
+[dependencies]
+unicode-width = "0.2"

@@ -6,7 +6,7 @@ Made CLI summary counts match the files actually selected by the runner:
 
 - Added `Runner::file_count()` using the same include/exclude matcher as
   `Runner::run()`.
-- Updated `proof check` and `proof stats` directory summaries to use the runner
+- Updated `mdloom check` and `mdloom stats` directory summaries to use the runner
   count instead of a separate markdown-extension approximation.
 - Removed the old duplicate `count_files` helper from `main.rs`.
 

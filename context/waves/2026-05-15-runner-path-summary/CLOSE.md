@@ -9,7 +9,7 @@ commands do not duplicate input-shape branching.
 
 - Added `Runner::run_path_summary(path)` for single files and directories.
 - Kept `Runner::run()` as a compatibility convenience over `run_summary()`.
-- Updated `proof check`, `proof stats`, and `proof draft` to consume
+- Updated `mdloom check`, `mdloom stats`, and `mdloom draft` to consume
   `RunSummary` through the unified path API.
 - Added a regression that verifies file inputs count as one checked file while
   directory inputs count only runner-selected markdown files.

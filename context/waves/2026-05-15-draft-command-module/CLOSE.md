@@ -2,7 +2,7 @@
 
 ## Mission
 
-Continue the command-module split by extracting `proof draft`, which now shares
+Continue the command-module split by extracting `mdloom draft`, which now shares
 library lint orchestration with `check` and `stats`.
 
 ## Changes
@@ -11,7 +11,7 @@ library lint orchestration with `check` and `stats`.
 - Moved the `draft` command implementation out of `main.rs`.
 - Kept CLI dispatch, output text, and draft-plan JSON generation behavior
   unchanged.
-- Added an E2E regression that verifies `proof draft -o <path> <input>` writes a
+- Added an E2E regression that verifies `mdloom draft -o <path> <input>` writes a
   DraftPlan-shaped JSON file.
 
 ## Validation
@@ -27,5 +27,5 @@ build/test; this wave did not change sibling repository code.
 ## Carry-forward
 
 `cmd_check` is the largest remaining lint-facing command extraction. It should
-reuse `proof_lib::lint::lint_paths` and leave formatting/output helpers either
+reuse `mdloom_lib::lint::lint_paths` and leave formatting/output helpers either
 in main for now or in a later renderer module.

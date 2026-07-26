@@ -1,4 +1,4 @@
-# proof Symbols — Named Glyph Library
+# mdloom Symbols — Named Glyph Library
 
 The symbol system gives you named Unicode glyphs that expand anywhere in prose,
 bullets, slide content, and element labels. The key insight is that symbols are
@@ -15,7 +15,7 @@ itself is the content.
 ## Inline symbol expansion
 
 Inline expansion is the most common use. Write `[sym:name]` anywhere in prose
-and proof replaces it with the Unicode glyph at compile time. This works in
+and mdloom replaces it with the Unicode glyph at compile time. This works in
 paragraphs, bullet labels, callout text, and slide titles — anywhere text is
 rendered.
 
@@ -44,20 +44,20 @@ in bullet lists where you want a visual left-edge that isn't just `-`.
 ## Symbol blocks
 
 When the symbol needs to be large — a section header icon, a status badge in a
-dashboard region, or a decorative element — use `proof:symbol`. The `size`
+dashboard region, or a decorative element — use `mdloom:symbol`. The `size`
 parameter scales the symbol from 1 (compact) to 5+ (display-sized).
 
-```proof:symbol name=checkmark size=3
+```mdloom:symbol name=checkmark size=3
 ```
 
-```proof:symbol name=star size=5
+```mdloom:symbol name=star size=5
 ```
 
 ---
 
 ## Shape renderer
 
-`proof:shape` generates geometric ASCII art shapes with optional labels. Use
+`mdloom:shape` generates geometric ASCII art shapes with optional labels. Use
 shapes to create visual frames for content, highlight important sections, or
 build visual identity in dashboards. The available shapes are banner (wide
 rectangle), badge (compact), and ribbon (angled).
@@ -65,13 +65,13 @@ rectangle), badge (compact), and ribbon (angled).
 A labeled banner works well as a section divider in a dashboard or as a callout
 header in slides.
 
-```proof:shape name=banner width=26 height=3 label="proof:math"
+```mdloom:shape name=banner width=26 height=3 label="mdloom:math"
 ```
 
-```proof:shape name=badge width=20 height=3 label="COMPILE"
+```mdloom:shape name=badge width=20 height=3 label="COMPILE"
 ```
 
-```proof:shape name=ribbon width=22 height=5
+```mdloom:shape name=ribbon width=22 height=5
 ```
 
 ---
@@ -81,18 +81,18 @@ header in slides.
 The full built-in library. All names are lowercase with hyphens. The `aliases`
 column lists alternate names that resolve to the same glyph.
 
-```proof:row source=md://src/data/symbol-catalog.md foreach=row separator=" │ "
-proof:element kind=badge field=name width=20
-proof:element kind=label field=glyph width=8
-proof:element kind=label field=category width=12
-proof:element kind=label field=aliases width=30
+```mdloom:row source=md://src/data/symbol-catalog.md foreach=row separator=" │ "
+mdloom:element kind=badge field=name width=20
+mdloom:element kind=label field=glyph width=8
+mdloom:element kind=label field=category width=12
+mdloom:element kind=label field=aliases width=30
 ```
 
 ---
 
 ## Custom symbols
 
-Define custom symbols in `proof.toml` under `[[symbol]]`. Each symbol is a list
+Define custom symbols in `mdloom.toml` under `[[symbol]]`. Each symbol is a list
 of lines that form the glyph. This is useful for project logos, custom icons, or
 any recurring visual element that belongs in your document corpus.
 
@@ -107,7 +107,7 @@ lines = [
 ```
 
 After defining it, use it anywhere: `[sym:my-logo]` in prose, or
-`proof:symbol name=my-logo size=1` for block rendering.
+`mdloom:symbol name=my-logo size=1` for block rendering.
 
 ---
 
@@ -116,8 +116,8 @@ After defining it, use it anywhere: `[sym:my-logo]` in prose, or
 Symbols expand in slide titles and subtitles, making it easy to add visual
 markers to presentation content without special rendering:
 
-```proof:slide layout=title
-title: "[sym:star] proof"
+```mdloom:slide layout=title
+title: "[sym:star] mdloom"
 subtitle: "Markdown quality assurance"
 ```
 
@@ -125,7 +125,7 @@ subtitle: "Markdown quality assurance"
 
 ## Where symbols expand and where they don't
 
-Symbols only expand in contexts where proof processes text. They are skipped
+Symbols only expand in contexts where mdloom processes text. They are skipped
 inside fenced code blocks and inline code spans to avoid corrupting literal
 content.
 

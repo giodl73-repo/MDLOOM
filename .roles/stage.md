@@ -20,7 +20,7 @@ actually has?
 ## What STAGE looks for
 
 **The 30-second rule**
-- Each slide should have one clear message. Does proof enforce or encourage this?
+- Each slide should have one clear message. Does mdloom enforce or encourage this?
 - Are there layout guards against overloading a slide? (Max bullets, max depth.)
 - Does the `max_bullets=6` default match presentation best practices? (Yes — 6 is
   already generous. Real presentation coaches say 4.)
@@ -32,20 +32,20 @@ actually has?
   slides use 60:40 or 70:30.
 - `section` layout — is a full-bleed section header with subtitle the right
   transition slide? (Common in Keynote/PowerPoint — yes.)
-- `stats` layout — proof renders stats horizontally. Real "big number" slides
+- `stats` layout — mdloom renders stats horizontally. Real "big number" slides
   center one number per slide. Is the multi-stat layout appropriate?
 
 **Slide body directives**
-- `proof:bullets` — standard. Does the visual weight of ●/◦/▸/– hierarchy read
+- `mdloom:bullets` — standard. Does the visual weight of ●/◦/▸/– hierarchy read
   correctly at 80 columns?
-- `proof:callout` — is this the right abstraction? Callout boxes in presentations
+- `mdloom:callout` — is this the right abstraction? Callout boxes in presentations
   often have a more prominent visual treatment.
-- `proof:quote` — centered with curly quotes. Classic. Good.
-- `proof:ol` — numbered lists are rare in presentations (suggests documentation,
+- `mdloom:quote` — centered with curly quotes. Classic. Good.
+- `mdloom:ol` — numbered lists are rare in presentations (suggests documentation,
   not presenting). Is this needed?
-- `proof:stat` — good for KPI slides. Should stats have visual emphasis beyond just
+- `mdloom:stat` — good for KPI slides. Should stats have visual emphasis beyond just
   the number? (Color would help but isn't available in ASCII.)
-- `proof:notes` — speaker notes excluded from output. This is exactly right.
+- `mdloom:notes` — speaker notes excluded from output. This is exactly right.
 
 **Missing presentation features**
 - **Speaker notes in compiled output**: currently excluded entirely. A presenter
@@ -91,7 +91,7 @@ can read the thing in the time they have.
 
 Use when reviewing:
 - Slide layout design and default parameters
-- `proof:bullets` depth and visual hierarchy
+- `mdloom:bullets` depth and visual hierarchy
 - The slide rendering engine output — does it look like a real deck?
 - New slide body directives — does this belong in a presentation context?
 - The slides guide — would a PowerPoint user find it comprehensible?

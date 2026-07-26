@@ -1,15 +1,15 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
-use proof_lib::crop_side_info;
-use proof_lib::lint::load_config_for_path as load_config;
+use mdloom_lib::crop_side_info;
+use mdloom_lib::lint::load_config_for_path as load_config;
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 
-const DEFAULT_VIEW_OUTPUT: &str = ".crop\\views\\proof-view.json";
+const DEFAULT_VIEW_OUTPUT: &str = ".crop\\views\\mdloom-view.json";
 const DEFAULT_VIEW_DIR: &str = ".crop\\views";
 
 #[derive(clap::Args)]
@@ -32,7 +32,7 @@ enum CropCommand {
     InspectViews(InspectViewsArgs),
     /// Inspect CROP views and sync compiler side-info in one preflight step
     Prepare(PrepareArgs),
-    /// Write a crop.view.v1 recipe from PROOF root/config/tag settings
+    /// Write a crop.view.v1 recipe from MDLOOM root/config/tag settings
     View(ViewArgs),
     /// Run a persisted crop.view.v1 recipe as a JSON context pack
     RunView(RunViewArgs),
@@ -52,9 +52,9 @@ enum CropCommand {
     Headings(SideInfoArgs),
     /// Render headings for one source from CROP heading side-info
     HeadingList(HeadingListArgs),
-    /// Report PROOF generated artifact manifest health through CROP
+    /// Report MDLOOM generated artifact manifest health through CROP
     Artifacts(ArtifactsArgs),
-    /// Generate side-info JSON files under .proof\side-info for PROOF compiler use
+    /// Generate side-info JSON files under .mdloom\side-info for MDLOOM compiler use
     Sync(SyncArgs),
 }
 
@@ -141,11 +141,11 @@ struct PrepareArgs {
     /// View store directory to inspect before syncing side-info
     #[arg(long = "dir", default_value = DEFAULT_VIEW_DIR)]
     dir: PathBuf,
-    /// crop.view.v1 recipe to sync into .proof\side-info
-    #[arg(long, default_value = ".crop\\views\\proof-guides.json")]
+    /// crop.view.v1 recipe to sync into .mdloom\side-info
+    #[arg(long, default_value = ".crop\\views\\mdloom-guides.json")]
     view: PathBuf,
     /// Directory where links/backlinks/frontmatter/headings JSON files are written
-    #[arg(long, default_value = ".proof\\side-info")]
+    #[arg(long, default_value = ".mdloom\\side-info")]
     output_dir: PathBuf,
 }
 
@@ -158,7 +158,7 @@ struct ViewArgs {
     #[arg(long)]
     output: Option<PathBuf>,
     /// View name
-    #[arg(long, default_value = "proof-view")]
+    #[arg(long, default_value = "mdloom-view")]
     name: String,
     /// Context-crop task prompt for crop view --file
     #[arg(long)]
@@ -238,7 +238,7 @@ struct BacklinkListArgs {
     /// CROP backlinks JSON report to consume
     #[arg(
         long = "side-info",
-        default_value = ".proof\\side-info\\backlinks.json"
+        default_value = ".mdloom\\side-info\\backlinks.json"
     )]
     side_info: PathBuf,
     /// Render format: list, table, or count
@@ -252,7 +252,7 @@ struct BacklinkListArgs {
 #[derive(clap::Args)]
 struct LinkListArgs {
     /// CROP links JSON report to consume
-    #[arg(long = "side-info", default_value = ".proof\\side-info\\links.json")]
+    #[arg(long = "side-info", default_value = ".mdloom\\side-info\\links.json")]
     side_info: PathBuf,
     /// Optional source/page to render outbound links for
     #[arg(long)]
@@ -274,7 +274,10 @@ struct HeadingListArgs {
     #[arg(long)]
     source: String,
     /// CROP headings JSON report to consume
-    #[arg(long = "side-info", default_value = ".proof\\side-info\\headings.json")]
+    #[arg(
+        long = "side-info",
+        default_value = ".mdloom\\side-info\\headings.json"
+    )]
     side_info: PathBuf,
     /// Render format: list, table, or count
     #[arg(long, default_value = "list", value_parser = ["list", "table", "count"])]
@@ -289,7 +292,7 @@ struct FrontmatterListArgs {
     /// CROP frontmatter JSON report to consume
     #[arg(
         long = "side-info",
-        default_value = ".proof\\side-info\\frontmatter.json"
+        default_value = ".mdloom\\side-info\\frontmatter.json"
     )]
     side_info: PathBuf,
     /// Frontmatter field to filter or render, e.g. tags or status
@@ -311,10 +314,10 @@ struct FrontmatterListArgs {
 
 #[derive(clap::Args)]
 struct ArtifactsArgs {
-    /// PROOF repository root. CROP reads .proof\artifacts.json under this root
+    /// MDLOOM repository root. CROP reads .mdloom\artifacts.json under this root
     #[arg(long)]
     root: Option<PathBuf>,
-    /// Explicit PROOF artifact manifest path
+    /// Explicit MDLOOM artifact manifest path
     #[arg(long)]
     manifest: Option<PathBuf>,
     /// Optional output path. Defaults to CROP stdout
@@ -331,7 +334,7 @@ struct SyncArgs {
     #[arg(long)]
     view: Option<PathBuf>,
     /// Directory where links/backlinks/frontmatter/headings JSON files are written
-    #[arg(long, default_value = ".proof\\side-info")]
+    #[arg(long, default_value = ".mdloom\\side-info")]
     output_dir: PathBuf,
     /// Restrict analyzed files to one or more extensions, e.g. --extension md
     #[arg(long = "extension")]
@@ -393,13 +396,13 @@ fn build_status_args(args: StatusArgs) -> Result<Vec<String>> {
 
 pub(crate) fn build_status_request_args(args: CropStatusRequest) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
-        bail!("proof crop status accepts either --root or --view, not both");
+        bail!("mdloom crop status accepts either --root or --view, not both");
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("proof crop status requires --root or --view");
+        bail!("mdloom crop status requires --root or --view");
     }
     if !args.strict && !args.strict_on.is_empty() {
-        bail!("proof crop status --strict-on requires --strict");
+        bail!("mdloom crop status --strict-on requires --strict");
     }
     for strict_on in &args.strict_on {
         validate_status_strict_policy(strict_on)?;
@@ -447,7 +450,7 @@ fn validate_status_strict_policy(policy: &str) -> Result<()> {
     match policy {
         "broken-links" | "orphan-pages" | "duplicate-anchors" => Ok(()),
         other => bail!(
-            "proof crop status --strict-on must be broken-links, orphan-pages, or duplicate-anchors, got {:?}",
+            "mdloom crop status --strict-on must be broken-links, orphan-pages, or duplicate-anchors, got {:?}",
             other
         ),
     }
@@ -496,15 +499,15 @@ fn run_inspect_views(
 
 fn build_inspect_views_args(args: InspectViewsArgs) -> Result<Vec<String>> {
     if args.file.is_some() && args.strict {
-        bail!("proof crop inspect-views --strict requires store inspection with --dir");
+        bail!("mdloom crop inspect-views --strict requires store inspection with --dir");
     }
     if args.file.is_some() && args.dir != Path::new(DEFAULT_VIEW_DIR) {
-        bail!("proof crop inspect-views accepts either --file or --dir, not both");
+        bail!("mdloom crop inspect-views accepts either --file or --dir, not both");
     }
     if args.file.is_none()
         && (args.query.is_some() || !args.extensions.is_empty() || !args.exclude_dirs.is_empty())
     {
-        bail!("proof crop inspect-views --query, --extension, and --exclude-dir require --file");
+        bail!("mdloom crop inspect-views --query, --extension, and --exclude-dir require --file");
     }
 
     let mut crop_args = vec!["view".to_string(), "--inspect".to_string()];
@@ -538,7 +541,7 @@ fn reject_non_json_inspect_format(globals: &GlobalOptions) -> Result<()> {
     match globals.format() {
         "text" | "json" => Ok(()),
         other => bail!(
-            "proof crop inspect-views emits JSON; use text/json output format, got {:?}",
+            "mdloom crop inspect-views emits JSON; use text/json output format, got {:?}",
             other
         ),
     }
@@ -548,7 +551,7 @@ fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions
     match globals.format() {
         "text" | "json" => Ok(()),
         other => bail!(
-            "proof crop {} writes JSON artifacts; use text/json output format, got {:?}",
+            "mdloom crop {} writes JSON artifacts; use text/json output format, got {:?}",
             command,
             other
         ),
@@ -558,7 +561,7 @@ fn reject_non_json_artifact_global_format(command: &str, globals: &GlobalOptions
 fn reject_global_output_for_output_dir(command: &str, globals: &GlobalOptions) -> Result<()> {
     if globals.output().is_some() {
         bail!(
-            "proof crop {} writes multiple artifacts; use --output-dir instead of global -o/--output",
+            "mdloom crop {} writes multiple artifacts; use --output-dir instead of global -o/--output",
             command
         );
     }
@@ -721,7 +724,7 @@ fn validate_prefix_cache(prefix_cache: &str) -> Result<()> {
     match prefix_cache {
         "generic" => Ok(()),
         other => bail!(
-            "proof crop run-view --prefix-cache must be generic, got {:?}",
+            "mdloom crop run-view --prefix-cache must be generic, got {:?}",
             other
         ),
     }
@@ -993,7 +996,7 @@ fn reject_non_markdown_snippet_global_format(command: &str, globals: &GlobalOpti
     match globals.format() {
         "text" | "markdown" | "list" | "table" | "count" => Ok(()),
         other => bail!(
-            "proof crop {} renders Markdown snippets; use text/markdown global output format or list/table/count snippet format, got {:?}",
+            "mdloom crop {} renders Markdown snippets; use text/markdown global output format or list/table/count snippet format, got {:?}",
             command,
             other
         ),
@@ -1025,12 +1028,12 @@ fn build_side_info_args(
 ) -> Result<Vec<String>> {
     if args.root.is_some() && args.view.is_some() {
         bail!(
-            "proof crop {} accepts either --root or --view, not both",
+            "mdloom crop {} accepts either --root or --view, not both",
             command
         );
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("proof crop {} requires --root or --view", command);
+        bail!("mdloom crop {} requires --root or --view", command);
     }
 
     let mut crop_args = vec![command.to_string()];
@@ -1067,10 +1070,10 @@ fn run_artifacts(crop_bin: PathBuf, args: ArtifactsArgs, globals: &GlobalOptions
 
 fn build_artifacts_args(args: ArtifactsArgs, globals: &GlobalOptions) -> Result<Vec<String>> {
     if args.root.is_some() && args.manifest.is_some() {
-        bail!("proof crop artifacts accepts either --root or --manifest, not both");
+        bail!("mdloom crop artifacts accepts either --root or --manifest, not both");
     }
     if args.root.is_none() && args.manifest.is_none() {
-        bail!("proof crop artifacts requires --root or --manifest");
+        bail!("mdloom crop artifacts requires --root or --manifest");
     }
 
     let mut crop_args = vec!["artifacts".to_string()];
@@ -1105,10 +1108,10 @@ fn run_sync(crop_bin: PathBuf, args: SyncArgs, globals: &GlobalOptions) -> Resul
 
 fn build_sync_args(args: SyncArgs) -> Result<Vec<Vec<String>>> {
     if args.root.is_some() && args.view.is_some() {
-        bail!("proof crop sync accepts either --root or --view, not both");
+        bail!("mdloom crop sync accepts either --root or --view, not both");
     }
     if args.root.is_none() && args.view.is_none() {
-        bail!("proof crop sync requires --root or --view");
+        bail!("mdloom crop sync requires --root or --view");
     }
 
     std::fs::create_dir_all(&args.output_dir)
@@ -1158,7 +1161,7 @@ fn crop_report_format_value(format: &str) -> Result<String> {
     match format {
         "json" | "markdown" => Ok(format.to_string()),
         other => bail!(
-            "proof crop report format must be json or markdown, got {:?}",
+            "mdloom crop report format must be json or markdown, got {:?}",
             other
         ),
     }
@@ -1622,7 +1625,7 @@ mod tests {
         let output_dir = dir.path().join("side-info");
         let args = build_prepare_args(PrepareArgs {
             dir: PathBuf::from(".crop\\views"),
-            view: PathBuf::from(".crop\\views\\proof-guides.json"),
+            view: PathBuf::from(".crop\\views\\mdloom-guides.json"),
             output_dir: output_dir.clone(),
         })
         .unwrap();
@@ -1638,7 +1641,7 @@ mod tests {
                 "view",
                 "--inspect",
                 "--file",
-                ".crop\\views\\proof-guides.json"
+                ".crop\\views\\mdloom-guides.json"
             ]
         );
         assert_eq!(args[2][0], "links");
@@ -1647,7 +1650,7 @@ mod tests {
         assert_eq!(args[5][0], "headings");
         for crop_args in &args[2..] {
             assert!(crop_args.contains(&"--view".to_string()));
-            assert!(crop_args.contains(&".crop\\views\\proof-guides.json".to_string()));
+            assert!(crop_args.contains(&".crop\\views\\mdloom-guides.json".to_string()));
             assert!(crop_args.contains(&"--format".to_string()));
             assert!(crop_args.contains(&"json".to_string()));
         }
@@ -1658,7 +1661,7 @@ mod tests {
     fn view_recipe_maps_config_and_frontmatter_filters() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
-            dir.path().join("proof.toml"),
+            dir.path().join("mdloom.toml"),
             r#"
 [files]
 include = ["src/**/*.source.md", "docs/**/*.md"]
@@ -2020,7 +2023,7 @@ exclude = ["target/**", "node_modules/**"]
         let args = build_artifacts_args(
             ArtifactsArgs {
                 root: None,
-                manifest: Some(PathBuf::from(".proof\\artifacts.json")),
+                manifest: Some(PathBuf::from(".mdloom\\artifacts.json")),
                 output: Some(PathBuf::from("ARTIFACTS.md")),
             },
             &globals("markdown"),
@@ -2032,7 +2035,7 @@ exclude = ["target/**", "node_modules/**"]
             vec![
                 "artifacts",
                 "--manifest",
-                ".proof\\artifacts.json",
+                ".mdloom\\artifacts.json",
                 "--format",
                 "markdown",
                 "--output",
@@ -2087,7 +2090,7 @@ exclude = ["target/**", "node_modules/**"]
         let err = build_artifacts_args(
             ArtifactsArgs {
                 root: Some(PathBuf::from(".")),
-                manifest: Some(PathBuf::from(".proof\\artifacts.json")),
+                manifest: Some(PathBuf::from(".mdloom\\artifacts.json")),
                 output: None,
             },
             &globals("text"),

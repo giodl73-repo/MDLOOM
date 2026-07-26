@@ -1,4 +1,4 @@
-# DASHBOARD-IMPL-PLAN — proof:dashboard canvas compositor
+# DASHBOARD-IMPL-PLAN — mdloom:dashboard canvas compositor
 
 > Prerequisite: ELEMENT-IMPL-PLAN Wave 1 (element rendering module) must be complete before
 > Wave 3. Waves 1 and 2 are independent of element.
@@ -70,7 +70,7 @@ Implementation notes:
 | 9 | `paste` beyond canvas height → panic-free, lines silently dropped |
 | 10 | `paste` with empty content_lines → canvas unchanged |
 
-**Exit criterion**: `cargo test -p proof-lib dashboard::canvas::` is clean.
+**Exit criterion**: `cargo test -p mdloom-lib dashboard::canvas::` is clean.
 `Canvas::new(80, 24).render()` produces a 24-line, 80-char-per-line string.
 
 ---
@@ -165,9 +165,9 @@ fn validate_no_overlap(regions: &[RegionDecl]) -> Vec<DashboardError>
 
 ---
 
-## Wave 3 — `proof:region` directive + canvas compositor (400 LOC)
+## Wave 3 — `mdloom:region` directive + canvas compositor (400 LOC)
 
-**Goal**: Recognize `proof:region` blocks in `.dashboard.source.md`, render each region's content
+**Goal**: Recognize `mdloom:region` blocks in `.dashboard.source.md`, render each region's content
 using the existing compile pipeline, paste into Canvas, serialize the full output.
 
 ### New files / changes
@@ -179,7 +179,7 @@ pub fn compile_dashboard(
     source_text: &str,
     source_path: &Path,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     width_override: Option<usize>,
     height_override: Option<usize>,
     region_filter: Option<&str>,
@@ -198,10 +198,10 @@ Implementation:
 1. `parse_dashboard_decl(source_text)` → `DashboardDecl` (or emit errors and bail)
 2. Apply width/height overrides to `meta`
 3. `Canvas::new(meta.width, meta.height)`
-4. For each `proof:region name=<X>` block in the content section:
+4. For each `mdloom:region name=<X>` block in the content section:
    - Look up `RegionDecl` by name → emit DASHBOARD-004 if not found
    - If `region_filter` is set and name != filter → skip
-   - Extract the body of the `proof:region` block (lines between ` ``` ` delimiters)
+   - Extract the body of the `mdloom:region` block (lines between ` ``` ` delimiters)
    - Run inner directives through `compile_file()` logic:
      - Build a synthetic `.source.md` from the region body
      - Call `collect_directives()` on it; run each directive's compile arm
@@ -218,13 +218,13 @@ Implementation:
 ```rust
 Region {
     name: String,
-    body_lines: Vec<String>,  // raw lines inside the proof:region block
+    body_lines: Vec<String>,  // raw lines inside the mdloom:region block
     line_start: usize,
     line_end: usize,
 }
 ```
 
-Extend `proof_directive_kind()`:
+Extend `mdloom_directive_kind()`:
 
 ```rust
 else if rest.starts_with("region") { Some("region") }
@@ -237,7 +237,7 @@ Extend `collect_directives()` — new `"region"` arm:
 Extend `compile_file()` — detect `.dashboard.source.md` files:
 - If `source_path` ends with `.dashboard.source.md`: call `compile_dashboard()` instead of
   the normal directive loop.
-- Otherwise: existing behavior (for non-dashboard `.source.md` files containing `proof:region`
+- Otherwise: existing behavior (for non-dashboard `.source.md` files containing `mdloom:region`
   as an inline embed — future use).
 
 **Diagnostic emission**:
@@ -247,7 +247,7 @@ Extend `compile_file()` — detect `.dashboard.source.md` files:
 | DASHBOARD-001 | `x + width > canvas_width` |
 | DASHBOARD-002 | `y + height > canvas_height` |
 | DASHBOARD-003 | Two regions overlap |
-| DASHBOARD-004 | `proof:region name=X` has no matching declaration |
+| DASHBOARD-004 | `mdloom:region name=X` has no matching declaration |
 | DASHBOARD-005 | Region content overflows declared height |
 | DASHBOARD-006 | Region content line underflows declared width |
 
@@ -257,21 +257,21 @@ Extend `compile_file()` — detect `.dashboard.source.md` files:
 |---|------|
 | 1 | `compile_dashboard` with 2 regions → canvas contains both regions' content |
 | 2 | Region content does not bleed into adjacent region (Canvas isolation) |
-| 3 | DASHBOARD-004 emitted when `proof:region name=missing` has no declaration |
+| 3 | DASHBOARD-004 emitted when `mdloom:region name=missing` has no declaration |
 | 4 | DASHBOARD-005 emitted when region content is taller than declared height |
 | 5 | DASHBOARD-006 emitted when region content line is narrower than declared width |
 | 6 | `region_filter` set: only specified region rendered, rest left blank |
-| 7 | Output wrapped in `<!-- proof:compiled from="proof:dashboard" -->` fence |
+| 7 | Output wrapped in `<!-- mdloom:compiled from="mdloom:dashboard" -->` fence |
 | 8 | `no_chrome=true`: output is raw canvas string, no fence |
 | 9 | Width override replaces front-matter width |
 | 10 | Height override replaces front-matter height |
 | 11 | `derive_output_path` for `foo.dashboard.source.md` → `foo.dashboard.md` |
-| 12 | Inner `proof:element kind=label value="X" width=10` inside region renders correctly |
-| 13 | Inner `proof:row` inside region: each row line pasted at correct y offset |
+| 12 | Inner `mdloom:element kind=label value="X" width=10` inside region renders correctly |
+| 13 | Inner `mdloom:row` inside region: each row line pasted at correct y offset |
 | 14 | `compile_file` detects `.dashboard.source.md` and routes to `compile_dashboard` |
 | 15 | Canvas with 0 region content → all spaces (blank canvas, no panic) |
 
-**Exit criterion**: a `.dashboard.source.md` with 2 declared regions and 2 `proof:region` blocks
+**Exit criterion**: a `.dashboard.source.md` with 2 declared regions and 2 `mdloom:region` blocks
 compiles to a fixed-width canvas with correct region placement. The two regions' content doesn't
 bleed into each other.
 
@@ -279,7 +279,7 @@ bleed into each other.
 
 ## Wave 4 — CLI flags + IceLines integration (150 LOC)
 
-**Goal**: `--width N`, `--height N`, `--region name`, `--no-chrome` flags on `proof compile`.
+**Goal**: `--width N`, `--height N`, `--region name`, `--no-chrome` flags on `mdloom compile`.
 `derive_output_path` handles the `.dashboard.source.md → .dashboard.md` suffix.
 
 ### Changes to existing files
@@ -340,7 +340,7 @@ pub fn compile_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     // New optional params for dashboard:
     width_override: Option<usize>,
     height_override: Option<usize>,
@@ -363,10 +363,10 @@ ignored (or `no_chrome` suppresses the traceability wrapper — consistent with 
 | 5 | `cmd_compile` with `--region header` renders only the header region |
 | 6 | `cmd_compile` with `--no-chrome` suppresses fence in output |
 | 7 | `cmd_compile` on a non-dashboard `.source.md` — `--width` / `--height` flags are no-ops |
-| 8 | `proof compile team.dashboard.source.md --width 80 --height 24` exit code 0 on clean input |
+| 8 | `mdloom compile team.dashboard.source.md --width 80 --height 24` exit code 0 on clean input |
 
-**Exit criterion**: `proof compile dashboard.source.md --width 80 --height 24` compiles a
-80×24 canvas. `proof compile dashboard.source.md --region header` emits only the header region
+**Exit criterion**: `mdloom compile dashboard.source.md --width 80 --height 24` compiles a
+80×24 canvas. `mdloom compile dashboard.source.md --region header` emits only the header region
 content. Both exit 0 on clean input.
 
 ---
@@ -391,12 +391,12 @@ src/dashboard/
 - `collect_directives()` and the compile arm dispatch are extended in-place — no new pass is
   needed. The dashboard route branches at `compile_file()` entry based on the `.dashboard.source.md`
   filename suffix.
-- Inner directives inside a `proof:region` body run through the same `collect_directives()` +
+- Inner directives inside a `mdloom:region` body run through the same `collect_directives()` +
   per-arm compile path. Region content is treated as a synthetic `.source.md` string, not a file.
   Pass `no_chrome=true` implicitly for all inner renders (the region boundary is the container).
 - `CompileViolation` is reused for both ELEMENT-* and DASHBOARD-* codes. No new result type.
-- IceLines integration: no proof changes required beyond Wave 4 CLI flags. IceLines calls
-  `proof compile screen.dashboard.source.md --width $COLUMNS --height $LINES` and reads stdout.
+- IceLines integration: no mdloom changes required beyond Wave 4 CLI flags. IceLines calls
+  `mdloom compile screen.dashboard.source.md --width $COLUMNS --height $LINES` and reads stdout.
   The `--no-chrome` flag gives IceLines the raw canvas string for direct terminal rendering.
 - `walkdir` already traverses `.source.md` files in `cmd_compile`. Extend the filter to also
   collect `.dashboard.source.md` files (they already end in `.source.md`, so the existing

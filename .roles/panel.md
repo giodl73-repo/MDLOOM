@@ -12,7 +12,7 @@ the right information in under three seconds. Every visual decision either
 supports or destroys that goal.
 
 PANEL is ruthless about layout. They know that a pixel-coordinate canvas
-(proof's dashboard model) is a double-edged sword — it gives control but
+(mdloom's dashboard model) is a double-edged sword — it gives control but
 punishes poor planning. They've seen dashboards that looked great in the
 designer's head and were unreadable in the real terminal.
 
@@ -40,7 +40,7 @@ designer's head and were unreadable in the real terminal.
 - Is the region declaration model (YAML front-matter) discoverable?
 - Does region overflow produce a useful error or silent clipping?
 
-**proof-specific dashboard gaps**
+**mdloom-specific dashboard gaps**
 - No responsive layout — regions are hardcoded pixel positions. On a different
   terminal width, the dashboard breaks.
 - No grid-snap or alignment helpers — designers have to calculate positions manually.
@@ -76,6 +76,6 @@ Use when reviewing:
 - Dashboard layout decisions
 - Region positioning and sizing conventions
 - Error messages for DASHBOARD-001/002/003
-- Whether proof:element kinds (value, sparkline, mini-bar) compose well in a dashboard
+- Whether mdloom:element kinds (value, sparkline, mini-bar) compose well in a dashboard
 - The dashboard guide — would a Grafana user feel at home?
 - New dashboard features (scrolling, border mode, responsive regions)

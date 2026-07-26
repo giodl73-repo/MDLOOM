@@ -1,14 +1,14 @@
 {
-  "default": "proof",
+  "default": "mdloom",
   "projects": {
-    "proof": {
+    "mdloom": {
       "wavesPath": "context/waves",
-      "description": "proof architecture, quality, and document-contract execution waves",
+      "description": "mdloom architecture, quality, and document-contract execution waves",
       "projectType": "rust-cli-toolchain",
       "stack": {
         "backend": "Rust",
         "testing": "cargo test, cargo test --test integration_tests",
-        "validation": "proof check, proof draft/fix smoke tests, git diff --check"
+        "validation": "mdloom check, mdloom draft/fix smoke tests, git diff --check"
       }
     }
   }

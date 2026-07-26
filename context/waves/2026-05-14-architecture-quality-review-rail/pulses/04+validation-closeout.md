@@ -16,7 +16,7 @@ Run final gates, write close notes, and leave clear carry-forwards.
 ## Deliverables
 
 - [x] Run full test/build validation.
-- [x] Run proof fixture smoke checks.
+- [x] Run mdloom fixture smoke checks.
 - [x] Mark wave and pulse statuses accurately.
 - [x] Write `CLOSE.md` with carried-forward schema compatibility and mdpath work.
 

@@ -29,7 +29,7 @@ pub(crate) fn render_symbol(name: &str, size: usize) -> Result<String, SymbolRen
 pub(crate) fn render_symbol_compiled(name: &str, size: usize) -> Result<String, SymbolRenderError> {
     let rendered = render_symbol(name, size)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:symbol\" name=\"{}\" size=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:symbol\" name=\"{}\" size=\"{}\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
         name, size, rendered
     ))
 }
@@ -45,7 +45,7 @@ pub(crate) fn render_shape_inline(attrs: &ShapeAttrs) -> Result<String, SymbolRe
 pub(crate) fn render_shape_compiled(attrs: &ShapeAttrs) -> Result<String, SymbolRenderError> {
     let rendered = render_shape_inline(attrs)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:shape\" name=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:shape\" name=\"{}\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
         attrs.name, rendered
     ))
 }

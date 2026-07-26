@@ -7,9 +7,9 @@ targets share one artifact graph.
 
 ## Changes
 
-- Added `proof_lib::artifact` with serializable manifest, artifact, status, and
+- Added `mdloom_lib::artifact` with serializable manifest, artifact, status, and
   diagnostic records.
-- `proof compile` now writes `.proof/artifacts.json` for non-watch compile runs.
+- `mdloom compile` now writes `.mdloom/artifacts.json` for non-watch compile runs.
 - Manifest entries record:
   - source path
   - output path
@@ -35,6 +35,6 @@ test/build; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-Next manifest work should wire stale checks and `proof status` to
-`.proof/artifacts.json`, then let watch mode and future PPTX/site backends record
+Next manifest work should wire stale checks and `mdloom status` to
+`.mdloom/artifacts.json`, then let watch mode and future PPTX/site backends record
 target-specific provenance through the same structure.

@@ -2,9 +2,9 @@
 
 ## Outcome
 
-Implemented the documented `proof config [PATH]` behavior:
+Implemented the documented `mdloom config [PATH]` behavior:
 
-- `proof config [PATH]` now prints the resolved effective config as TOML.
+- `mdloom config [PATH]` now prints the resolved effective config as TOML.
 - Auto mode resolves PATH through normal config cascade.
 - Explicit `--config` mode prints the supplied config with defaults and skips
   auto-cascade.
@@ -29,6 +29,6 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof config` now exposes the current effective model. A future raw/effective
+`mdloom config` now exposes the current effective model. A future raw/effective
 config split should keep this command backed by the effective, post-resolution
 view.

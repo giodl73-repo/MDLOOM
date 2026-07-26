@@ -1,6 +1,6 @@
 # Publish Backends Spec
 
-PROOF's compile graph resolves `.source.md` into a canonical compiled Markdown
+MDLOOM's compile graph resolves `.source.md` into a canonical compiled Markdown
 document first. Publish backends consume that resolved document plus compile
 metadata; they do not re-parse source directives or invent separate document
 semantics.
@@ -12,8 +12,8 @@ semantics.
 | `md` | supported | Canonical terminal-first compiled document. | Resolves directives and writes Markdown. |
 | `html` | supported | Standalone human-readable web document. | Resolves through Markdown, escapes raw HTML, emits common Markdown blocks with a small stylesheet. |
 | `pebble` | supported | Agent/retrieval context transfer. | Emits `pebble.v1` JSON with source path, title, refs, stable section IDs, heading paths, line numbers, and resolved Markdown text. |
-| `json-report` | supported | Machine-readable compile/report bundle. | Emits `proof.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
-| `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `proof-site.json` page manifest from a source tree. |
+| `json-report` | supported | Machine-readable compile/report bundle. | Emits `mdloom.publish.json_report.v1` JSON with artifact summary, resolved Markdown, sections, source metadata, dependency refs, diagnostics, and compile counts. |
+| `site` | supported | Local static documentation site. | Emits HTML pages, navigation `index.html`, and `mdloom-site.json` page manifest from a source tree. |
 | `pdf` | supported | Portable human-readable artifact. | Renders the resolved HTML publish output into a deterministic PDF with basic text and metadata. |
 | `docx` | supported | Editable Word-processing document. | Emits a native OOXML package with editable headings, paragraphs, lists, tables, code text, links, and metadata. |
 | `pptx` | supported | Editable PowerPoint deck. | Emits a native OOXML package from explicit `.slides.source.md` inputs with editable slide text, native bullets/numbering, code text, notes, relationships, and manifest records. |
@@ -37,7 +37,7 @@ publish backends above.
   compiler validates that `.slides.source.md` input.
 - Source-only frontmatter stays source-only unless a backend explicitly maps safe
   metadata fields into its output.
-- `.proof/artifacts.json` records target, source, output path, status,
+- `.mdloom/artifacts.json` records target, source, output path, status,
   diagnostics, cache use, and resolved directive counts for every non-watch
   compile.
 - Backends may add target-specific sidecar metadata, but they must not replace
@@ -51,7 +51,7 @@ publish backends above.
 
 ### JSON report bundle
 
-The JSON bundle serializes information PROOF already owns: resolved Markdown
+The JSON bundle serializes information MDLOOM already owns: resolved Markdown
 text, sections, dependencies, diagnostics, source metadata, and compile stats. It
 is stable enough for CI and agents, but not a replacement for Pebble's compact
 retrieval schema.
@@ -84,7 +84,7 @@ presentation objects: text boxes, text runs, bullet levels, notes, dimensions,
 themes, relationships, and content types all have to line up for the file to be
 editable and reliable.
 
-The backend requires `.slides.source.md` so PROOF does not guess a deck from
+The backend requires `.slides.source.md` so MDLOOM does not guess a deck from
 arbitrary prose. First support focuses on a small native model:
 
 - title slides and title/content slides;
@@ -112,7 +112,7 @@ templates come later.
 
 A backend is "supported" only when it has:
 
-- a public `proof compile --target <target>` path or documented command surface;
+- a public `mdloom compile --target <target>` path or documented command surface;
 - at least one integration test proving output shape and manifest target;
 - README and spec coverage;
 - deterministic output for unchanged inputs where feasible;

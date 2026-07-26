@@ -1,6 +1,6 @@
-# proof dashboard — Fixed-Width ASCII Canvas Compositor
+# mdloom dashboard — Fixed-Width ASCII Canvas Compositor
 
-> **Status**: ✅ Implemented — `src/dashboard/`. Canvas, region parser, compositor, proof:region compile directive all live. Inner directives inside `proof:region` bodies (proof:chart, proof:tree, proof:row, proof:element, proof:symbol, proof:shape, proof:math) are recursively rendered and pasted into the canvas with `no-chrome` semantics. **Author syntax**: directive lines inside a region are *fenceless* (`proof:chart kind=bar` on its own line followed by data lines), not nested triple-backtick fences — markdown's outer fence would close at the inner backticks. DASHBOARD-001 through DASHBOARD-006 diagnostics wired.
+> **Status**: ✅ Implemented — `src/dashboard/`. Canvas, region parser, compositor, mdloom:region compile directive all live. Inner directives inside `mdloom:region` bodies (mdloom:chart, mdloom:tree, mdloom:row, mdloom:element, mdloom:symbol, mdloom:shape, mdloom:math) are recursively rendered and pasted into the canvas with `no-chrome` semantics. **Author syntax**: directive lines inside a region are *fenceless* (`mdloom:chart kind=bar` on its own line followed by data lines), not nested triple-backtick fences — markdown's outer fence would close at the inner backticks. DASHBOARD-001 through DASHBOARD-006 diagnostics wired.
 
 ---
 
@@ -31,29 +31,29 @@ dashboard:
     player-table: { x: 0,  y: 24, width: 120, height: 16 }
 ---
 
-```proof:region name=header
-proof:element kind=label value="EDMONTON OILERS" width=40
-proof:element kind=sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
+```mdloom:region name=header
+mdloom:element kind=label value="EDMONTON OILERS" width=40
+mdloom:element kind=sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
 ```
 
-```proof:region name=forwards
-proof:tree kind=org name="Player" parent="Line" label="Score"
+```mdloom:region name=forwards
+mdloom:tree kind=org name="Player" parent="Line" label="Score"
 md://reports/edm-forwards.md#depth:table:0
 ```
 
-```proof:region name=stats
-proof:chart kind=bar no-chrome
+```mdloom:region name=stats
+mdloom:chart kind=bar no-chrome
 md://stats/2025.md#edm-leaders:table:0
 ```
 
-```proof:region name=player-table
-proof:row source=md://stats/2025.md#edm:table:0 width=120
-  proof:element kind=label field=name width=24
-  proof:element kind=value field=pts_82 format="{:.1}" width=6
-  proof:element kind=mini-bar field=pts_82 max=200 width=20 no-chrome
-  proof:element kind=sparkline width=10 no-chrome field=career_arc
-  proof:element kind=label style=badge field=expiry_type width=5
-  proof:element kind=delta field=improvement format="{:+.2}" width=6
+```mdloom:region name=player-table
+mdloom:row source=md://stats/2025.md#edm:table:0 width=120
+  mdloom:element kind=label field=name width=24
+  mdloom:element kind=value field=pts_82 format="{:.1}" width=6
+  mdloom:element kind=mini-bar field=pts_82 max=200 width=20 no-chrome
+  mdloom:element kind=sparkline width=10 no-chrome field=career_arc
+  mdloom:element kind=label style=badge field=expiry_type width=5
+  mdloom:element kind=delta field=improvement format="{:+.2}" width=6
 ```
 ```
 
@@ -84,13 +84,13 @@ Coordinates are **0-indexed**: column 0 is the leftmost character, row 0 is the 
 ## Regions
 
 Each region declares `x`, `y`, `width`, `height`. The compiler renders the
-`proof:region` content into that bounding box, clipping at the boundary.
+`mdloom:region` content into that bounding box, clipping at the boundary.
 
 Region content is any combination of:
-- `proof:element` — micro-element primitive
-- `proof:row` — horizontal element compositor
-- `proof:tree` — tree diagram
-- `proof:chart` — chart (rendered without fence, `no-chrome` implied within regions)
+- `mdloom:element` — micro-element primitive
+- `mdloom:row` — horizontal element compositor
+- `mdloom:tree` — tree diagram
+- `mdloom:chart` — chart (rendered without fence, `no-chrome` implied within regions)
 - Plain text / markdown headings (rendered as literal text)
 
 All content within a region uses `no-chrome` by default — the region boundary is
@@ -101,10 +101,10 @@ the container, not a fence.
 ## Compilation
 
 ```bash
-proof compile report.dashboard.source.md
+mdloom compile report.dashboard.source.md
 # → report.dashboard.md
 
-proof compile report.dashboard.source.md --width 80 --height 24
+mdloom compile report.dashboard.source.md --width 80 --height 24
 # → report.dashboard.md (canvas scaled to 80×24)
 ```
 
@@ -113,7 +113,7 @@ Dashboard compile cache key includes: `source_parse_key`, all region `source` re
 Output format:
 
 ````markdown
-<!-- proof:compiled from="proof:dashboard" title="EDM 2025-26 — Team Dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" title="EDM 2025-26 — Team Dashboard" -->
 ```dashboard
 EDMONTON OILERS                      ▁▂▅▇█▆▄▃▂▄  Team Score: 927.0
 ────────────────────────────────────────────────────────────────────────────────
@@ -128,15 +128,15 @@ Player                  Pts/82  ████████████████
 Connor McDavid           138.0  ████████████████████  ▁▂▅▇█▆▄  UFA   +0.19
 Nikita Kucherov          130.2  ███████████████████   ▃▅▆▇█▇▅  UFA   +0.12
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ````
 
 ---
 
-## `proof:region` directive
+## `mdloom:region` directive
 
 ```
-```proof:region name=player-table
+```mdloom:region name=player-table
 [content here]
 ```
 ```
@@ -149,19 +149,19 @@ Nikita Kucherov          130.2  ████████████████
 
 ### Region content parsing
 
-Inside a `proof:region` fenced block, lines are parsed as follows:
+Inside a `mdloom:region` fenced block, lines are parsed as follows:
 
-- A line starting with `proof:element`, `proof:tree`, `proof:chart`, `proof:row` (after optional leading spaces) is a **directive line** — processed as a proof: directive
+- A line starting with `mdloom:element`, `mdloom:tree`, `mdloom:chart`, `mdloom:row` (after optional leading spaces) is a **directive line** — processed as a mdloom: directive
 - All other lines are **literal content** — rendered verbatim
 
 Directive lines do NOT use fenced blocks inside a region. They are single-line directives with their source URI on the next line:
 
 ```
-proof:element kind=label value="EDMONTON OILERS" width=40 no-chrome
-proof:sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
+mdloom:element kind=label value="EDMONTON OILERS" width=40 no-chrome
+mdloom:sparkline width=20 no-chrome source=md://stats/2025.md#edm:table:0?select=date,pts
 ```
 
-The `proof:region` block itself is the container fence. No nested fences.
+The `mdloom:region` block itself is the container fence. No nested fences.
 
 ---
 
@@ -171,7 +171,7 @@ Every TUI screen is a `.dashboard.source.md` file in `~/.icelines/dashboards/`.
 
 The TUI runtime:
 1. Measures terminal: `$COLUMNS × $LINES`
-2. Calls `proof compile screen.dashboard.source.md --width $COLUMNS --height $LINES`
+2. Calls `mdloom compile screen.dashboard.source.md --width $COLUMNS --height $LINES`
 3. Reads the compiled ASCII string
 4. Renders into a ratatui `Paragraph` widget (no further processing — the ASCII IS the UI)
 5. On terminal resize: recompiles with new dimensions
@@ -185,7 +185,7 @@ icelines report player McDavid   # player profile dashboard
 Each dashboard template is:
 - User-editable (plain text `.dashboard.source.md`)
 - Version-controlled
-- Validated by proof (DaVinci invariants, element budget checks)
+- Validated by mdloom (DaVinci invariants, element budget checks)
 - Data-bound via mdpath (stable across schema renames)
 
 Adding a new field to a player row = editing the template, not Rust code.
@@ -195,7 +195,7 @@ Adding a new field to a player row = editing the template, not Rust code.
 ## Canvas compositor algorithm
 
 ```
-proof compile dashboard.source.md
+mdloom compile dashboard.source.md
     │
     ├── 1. Parse front-matter (width, height, title)
     │
@@ -231,11 +231,11 @@ proof compile dashboard.source.md
 
 | Invariant | Claim |
 |-----------|-------|
-| D-1 | Each `proof:row` element widths + separators = declared row width |
+| D-1 | Each `mdloom:row` element widths + separators = declared row width |
 | D-2 | Every region: `x + width ≤ canvas width`, `y + height ≤ canvas height` |
 | D-3 | No two regions overlap (bounding boxes are disjoint) |
-| D-4 | Every `proof:element kind=value` resolves to a scalar |
-| D-5 | `proof:row` loop count (via `source=`) matches source table row count |
+| D-4 | Every `mdloom:element kind=value` resolves to a scalar |
+| D-5 | `mdloom:row` loop count (via `source=`) matches source table row count |
 | D-6 | Total canvas is exactly `width × height` characters (no jagged lines) |
 
 ---
@@ -253,13 +253,13 @@ proof compile dashboard.source.md
 
 ---
 
-## What proof needs to implement this
+## What mdloom needs to implement this
 
 | Component | Status |
 |-----------|--------|
-| `proof:element` directive | Planned — ELEMENT-SPEC.md |
-| `proof:row` compositor | Planned — ELEMENT-SPEC.md |
-| `proof:region` directive | Planned — this spec |
+| `mdloom:element` directive | Planned — ELEMENT-SPEC.md |
+| `mdloom:row` compositor | Planned — ELEMENT-SPEC.md |
+| `mdloom:region` directive | Planned — this spec |
 | Canvas compositor engine | Planned |
 | `--width N --height N` compile flags | Planned |
 | `org` tree with field mapping | ✅ Done (Wave 3) |
@@ -275,15 +275,15 @@ proof compile dashboard.source.md
 | `src/dashboard/mod.rs` | Canvas compositor |
 | `src/dashboard/canvas.rs` | Fixed-width character grid |
 | `src/dashboard/region.rs` | Region parsing and content rendering |
-| `src/compile.rs` | proof:region directive handling |
-| `src/element/mod.rs` | proof:element rendering |
-| `src/element/row.rs` | proof:row compositor |
+| `src/compile.rs` | mdloom:region directive handling |
+| `src/element/mod.rs` | mdloom:element rendering |
+| `src/element/row.rs` | mdloom:row compositor |
 
 ---
 
 ## See also
 
-- [Element Spec](./element-spec.md) — `proof:element` and `proof:row` primitives
+- [Element Spec](./element-spec.md) — `mdloom:element` and `mdloom:row` primitives
 - [Chart Spec](./chart-spec.md) — chart generation used inside regions
 - [Tree Spec](./tree-spec.md) — tree generation used inside regions
 - [Compile Spec](./compile-spec.md) — base compilation pipeline

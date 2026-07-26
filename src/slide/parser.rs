@@ -8,7 +8,7 @@
 ///     slide separator. The content before the first separator is slide 1.
 ///
 /// Slide blocks: after front-matter (if any), the remaining text is split into raw slide
-/// strings at bare `---` lines. Each raw slide string is then parsed for `proof:slide`
+/// strings at bare `---` lines. Each raw slide string is then parsed for `mdloom:slide`
 /// fence attributes and body content.
 use super::{FooterMode, Slide, SlideDoc, SlideLayout, SlideMeta, SlideTheme};
 
@@ -270,24 +270,24 @@ fn split_slides(body: &str, body_offset: usize) -> Vec<(usize, String)> {
 
 /// Parse a raw slide chunk (text between separators) into a `Slide`.
 fn parse_slide(raw: &str, index: usize, source_line: usize) -> Result<Slide, SlideError> {
-    // A slide chunk may begin with a ```proof:slide ...``` fence.
+    // A slide chunk may begin with a ```mdloom:slide ...``` fence.
     // If so, everything inside is the body. If not, the whole chunk is the body.
     let trimmed = raw.trim();
 
-    let (layout, title, subtitle, author, date, body_raw) = if trimmed.starts_with("```proof:slide")
-    {
-        parse_slide_fence(trimmed, index)?
-    } else {
-        // No fence — treat entire chunk as body with default layout
-        (
-            SlideLayout::TitleContent,
-            None,
-            None,
-            None,
-            None,
-            trimmed.to_string(),
-        )
-    };
+    let (layout, title, subtitle, author, date, body_raw) =
+        if trimmed.starts_with("```mdloom:slide") {
+            parse_slide_fence(trimmed, index)?
+        } else {
+            // No fence — treat entire chunk as body with default layout
+            (
+                SlideLayout::TitleContent,
+                None,
+                None,
+                None,
+                None,
+                trimmed.to_string(),
+            )
+        };
 
     let (body_content, notes_content) = extract_notes(&body_raw);
 
@@ -304,7 +304,7 @@ fn parse_slide(raw: &str, index: usize, source_line: usize) -> Result<Slide, Sli
     })
 }
 
-/// Parse a ```proof:slide ...``` fenced block.
+/// Parse a ```mdloom:slide ...``` fenced block.
 /// Returns (layout, title, subtitle, author, date, body_text).
 fn parse_slide_fence(
     text: &str,
@@ -322,9 +322,9 @@ fn parse_slide_fence(
 > {
     let mut lines = text.lines();
     let first = lines.next().unwrap_or("");
-    // first = "```proof:slide layout=title-content title=\"Foo\" ..."
+    // first = "```mdloom:slide layout=title-content title=\"Foo\" ..."
     let info = first.trim_start_matches('`').trim();
-    let attrs_str = info.strip_prefix("proof:slide").unwrap_or("").trim();
+    let attrs_str = info.strip_prefix("mdloom:slide").unwrap_or("").trim();
 
     let (layout, mut title, mut subtitle) = parse_slide_attrs(attrs_str, index)?;
 
@@ -368,7 +368,7 @@ fn parse_slide_fence(
     Ok((layout, title, subtitle, author, date, body_lines.join("\n")))
 }
 
-/// Parse `layout=`, `title=`, `ratio=` from the info string after `proof:slide`.
+/// Parse `layout=`, `title=`, `ratio=` from the info string after `mdloom:slide`.
 /// Returns (SlideLayout, Option<title>, Option<subtitle>).
 pub(crate) fn parse_slide_attrs(
     info: &str,
@@ -465,7 +465,7 @@ fn parse_ratio(raw: &str, slide_index: usize) -> Result<(u8, u8), SlideError> {
 // Notes extraction
 // ─────────────────────────────────────────────────────────
 
-/// Extract `proof:notes` fenced block from slide body.
+/// Extract `mdloom:notes` fenced block from slide body.
 /// Returns `(body_without_notes, notes_content)`.
 pub(crate) fn extract_notes(body: &str) -> (String, String) {
     let mut body_lines: Vec<&str> = Vec::new();
@@ -476,7 +476,7 @@ pub(crate) fn extract_notes(body: &str) -> (String, String) {
     let mut i = 0;
     while i < lines.len() {
         let trimmed = lines[i].trim();
-        if !in_notes && (trimmed == "```proof:notes" || trimmed == "~~~proof:notes") {
+        if !in_notes && (trimmed == "```mdloom:notes" || trimmed == "~~~mdloom:notes") {
             in_notes = true;
             i += 1;
             continue;
@@ -556,7 +556,7 @@ mod tests {
     // ── Test 5: layout=title parsed ─────────────────────────────────────────
     #[test]
     fn layout_title_parsed() {
-        let source = "```proof:slide layout=title title=\"Hello\"\ncontent\n```";
+        let source = "```mdloom:slide layout=title title=\"Hello\"\ncontent\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         assert!(matches!(doc.slides[0].layout, SlideLayout::Title));
     }
@@ -564,7 +564,7 @@ mod tests {
     // ── layout=agenda parsed ────────────────────────────────────────────────
     #[test]
     fn layout_agenda_parsed() {
-        let source = "```proof:slide layout=agenda title=\"Today\"\n```";
+        let source = "```mdloom:slide layout=agenda title=\"Today\"\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         assert!(
             matches!(doc.slides[0].layout, SlideLayout::Agenda),
@@ -576,7 +576,7 @@ mod tests {
     // ── Test 6: two-column ratio 60:40 parsed ───────────────────────────────
     #[test]
     fn layout_two_column_ratio_parsed() {
-        let source = "```proof:slide layout=two-column ratio=60:40\ncol content\n```";
+        let source = "```mdloom:slide layout=two-column ratio=60:40\ncol content\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         match doc.slides[0].layout {
             SlideLayout::TwoColumn { ratio: (a, b) } => {
@@ -590,7 +590,7 @@ mod tests {
     // ── Test 7: ratio parts don't sum to 100 → InvalidRatio error ───────────
     #[test]
     fn invalid_ratio_rejected() {
-        let source = "```proof:slide layout=two-column ratio=60:50\ncol content\n```";
+        let source = "```mdloom:slide layout=two-column ratio=60:50\ncol content\n```";
         let result = parse_slide_doc(source);
         // Should either return errors or have silently recovered
         // The spec says SLIDE-002 is an error; we propagate it
@@ -615,15 +615,15 @@ mod tests {
     // ── Test 8: title= attribute extracted from info string ──────────────────
     #[test]
     fn slide_title_from_info_string() {
-        let source = "```proof:slide layout=title-content title=\"My Title\"\nbody\n```";
+        let source = "```mdloom:slide layout=title-content title=\"My Title\"\nbody\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         assert_eq!(doc.slides[0].title.as_deref(), Some("My Title"));
     }
 
-    // ── Test 9: proof:notes extracted to notes_content ───────────────────────
+    // ── Test 9: mdloom:notes extracted to notes_content ───────────────────────
     #[test]
     fn notes_extracted_to_notes_content() {
-        let source = "```proof:slide layout=title-content\nBody text\n```proof:notes\nSpeaker notes\n```\n```";
+        let source = "```mdloom:slide layout=title-content\nBody text\n```mdloom:notes\nSpeaker notes\n```\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         assert!(
             doc.slides[0].notes_content.contains("Speaker notes"),
@@ -641,7 +641,7 @@ mod tests {
     #[test]
     fn author_date_extracted_from_body() {
         let source =
-            "```proof:slide layout=title title=\"My Deck\"\nauthor: Gio\ndate: April 2026\n```";
+            "```mdloom:slide layout=title title=\"My Deck\"\nauthor: Gio\ndate: April 2026\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         let slide = &doc.slides[0];
         assert_eq!(slide.author.as_deref(), Some("Gio"));
@@ -684,7 +684,7 @@ mod tests {
     // ── Test 14: extract_notes round-trip ─────────────────────────────────────
     #[test]
     fn extract_notes_round_trip() {
-        let body = "Line 1\n```proof:notes\nNote A\nNote B\n```\nLine 2";
+        let body = "Line 1\n```mdloom:notes\nNote A\nNote B\n```\nLine 2";
         let (body_out, notes_out) = extract_notes(body);
         assert!(body_out.contains("Line 1"), "body missing Line 1");
         assert!(body_out.contains("Line 2"), "body missing Line 2");
@@ -706,7 +706,7 @@ mod tests {
     // ── Test 16: two-column without ratio= defaults to 60:40 ─────────────────
     #[test]
     fn two_column_default_ratio_is_60_40() {
-        let source = "```proof:slide layout=two-column\n## col:left\nA\n## col:right\nB\n```";
+        let source = "```mdloom:slide layout=two-column\n## col:left\nA\n## col:right\nB\n```";
         let doc = parse_slide_doc(source).expect("should parse");
         match doc.slides[0].layout {
             SlideLayout::TwoColumn { ratio: (a, b) } => {

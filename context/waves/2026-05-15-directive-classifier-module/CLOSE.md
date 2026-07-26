@@ -7,58 +7,58 @@ syntax or renderer behavior.
 
 ## Changes
 
-- Added `proof_lib::compile_directive`.
-- Moved proof directive kind classification out of `compile.rs`.
-- Moved proof directive fence span scanning out of `compile.rs`.
-- Moved proof directive header attribute slicing out of `compile.rs` and onto
+- Added `mdloom_lib::compile_directive`.
+- Moved mdloom directive kind classification out of `compile.rs`.
+- Moved mdloom directive fence span scanning out of `compile.rs`.
+- Moved mdloom directive header attribute slicing out of `compile.rs` and onto
   `DirectiveSpan`.
 - Moved shared directive `key=value` attribute extraction out of `compile.rs`.
-- Moved `proof:element` directive attribute/kind/source/field/inline-value
+- Moved `mdloom:element` directive attribute/kind/source/field/inline-value
   parsing out of `compile.rs`.
-- Moved `proof:row` foreach/separator/width/no-chrome and row-element body
+- Moved `mdloom:row` foreach/separator/width/no-chrome and row-element body
   parsing out of `compile.rs`.
-- Moved `proof:tree` directive attribute/kind/source/inline-body parsing out
+- Moved `mdloom:tree` directive attribute/kind/source/inline-body parsing out
   of `compile.rs`.
-- Moved `proof:layout` directive attribute/body URI parsing and config
+- Moved `mdloom:layout` directive attribute/body URI parsing and config
   conversion out of `compile.rs`.
-- Moved `proof:chart` directive attribute/source/field/body parsing out of
+- Moved `mdloom:chart` directive attribute/source/field/body parsing out of
   `compile.rs`.
-- Moved `proof:math` directive attribute/expression-body parsing out of
+- Moved `mdloom:math` directive attribute/expression-body parsing out of
   `compile.rs`.
-- Moved `proof:toc` directive payload parsing out of `compile.rs`.
-- Moved `proof:xref` directive payload parsing out of `compile.rs`.
-- Moved `proof:blockquote` directive attribute/text-body parsing out of
+- Moved `mdloom:toc` directive payload parsing out of `compile.rs`.
+- Moved `mdloom:xref` directive payload parsing out of `compile.rs`.
+- Moved `mdloom:blockquote` directive attribute/text-body parsing out of
   `compile.rs`.
-- Moved `proof:symbol` directive payload parsing out of `compile.rs`.
-- Moved `proof:shape` directive payload parsing behind the directive parser
+- Moved `mdloom:symbol` directive payload parsing out of `compile.rs`.
+- Moved `mdloom:shape` directive payload parsing behind the directive parser
   boundary.
-- Moved `proof:region` directive name/body parsing out of `compile.rs`.
-- Moved `proof:include` directive pin/body URI parsing out of `compile.rs`.
-- Moved `proof:table` directive payload parsing out of `compile.rs`.
+- Moved `mdloom:region` directive name/body parsing out of `compile.rs`.
+- Moved `mdloom:include` directive pin/body URI parsing out of `compile.rs`.
+- Moved `mdloom:table` directive payload parsing out of `compile.rs`.
 - Moved typed `Directive` ownership and directive collection into
   `compile_directive`; kept `compile.rs` as the compile/render facade.
 - Moved the public quick-inspection `parse_directives` implementation behind
   `compile_directive`.
-- Added `proof_lib::compile_prose` and moved prose-only `proof:xref` and
-  `proof:blockquote` rendering helpers out of `compile.rs`.
-- Added `proof_lib::compile_source` and moved shared compile-time source
+- Added `mdloom_lib::compile_prose` and moved prose-only `mdloom:xref` and
+  `mdloom:blockquote` rendering helpers out of `compile.rs`.
+- Added `mdloom_lib::compile_source` and moved shared compile-time source
   resolution out of `compile.rs`.
-- Added `proof_lib::compile_chart` and moved `proof:chart` data resolution and
+- Added `mdloom_lib::compile_chart` and moved `mdloom:chart` data resolution and
   markdown table extraction out of `compile.rs`.
-- Added `proof_lib::compile_tree` and moved inline tree/outline rendering
+- Added `mdloom_lib::compile_tree` and moved inline tree/outline rendering
   helpers out of `compile.rs`.
-- Added `proof_lib::compile_toc` and moved `proof:toc` heading collection,
+- Added `mdloom_lib::compile_toc` and moved `mdloom:toc` heading collection,
   section narrowing, and list/tree/numbered formatting out of `compile.rs`.
-- Preserved existing directive aliases, including `proof:numbered-list` and
-  `proof:ol` mapping to `ol`.
+- Preserved existing directive aliases, including `mdloom:numbered-list` and
+  `mdloom:ol` mapping to `ol`.
 - Added focused unit coverage for known directive kinds, aliases, unknown
-  directives, and non-proof fences.
+  directives, and non-mdloom fences.
 - Re-ran existing compile parser coverage to prove behavior stayed stable.
 
 ## Validation
 
 - `cargo test classifies_known_directive_kinds`
-- `cargo test ignores_unknown_or_non_proof_fences`
+- `cargo test ignores_unknown_or_non_mdloom_fences`
 - `cargo test scans_directive_spans_with_body_and_closing_line`
 - `cargo test scans_multiple_directive_spans`
 - `cargo test slices_directive_header_attrs`

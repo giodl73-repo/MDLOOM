@@ -6,7 +6,7 @@ user_invocable: true
 
 # Spec Review
 
-The SPEC.md is the contract between proof's design and its implementation. This skill audits
+The SPEC.md is the contract between mdloom's design and its implementation. This skill audits
 the spec for drift, gaps, and inconsistencies.
 
 ## Steps

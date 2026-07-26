@@ -7,9 +7,9 @@ contract.
 
 ## Changes
 
-- Added `proof backfill --extract-tables`.
+- Added `mdloom backfill --extract-tables`.
 - Added table extraction plumbing through `cmd_backfill` and
-  `proof_lib::backfill`.
+  `mdloom_lib::backfill`.
 - Reused the existing markdown table parser so extraction skips fenced code
   blocks consistently with markdown table checks.
 - Writes high-confidence markdown pipe tables to sibling sidecar files named

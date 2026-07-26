@@ -3,7 +3,7 @@
 ## Mission
 
 Continue the command-module split by extracting the mdpath lookup command,
-`proof resolve`.
+`mdloom resolve`.
 
 ## Changes
 
@@ -27,5 +27,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof depends` is the next smallest remaining command extraction and shares the
+`mdloom depends` is the next smallest remaining command extraction and shares the
 same mdpath-facing command surface.

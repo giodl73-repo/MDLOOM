@@ -13,7 +13,7 @@ code changes.
 **Finding:** `\frac{x+y}{z}` inline → renders as `x+y/z` (wrong precedence).
 Should render as `(x+y)/z`.
 
-**Fix:** In `proof-math/src/lib.rs` `expand_command()` frac handler, when
+**Fix:** In `mdloom-math/src/lib.rs` `expand_command()` frac handler, when
 numerator contains operators (`+`, `-`, `*`, `/`, `\pm` etc.), wrap in parens:
 
 ```rust
@@ -26,7 +26,7 @@ let num_display = if num_needs_parens { format!("({})", num) } else { num };
 format!("{}/{}", num_display, den)
 ```
 
-**File:** `proof/crates/proof-math/src/lib.rs` → `expand_command` for `"frac"`
+**File:** `mdloom/crates/mdloom-math/src/lib.rs` → `expand_command` for `"frac"`
 **Tests:** Add L0 test: `\frac{x+y}{z}` inline → `(x+y)/z`; `\frac{a}{b}` → `a/b`
 
 ---
@@ -36,7 +36,7 @@ format!("{}/{}", num_display, den)
 **Finding:** When all series values are equal (min=max), normalization
 `(v - min) / (max - min)` divides by zero.
 
-**Fix:** In `proof/src/element/sparkline.rs`, guard the normalization:
+**Fix:** In `mdloom/src/element/sparkline.rs`, guard the normalization:
 
 ```rust
 let range = max - min;
@@ -47,17 +47,17 @@ let normalized = if range == 0.0 {
 };
 ```
 
-**File:** `proof/src/element/sparkline.rs`
+**File:** `mdloom/src/element/sparkline.rs`
 **Tests:** Add L0 test: `value="5,5,5,5,5"` → all `▄` blocks, no panic
 
 ---
 
 ### F90 — Cycle detection in dependency trees
 
-**Finding:** Circular references in `proof:tree kind=dependency` (A parent=B,
+**Finding:** Circular references in `mdloom:tree kind=dependency` (A parent=B,
 B parent=A) cause infinite recursion in `build_dfs_tree`.
 
-**Fix:** In `proof/src/tree/schema.rs` `dfs_children()`, pass a `visited`
+**Fix:** In `mdloom/src/tree/schema.rs` `dfs_children()`, pass a `visited`
 `HashSet` (already present) and early-return when a node is already in the set:
 
 ```rust
@@ -68,7 +68,7 @@ if visited.contains(child_name) {
 visited.insert(child_name.to_string());
 ```
 
-**File:** `proof/src/tree/schema.rs` → `dfs_children`
+**File:** `mdloom/src/tree/schema.rs` → `dfs_children`
 **Tests:** Add L0 test: table with A→B, B→A parent cycle → renders without panic, emits warning
 
 ---
@@ -78,7 +78,7 @@ visited.insert(child_name.to_string());
 **Finding:** `clip_to_width` splits wide Unicode chars (2-column CJK) at the
 boundary, leaving half a character.
 
-**Fix:** In `proof/src/slide/layout.rs` and `proof-canvas/src/lib.rs`:
+**Fix:** In `mdloom/src/slide/layout.rs` and `mdloom-canvas/src/lib.rs`:
 
 ```rust
 pub fn clip_to_width(s: &str, width: usize) -> String {
@@ -99,8 +99,8 @@ pub fn clip_to_width(s: &str, width: usize) -> String {
 
 Use `visual_width` per character, not `chars().count()`.
 
-**Files:** `proof/src/slide/layout.rs`, `proof/src/slide/bullets.rs`,
-`proof-canvas/src/lib.rs`
+**Files:** `mdloom/src/slide/layout.rs`, `mdloom/src/slide/bullets.rs`,
+`mdloom-canvas/src/lib.rs`
 **Tests:** Add L0 test: CJK string clipped at boundary → no half-char
 
 ---
@@ -112,7 +112,7 @@ writes col and tries to write col+1 which is out-of-bounds. Current code
 checks `col + 1 < self.width` before writing the placeholder — this is correct.
 Verify the first half IS written even when the second can't be.
 
-**Fix:** Audit `proof-canvas/src/lib.rs` paste loop — current code:
+**Fix:** Audit `mdloom-canvas/src/lib.rs` paste loop — current code:
 ```rust
 self.buf[row * self.width + col] = ch; // written
 if ch_w >= 2 && col + 1 < self.width {
@@ -123,37 +123,37 @@ col += ch_w;
 This is already correct — the char is written, placeholder only if room.
 Add a test to confirm.
 
-**Files:** `proof-canvas/src/lib.rs`
+**Files:** `mdloom-canvas/src/lib.rs`
 **Tests:** Add L0 test: paste 2-wide char at col=width-1 → char written, no panic, next row unaffected
 
 ---
 
 ## Priority 2 — Missing features
 
-### F42b — `proof:row` missing source attr surfaced at check time
+### F42b — `mdloom:row` missing source attr surfaced at check time
 
-**Finding:** Missing `source=` on `proof:row` is only caught at compile time.
-`proof check` should catch it earlier via `SourceLinkCheck`.
+**Finding:** Missing `source=` on `mdloom:row` is only caught at compile time.
+`mdloom check` should catch it earlier via `SourceLinkCheck`.
 
-**Fix:** Extend `SourceLinkCheck` in `proof/src/checks/source_links.rs` to
-detect `proof:row` fences without a `source=md://` attribute and emit a
+**Fix:** Extend `SourceLinkCheck` in `mdloom/src/checks/source_links.rs` to
+detect `mdloom:row` fences without a `source=md://` attribute and emit a
 new diagnostic `md_missing_source`:
 
 ```rust
-if fence_info.starts_with("proof:row") {
+if fence_info.starts_with("mdloom:row") {
     let has_source = info_after.contains("source=md://");
     if !has_source {
         diags.push(Diagnostic::error(
             path.to_path_buf(), line_no, 1,
             "md_missing_source",
-            "proof:row requires source=md://... attribute"
+            "mdloom:row requires source=md://... attribute"
         ));
     }
 }
 ```
 
-**File:** `proof/src/checks/source_links.rs`
-**Tests:** Add L1 test: `.source.md` with `proof:row` missing source → `md_missing_source` error
+**File:** `mdloom/src/checks/source_links.rs`
+**Tests:** Add L1 test: `.source.md` with `mdloom:row` missing source → `md_missing_source` error
 
 ---
 
@@ -174,7 +174,7 @@ if let Some(rest) = trimmed.strip_prefix("root:") {
 }
 ```
 
-**File:** `proof/src/compile.rs` → `render_inline_tree`
+**File:** `mdloom/src/compile.rs` → `render_inline_tree`
 **Tests:** Add L0 test: inline tree without `root:` → first line becomes root node
 
 ---
@@ -184,19 +184,19 @@ if let Some(rest) = trimmed.strip_prefix("root:") {
 **Finding:** Spec says symbol lookup is case-insensitive. Verify this is
 implemented and add a test.
 
-**Check:** `proof/src/symbol/mod.rs` — `resolve()` should lowercase the name.
+**Check:** `mdloom/src/symbol/mod.rs` — `resolve()` should lowercase the name.
 Already implemented per session notes. Verify test exists.
 
 **Tests:** Confirm test `symbol_resolve_case_insensitive` in integration_tests.rs
 
 ---
 
-### F103 — proof:toc style=numbered
+### F103 — mdloom:toc style=numbered
 
-**Finding:** `proof:toc` currently supports `style=list` and `style=tree`.
+**Finding:** `mdloom:toc` currently supports `style=list` and `style=tree`.
 `style=numbered` (with sequential numbers) is missing.
 
-**Fix:** In `proof/src/compile.rs` `generate_toc()`, add numbered style:
+**Fix:** In `mdloom/src/compile.rs` `generate_toc()`, add numbered style:
 
 ```rust
 "numbered" => {
@@ -205,7 +205,7 @@ Already implemented per session notes. Verify test exists.
 }
 ```
 
-**File:** `proof/src/compile.rs` → `generate_toc`
+**File:** `mdloom/src/compile.rs` → `generate_toc`
 **Tests:** Add L0 test: `style=numbered` → "1. Title", "  1.1. Section" format
 
 ---
@@ -213,15 +213,15 @@ Already implemented per session notes. Verify test exists.
 ### F116 — Stub attribute for work-in-progress directives
 
 **Finding:** Authors building documents incrementally need a way to mark
-`proof:tree source=md://not-yet-created.md` as intentionally incomplete
+`mdloom:tree source=md://not-yet-created.md` as intentionally incomplete
 without generating an error.
 
 **Fix:** Add `stub=true` attribute to tree, row, element, and include directives.
 When present, resolve failures emit a warning instead of an error and write
 the source block through unchanged.
 
-**Files:** `proof/src/compile.rs` → each directive's parse and dispatch
-**Tests:** Add L1 test: `proof:tree stub=true source=md://missing.md` → warning, written=true
+**Files:** `mdloom/src/compile.rs` → each directive's parse and dispatch
+**Tests:** Add L1 test: `mdloom:tree stub=true source=md://missing.md` → warning, written=true
 
 ---
 
@@ -232,11 +232,11 @@ the source block through unchanged.
 Current behavior: basename match at any depth. Add test to confirm:
 
 ```rust
-// test: exclude=target skips C:/src/proof/crates/proof-math/target/
-// but NOT C:/src/proof/src/dashboard/ (doesn't contain "target")
+// test: exclude=target skips C:/src/mdloom/crates/mdloom-math/target/
+// but NOT C:/src/mdloom/src/dashboard/ (doesn't contain "target")
 ```
 
-**File:** `proof/src/tree/dirtree.rs` tests
+**File:** `mdloom/src/tree/dirtree.rs` tests
 
 ---
 
@@ -245,7 +245,7 @@ Current behavior: basename match at any depth. Add test to confirm:
 **Finding:** ELEMENT-003 warning fires when series length < width. Verify
 the warning message is actionable and the rendering (repeat values) is correct.
 
-**Check:** `proof/src/element/sparkline.rs` — confirm repeat logic and test.
+**Check:** `mdloom/src/element/sparkline.rs` — confirm repeat logic and test.
 
 ---
 
@@ -254,11 +254,11 @@ the warning message is actionable and the rendering (repeat values) is correct.
 **Finding:** When compile fails, leaving stale output is confusing. Add opt-in
 deletion.
 
-**Fix:** Add `--delete-on-error` flag to `proof compile`:
+**Fix:** Add `--delete-on-error` flag to `mdloom compile`:
 - When set: if `has_errors`, delete the output file if it exists
 - Default: false (current behavior — leave stale)
 
-**File:** `proof/src/main.rs` → Compile command, `cmd_compile`
+**File:** `mdloom/src/main.rs` → Compile command, `cmd_compile`
 **Tests:** Add L2 CLI test: `--delete-on-error` removes output on error
 
 ---
@@ -272,10 +272,10 @@ deletion.
 | P1 | F90 | cycle detection in dependency trees | small |
 | P1 | F123 | unicode-safe clip_to_width | small |
 | P1 | F128 | wide char at last canvas column (verify) | trivial |
-| P2 | F42b | proof:row missing source caught at check time | small |
+| P2 | F42b | mdloom:row missing source caught at check time | small |
 | P2 | F86 | root detection without root: prefix | small |
 | P2 | F96 | symbol case-insensitive lookup (verify) | trivial |
-| P2 | F103 | proof:toc style=numbered | small |
+| P2 | F103 | mdloom:toc style=numbered | small |
 | P2 | F116 | stub=true attribute for WIP directives | medium |
 | P3 | F83 | tree exclude basename test | trivial |
 | P3 | F75 | sparkline short series verify | trivial |

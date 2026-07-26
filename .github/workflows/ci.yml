@@ -64,19 +64,19 @@ jobs:
       - name: Build debug binary
         run: cargo build
       - name: E2E — clean file exits 0
-        run: ./target/debug/proof check tests/fixtures/perfect_box.md
+        run: ./target/debug/mdloom check tests/fixtures/perfect_box.md
       - name: E2E — broken file exits 1
         run: |
-          ./target/debug/proof check tests/fixtures/width_mismatch.md && exit 1 || true
+          ./target/debug/mdloom check tests/fixtures/width_mismatch.md && exit 1 || true
       - name: E2E — rich format is valid JSON
         run: |
-          ./target/debug/proof check --format rich --no-fail tests/fixtures/width_mismatch.md | python3 -c "import sys,json; json.load(sys.stdin)"
+          ./target/debug/mdloom check --format rich --no-fail tests/fixtures/width_mismatch.md | python3 -c "import sys,json; json.load(sys.stdin)"
       - name: E2E — stats command
-        run: ./target/debug/proof stats tests/fixtures/
+        run: ./target/debug/mdloom stats tests/fixtures/
       - name: E2E — layout command
         run: |
           echo '```' > /tmp/fig.md
           echo 'BOX CONTENT' >> /tmp/fig.md
           echo '└─────────┘' >> /tmp/fig.md
           echo '```' >> /tmp/fig.md
-          ./target/debug/proof layout /tmp/fig.md /tmp/fig.md --gap 4 --labels "A" "B"
+          ./target/debug/mdloom layout /tmp/fig.md /tmp/fig.md --gap 4 --labels "A" "B"

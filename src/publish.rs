@@ -1,4 +1,3 @@
-use pebble::PebbleDocument;
 use pulldown_cmark::{html, Event, Options, Parser};
 use serde::Serialize;
 use std::{
@@ -9,10 +8,11 @@ use std::{
 use zip::{write::FileOptions, ZipWriter};
 
 use crate::frontmatter::SourceFrontmatter;
+use crate::pebble_output;
 use crate::slide::{parse_slide_doc, Slide, SlideLayout};
 
 pub fn markdown_to_html_document(markdown: &str, title: &str) -> String {
-    let title = pebble::document_title(markdown, title);
+    let title = pebble_output::document_title(markdown, title);
     let body = markdown_to_html_fragment(markdown);
 
     format!(
@@ -50,9 +50,7 @@ pub fn markdown_to_pebble_document(
     resolved_files: &[PathBuf],
 ) -> String {
     let refs = resolved_files.iter().map(|path| path_string(path));
-    PebbleDocument::from_markdown(markdown, fallback_title, path_string(source_path), refs)
-        .to_json()
-        .expect("serializing Pebble document cannot fail")
+    pebble_output::document_json(markdown, fallback_title, path_string(source_path), refs)
 }
 
 pub fn markdown_to_json_report_bundle(
@@ -64,10 +62,10 @@ pub fn markdown_to_json_report_bundle(
     frontmatter: SourceFrontmatter,
     compile: JsonReportCompile,
 ) -> String {
-    let title = pebble::document_title(markdown, fallback_title);
+    let title = pebble_output::document_title(markdown, fallback_title);
     let sections = json_report_sections(markdown);
     let report = JsonReportBundle {
-        schema: "proof.publish.json_report.v1".to_string(),
+        schema: "mdloom.publish.json_report.v1".to_string(),
         kind: "compile_report".to_string(),
         source_path: path_string(source_path),
         title,
@@ -175,7 +173,7 @@ pub fn html_to_pdf_document(html: &str, fallback_title: &str) -> Vec<u8> {
 }
 
 pub fn markdown_to_docx_document(markdown: &str, fallback_title: &str) -> Vec<u8> {
-    let title = pebble::document_title(markdown, fallback_title);
+    let title = pebble_output::document_title(markdown, fallback_title);
     let blocks = markdown_to_docx_blocks(markdown);
     let document = docx_document_xml(&blocks);
     let core = docx_core_xml(&title);
@@ -312,13 +310,13 @@ pub fn write_static_site(site_root: &Path, mut pages: Vec<SitePage>) -> std::io:
     std::fs::create_dir_all(site_root)?;
     pages.sort_by(|left, right| left.href.cmp(&right.href));
     let manifest = SiteManifest {
-        schema: "proof.publish.site.v1".to_string(),
-        generated_by: "proof compile --target site".to_string(),
+        schema: "mdloom.publish.site.v1".to_string(),
+        generated_by: "mdloom compile --target site".to_string(),
         page_count: pages.len(),
         pages,
     };
     let manifest_json = serde_json::to_string_pretty(&manifest).map_err(std::io::Error::other)?;
-    std::fs::write(site_root.join("proof-site.json"), manifest_json)?;
+    std::fs::write(site_root.join("mdloom-site.json"), manifest_json)?;
     std::fs::write(site_root.join("index.html"), static_site_index(&manifest))?;
     Ok(())
 }
@@ -343,11 +341,11 @@ fn static_site_index(manifest: &SiteManifest) -> String {
             "<head>\n",
             "<meta charset=\"utf-8\">\n",
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
-            "<title>PROOF Site</title>\n",
+            "<title>MDLOOM Site</title>\n",
             "<style>body {{ font-family: system-ui, sans-serif; line-height: 1.55; max-width: 72ch; margin: 2rem auto; padding: 0 1rem; }} span {{ color: #666; }}</style>\n",
             "</head>\n",
             "<body>\n",
-            "<h1>PROOF Site</h1>\n",
+            "<h1>MDLOOM Site</h1>\n",
             "<nav aria-label=\"Site pages\">\n",
             "<ul>\n",
             "{}",
@@ -414,7 +412,7 @@ fn pptx_body_blocks(markdown: &str) -> Vec<PptxBlock> {
     let mut lines = markdown.lines().peekable();
     while let Some(line) = lines.next() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed == "proof:bullets" {
+        if trimmed.is_empty() || trimmed == "mdloom:bullets" {
             continue;
         }
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
@@ -658,7 +656,7 @@ fn docx_core_xml(title: &str) -> String {
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
             r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">"#,
-            "<dc:title>{}</dc:title><dc:creator>PROOF</dc:creator></cp:coreProperties>"
+            "<dc:title>{}</dc:title><dc:creator>MDLOOM</dc:creator></cp:coreProperties>"
         ),
         escape_xml(title)
     )
@@ -668,7 +666,7 @@ fn docx_app_xml() -> String {
     concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
         r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">"#,
-        "<Application>PROOF</Application></Properties>"
+        "<Application>MDLOOM</Application></Properties>"
     )
     .to_string()
 }
@@ -748,7 +746,7 @@ fn pptx_core_xml(title: &str) -> String {
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
             r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">"#,
-            "<dc:title>{}</dc:title><dc:creator>PROOF</dc:creator></cp:coreProperties>"
+            "<dc:title>{}</dc:title><dc:creator>MDLOOM</dc:creator></cp:coreProperties>"
         ),
         escape_xml(title)
     )
@@ -759,7 +757,7 @@ fn pptx_app_xml(slide_count: usize) -> String {
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
             r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">"#,
-            "<Application>PROOF</Application><Slides>{}</Slides></Properties>"
+            "<Application>MDLOOM</Application><Slides>{}</Slides></Properties>"
         ),
         slide_count
     )
@@ -1000,8 +998,8 @@ fn pptx_notes_master_relationships_xml() -> String {
 fn pptx_theme_xml() -> String {
     concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-        r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="PROOF">"#,
-        "<a:themeElements><a:clrScheme name=\"PROOF\"><a:dk1><a:srgbClr val=\"000000\"/></a:dk1><a:lt1><a:srgbClr val=\"FFFFFF\"/></a:lt1><a:dk2><a:srgbClr val=\"1F2937\"/></a:dk2><a:lt2><a:srgbClr val=\"F9FAFB\"/></a:lt2><a:accent1><a:srgbClr val=\"2563EB\"/></a:accent1><a:accent2><a:srgbClr val=\"16A34A\"/></a:accent2><a:accent3><a:srgbClr val=\"DC2626\"/></a:accent3><a:accent4><a:srgbClr val=\"9333EA\"/></a:accent4><a:accent5><a:srgbClr val=\"EA580C\"/></a:accent5><a:accent6><a:srgbClr val=\"0891B2\"/></a:accent6><a:hlink><a:srgbClr val=\"2563EB\"/></a:hlink><a:folHlink><a:srgbClr val=\"7C3AED\"/></a:folHlink></a:clrScheme><a:fontScheme name=\"PROOF\"><a:majorFont><a:latin typeface=\"Aptos Display\"/></a:majorFont><a:minorFont><a:latin typeface=\"Aptos\"/></a:minorFont></a:fontScheme><a:fmtScheme name=\"PROOF\"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>"
+        r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="MDLOOM">"#,
+        "<a:themeElements><a:clrScheme name=\"MDLOOM\"><a:dk1><a:srgbClr val=\"000000\"/></a:dk1><a:lt1><a:srgbClr val=\"FFFFFF\"/></a:lt1><a:dk2><a:srgbClr val=\"1F2937\"/></a:dk2><a:lt2><a:srgbClr val=\"F9FAFB\"/></a:lt2><a:accent1><a:srgbClr val=\"2563EB\"/></a:accent1><a:accent2><a:srgbClr val=\"16A34A\"/></a:accent2><a:accent3><a:srgbClr val=\"DC2626\"/></a:accent3><a:accent4><a:srgbClr val=\"9333EA\"/></a:accent4><a:accent5><a:srgbClr val=\"EA580C\"/></a:accent5><a:accent6><a:srgbClr val=\"0891B2\"/></a:accent6><a:hlink><a:srgbClr val=\"2563EB\"/></a:hlink><a:folHlink><a:srgbClr val=\"7C3AED\"/></a:folHlink></a:clrScheme><a:fontScheme name=\"MDLOOM\"><a:majorFont><a:latin typeface=\"Aptos Display\"/></a:majorFont><a:minorFont><a:latin typeface=\"Aptos\"/></a:minorFont></a:fontScheme><a:fmtScheme name=\"MDLOOM\"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>"
     )
     .to_string()
 }
@@ -1176,7 +1174,7 @@ fn build_simple_pdf(title: &str, lines: &[String]) -> Vec<u8> {
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
         format!("<< /Length {} >>\nstream\n{}endstream", content.len(), content),
         format!(
-            "<< /Title ({}) /Producer (PROOF) >>",
+            "<< /Title ({}) /Producer (MDLOOM) >>",
             escape_pdf_text(title)
         ),
     ];
@@ -1352,10 +1350,10 @@ mod tests {
     #[test]
     fn pebble_backend_chunks_markdown_for_transfer() {
         let pebble = markdown_to_pebble_document(
-            "---\ntags: [proof, guide]\nstatus: ready\n---\n\n# Guide\n\nIntro.\n\n## Steps\n\n- one\n- two\n",
+            "---\ntags: [mdloom, guide]\nstatus: ready\n---\n\n# Guide\n\nIntro.\n\n## Steps\n\n- one\n- two\n",
             "fallback",
             Path::new("guide.source.md"),
-            &[PathBuf::from(".proof\\side-info\\links.json")],
+            &[PathBuf::from(".mdloom\\side-info\\links.json")],
         );
         let json: serde_json::Value = serde_json::from_str(&pebble).unwrap();
 
@@ -1365,7 +1363,7 @@ mod tests {
         assert_eq!(json["metadata"]["status"], "ready");
         assert_eq!(json["refs"].as_array().unwrap().len(), 1);
         assert_eq!(json["sections"][0]["id"], "guide");
-        assert_eq!(json["sections"][0]["metadata"]["tags"], "[proof, guide]");
+        assert_eq!(json["sections"][0]["metadata"]["tags"], "[mdloom, guide]");
         assert_eq!(json["sections"][1]["path"][1], "Steps");
         assert!(json["sections"][1]["text"]
             .as_str()
@@ -1383,7 +1381,7 @@ mod tests {
             "# Guide\n\nIntro.\n\n## Steps\n\n- one\n",
             "fallback",
             Path::new("guide.source.md"),
-            Path::new("guide.proof-report.json"),
+            Path::new("guide.mdloom-report.json"),
             &[PathBuf::from("figures\\flow.md")],
             SourceFrontmatter {
                 tags: vec!["publish".to_string()],
@@ -1398,7 +1396,7 @@ mod tests {
         );
         let json: serde_json::Value = serde_json::from_str(&report).unwrap();
 
-        assert_eq!(json["schema"], "proof.publish.json_report.v1");
+        assert_eq!(json["schema"], "mdloom.publish.json_report.v1");
         assert_eq!(json["kind"], "compile_report");
         assert_eq!(json["title"], "Guide");
         assert_eq!(json["artifact"]["target"], "json-report");
@@ -1416,7 +1414,7 @@ mod tests {
 
         assert!(pdf.starts_with(b"%PDF-1.4"));
         let text = String::from_utf8_lossy(&pdf);
-        assert!(text.contains("/Producer (PROOF)"), "got:\n{}", text);
+        assert!(text.contains("/Producer (MDLOOM)"), "got:\n{}", text);
         assert!(text.contains("(Guide) Tj"), "got:\n{}", text);
         assert!(text.contains("Body with <angle> text"), "got:\n{}", text);
     }
@@ -1493,12 +1491,12 @@ mod tests {
         .unwrap();
 
         let manifest: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(dir.path().join("proof-site.json")).unwrap(),
+            &std::fs::read_to_string(dir.path().join("mdloom-site.json")).unwrap(),
         )
         .unwrap();
         let index = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
 
-        assert_eq!(manifest["schema"], "proof.publish.site.v1");
+        assert_eq!(manifest["schema"], "mdloom.publish.site.v1");
         assert_eq!(manifest["page_count"], 2);
         assert_eq!(manifest["pages"][0]["href"], "alpha.html");
         assert_eq!(manifest["pages"][1]["href"], "beta.html");
@@ -1509,7 +1507,7 @@ mod tests {
     #[test]
     fn pptx_ooxml_package_contains_native_bullets_and_notes() {
         let pptx = slides_source_to_pptx_document(
-            "```proof:slide layout=title title=\"Deck\" subtitle=\"Native slides\"\n```\n---\n```proof:slide layout=title-content title=\"Plan\"\nproof:bullets\n- First\n  - Nested\n1. Numbered\n~~~text\nlet x = 1;\n~~~\n~~~proof:notes\nPresenter note.\n~~~\n```",
+            "```mdloom:slide layout=title title=\"Deck\" subtitle=\"Native slides\"\n```\n---\n```mdloom:slide layout=title-content title=\"Plan\"\nmdloom:bullets\n- First\n  - Nested\n1. Numbered\n~~~text\nlet x = 1;\n~~~\n~~~mdloom:notes\nPresenter note.\n~~~\n```",
             "fallback",
         )
         .unwrap();

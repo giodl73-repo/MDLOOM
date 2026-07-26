@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::compile_output;
 use crate::compile_types::{CompileViolation, ViolationSeverity};
 
-/// Render a `proof:xref` directive as a formatted cross-reference.
+/// Render a `mdloom:xref` directive as a formatted cross-reference.
 ///
 /// Resolves the heading text from `uri` (e.g. `md://api.md#authentication`) by
 /// reading the target file and finding the heading whose slug matches.
@@ -87,9 +87,9 @@ pub(crate) fn heading_slug(text: &str) -> String {
         .collect()
 }
 
-/// Render a `proof:blockquote` directive for prose documents.
+/// Render a `mdloom:blockquote` directive for prose documents.
 ///
-/// Distinct from `proof:quote` (slide-only, centered, curly-quoted): this is
+/// Distinct from `mdloom:quote` (slide-only, centered, curly-quoted): this is
 /// left-aligned, indented, with optional attribution on a trailing line.
 pub(crate) fn render_blockquote(text: &str, attribution: Option<&str>, style: &str) -> String {
     let body_lines: Vec<&str> = text.lines().collect();
@@ -118,7 +118,7 @@ pub(crate) fn compile_xref(
         Ok(rendered) => {
             *resolved_count += 1;
             format!(
-                "<!-- proof:compiled from=\"proof:xref\" -->\n{}\n<!-- /proof:compiled -->",
+                "<!-- mdloom:compiled from=\"mdloom:xref\" -->\n{}\n<!-- /mdloom:compiled -->",
                 rendered
             )
         }
@@ -146,7 +146,7 @@ pub(crate) fn compile_blockquote(
     *resolved_count += 1;
     let rendered = render_blockquote(text, attribution.map(|s| s.as_str()), style);
     format!(
-        "<!-- proof:compiled from=\"proof:blockquote\" -->\n{}\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:blockquote\" -->\n{}\n<!-- /mdloom:compiled -->",
         rendered
     )
 }

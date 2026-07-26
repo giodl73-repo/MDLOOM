@@ -4,7 +4,7 @@ Each row is one period: `label: open, high, low, close`. Up-periods (close
 ≥ open) render with `O` body; down-periods with `█`. The wick `│` spans
 [low, high].
 
-```proof:chart kind=candlestick width=40 height=10 title="ACME weekly"
+```mdloom:chart kind=candlestick width=40 height=10 title="ACME weekly"
 Wk1: 100, 108, 95, 105
 Wk2: 105, 112, 102, 110
 Wk3: 110, 118, 108, 107

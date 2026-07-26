@@ -45,10 +45,10 @@ impl Check for MarkdownTableCheck {
                         table.line,
                         1,
                         "source_inline_table",
-                        "inline pipe table in .source.md; move durable row data to a sidecar table and reference it from PROOF",
+                        "inline pipe table in .source.md; move durable row data to a sidecar table and reference it from MDLOOM",
                     )
                     .with_note(
-                        "source documents may render tables, but canonical data should live in JSON/CSV/sidecar tables for proof, pebble, and crop pipelines",
+                        "source documents may render tables, but canonical data should live in JSON/CSV/sidecar tables for mdloom, pebble, and crop pipelines",
                     )
                     .with_group(format!("source-table-l{}", table.line)),
                 );

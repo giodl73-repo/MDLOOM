@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const PUBLICATION_AST_SCHEMA: &str = "proof.publication_ast.v1";
+pub const PUBLICATION_AST_SCHEMA: &str = "mdloom.publication_ast.v1";
 pub const THEME_PLAIN: &str = "plain";
 pub const THEME_PROFESSIONAL: &str = "professional";
 pub const THEME_DENSE: &str = "dense";

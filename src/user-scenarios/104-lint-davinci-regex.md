@@ -1,10 +1,10 @@
 # US-104 — DaVinci regex invariant in action
 
-This scenario assumes a `[[davinci]]` entry in proof.toml with a regex
+This scenario assumes a `[[davinci]]` entry in mdloom.toml with a regex
 invariant on a figure file. The figure must match the pattern; otherwise
 `fig_invariant_violated` fires.
 
-<!-- proof:compiled from="md://src/data/diagnostic-codes.md#:table:0" -->
+<!-- mdloom:compiled from="md://src/data/diagnostic-codes.md#:table:0" -->
 ```
 code | severity | module | meaning
 ------ | ---------- | -------- | ---------
@@ -34,7 +34,7 @@ DASHBOARD-001 | error | dashboard | Region declared but not rendered
 DASHBOARD-002 | error | dashboard | Region content exceeds bounding box
 DASHBOARD-003 | error | dashboard | Two regions overlap
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 If the pin's regex invariant is `^\| Code \|` (header row check) and the
 figure starts with that pattern, lint passes. If someone reorders or

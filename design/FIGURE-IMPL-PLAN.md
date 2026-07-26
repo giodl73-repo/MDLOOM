@@ -1,9 +1,9 @@
-# proof figure — Implementation Plan
+# mdloom figure — Implementation Plan
 
 > **Status**: Substantially implemented — see FIGURE-SPEC.md for the authoritative status. `src/figure/` contains the dither modes, shape clipping, and image→ASCII pipeline. DaVinci pinning lives in `src/davinci.rs`. Wave numbering below is now historical context, not a forward plan.
 > **Spec**: FIGURE-SPEC.md
-> **Exit criterion (full)**: `proof figure import logos/EDM.png --shape shield --label "EDM" --width 20`
-> produces a valid figure file; `proof:include kind=figure` embeds it with FIGURE-005 if unpinned.
+> **Exit criterion (full)**: `mdloom figure import logos/EDM.png --shape shield --label "EDM" --width 20`
+> produces a valid figure file; `mdloom:include kind=figure` embeds it with FIGURE-005 if unpinned.
 
 ---
 
@@ -33,7 +33,7 @@ Wave 1 must be compiled with `cargo build --features figure`. Wave 4 SVG support
 `cargo build --features svg`.
 
 `unicode-width` is already present (used by `visual_width` in `layout.rs`).
-`serde_json` is already present (used for `.proof-fetch-lock.json`).
+`serde_json` is already present (used for `.mdloom-fetch-lock.json`).
 
 ---
 
@@ -94,7 +94,7 @@ pub fn import_image(path: &Path, opts: &ImportOptions) -> Result<String>
 
 pub fn load_image(path: &Path, opts: &ImportOptions) -> Result<image::DynamicImage>
 // Handles: PNG/JPG/GIF/BMP via image crate; .svg via resvg feature (Wave 4)
-// Remote URLs: requires opts.allow_fetch; fetches, checks .proof-fetch-lock.json
+// Remote URLs: requires opts.allow_fetch; fetches, checks .mdloom-fetch-lock.json
 //
 // SVG feature guard: all code paths that reference `resvg` types must be inside
 // `#[cfg(feature = "svg")]` blocks. The non-feature build (`cargo build --features figure`
@@ -200,14 +200,14 @@ test files in the repo.
 ### Figure file format
 
 ```
-<!-- proof:figure id="edm-logo" kind="figure.logo" -->
+<!-- mdloom:figure id="edm-logo" kind="figure.logo" -->
 ```ascii
 <raw ascii art>
 ```
-<!-- /proof:figure -->
+<!-- /mdloom:figure -->
 ```
 
-The `<!-- proof:figure -->` comment sits **outside** the code fence. The fence has
+The `<!-- mdloom:figure -->` comment sits **outside** the code fence. The fence has
 no info string (plain triple-backtick). Multiple figures may appear in one `.md` file.
 
 ### Key structs
@@ -217,8 +217,8 @@ pub struct FigureMarker {
     pub id: String,
     pub kind: String,             // "figure.logo", "figure.illustration", etc.
     pub file: PathBuf,
-    pub line_start: usize,        // line of <!-- proof:figure -->
-    pub line_end: usize,          // line of <!-- /proof:figure -->
+    pub line_start: usize,        // line of <!-- mdloom:figure -->
+    pub line_end: usize,          // line of <!-- /mdloom:figure -->
     pub width: u32,               // columns in widest ASCII line
     pub height: u32,              // line count
     pub content: String,          // raw ASCII between fences
@@ -234,7 +234,7 @@ pub struct FigureCatalog {
 ```rust
 // src/figure/catalog.rs
 pub fn parse_figure_markers(content: &str, file: &Path) -> Vec<FigureMarker>
-// Scans for <!-- proof:figure id="..." kind="..." --> ... <!-- /proof:figure -->
+// Scans for <!-- mdloom:figure id="..." kind="..." --> ... <!-- /mdloom:figure -->
 // Extracts content from the fenced block inside
 
 pub fn index_directory(dir: &Path) -> Result<FigureCatalog>
@@ -242,17 +242,17 @@ pub fn index_directory(dir: &Path) -> Result<FigureCatalog>
 
 pub fn write_figure_file(marker: &FigureMarker, ascii: &str, output: &Path) -> Result<()>
 // Writes full markdown wrapper:
-//   <!-- proof:figure id="..." kind="..." -->
+//   <!-- mdloom:figure id="..." kind="..." -->
 //   ```
 //   <ascii>
 //   ```
-//   <!-- /proof:figure -->
+//   <!-- /mdloom:figure -->
 
 pub fn figures_command(dir: &Path, kind_filter: Option<&str>) -> Result<()>
-// proof figures . — lists all indexed figures with metadata
+// mdloom figures . — lists all indexed figures with metadata
 ```
 
-### CLI output format (`proof figures .`)
+### CLI output format (`mdloom figures .`)
 
 ```
 figures/nhl/edm-logo.md#edm-logo:0
@@ -266,14 +266,14 @@ figures/animals/bear-stop.md#bear-stop:0
   pinned:   no
 ```
 
-### `proof figure preview <uri>`
+### `mdloom figure preview <uri>`
 
 Resolves uri via `mdpath::parse` + `mdpath::resolve` (same pattern as `compile.rs`
 `resolve_uri`), then prints content to stdout. No fence wrapping in terminal output.
 
 ### `--output-file` format
 
-When `--output-file path.md` is passed to `proof figure import`, writes via
+When `--output-file path.md` is passed to `mdloom figure import`, writes via
 `write_figure_file`. When `--output-file -` is passed, writes raw ASCII to stdout
 without wrapper.
 
@@ -410,7 +410,7 @@ fence markers. `sanitize_filename("St. Louis")` returns `"st-louis"`.
 
 ---
 
-## Wave 4 — proof:include kind=figure + cache + CLI (~200 LOC)
+## Wave 4 — mdloom:include kind=figure + cache + CLI (~200 LOC)
 
 **Files**: `src/compile.rs` (extend), `src/commands/figure.rs` (new CLI surface)
 
@@ -431,11 +431,11 @@ IncludeFigure {
 
 #### 2. Directive parsing
 
-Extend `proof_directive_kind` and `collect_directives` to recognize
-`` ```proof:include kind=figure ``:
+Extend `mdloom_directive_kind` and `collect_directives` to recognize
+`` ```mdloom:include kind=figure ``:
 
 ```rust
-// proof_directive_kind — add:
+// mdloom_directive_kind — add:
 else if rest.starts_with("include") {
     // Check for kind=figure attribute in the info string — token-exact match required
     if rest.split_whitespace().any(|tok| tok == "kind=figure") { Some("include_figure") }
@@ -489,7 +489,7 @@ or `gamma` produces a cache miss and re-renders.
 
 #### 5. FIGURE-005 warning
 
-When a `proof:include kind=figure` directive resolves a URI that has no DaVinci
+When a `mdloom:include kind=figure` directive resolves a URI that has no DaVinci
 pin in the config, emit FIGURE-005:
 
 ```rust
@@ -500,14 +500,14 @@ if !config.davinci.iter().any(|e| uri_matches(&e.uri, uri)) {
         severity: ViolationSeverity::Warning,
         uri: uri.clone(),
         ...
-        message: "figure has no DaVinci pin — use `proof pin` to protect it".to_string(),
+        message: "figure has no DaVinci pin — use `mdloom pin` to protect it".to_string(),
     });
 }
 ```
 
-Plain `proof:include` (without `kind=figure`) does NOT trigger FIGURE-005.
+Plain `mdloom:include` (without `kind=figure`) does NOT trigger FIGURE-005.
 
-#### 6. Remote URL lock file (`.proof-fetch-lock.json`)
+#### 6. Remote URL lock file (`.mdloom-fetch-lock.json`)
 
 When `--allow-fetch` is used and the URI is a remote URL, `load_image` writes a
 lock file adjacent to the output file:
@@ -546,13 +546,13 @@ pub fn run_figure(cmd: FigureSubcommand, root: &Path) -> Result<()>
 pub fn run_figures_catalog(dir: &Path, kind_filter: Option<&str>) -> Result<()>
 ```
 
-The `proof figures` (catalog list) subcommand lives at the top-level alongside
-`proof figure` (singular — import/generate/preview).
+The `mdloom figures` (catalog list) subcommand lives at the top-level alongside
+`mdloom figure` (singular — import/generate/preview).
 
 ### Tests (Wave 4)
 
 ```
-test_proof_directive_kind_detects_include_figure
+test_mdloom_directive_kind_detects_include_figure
 test_collect_directives_include_figure_parses_attrs
 test_figure_attrs_cache_hash_changes_with_dither
 test_figure_attrs_cache_hash_changes_with_width
@@ -569,7 +569,7 @@ test_compile_figure_embeds_content_with_traceability_comment
 ### Exit criterion (full wave)
 
 ```bash
-proof figure import logos/EDM.png \
+mdloom figure import logos/EDM.png \
     --shape shield \
     --label "EDM" \
     --width 20 \
@@ -577,11 +577,11 @@ proof figure import logos/EDM.png \
     --output-file figures/nhl/edm-logo.md
 ```
 
-Produces `figures/nhl/edm-logo.md` with valid `<!-- proof:figure -->` markers and
+Produces `figures/nhl/edm-logo.md` with valid `<!-- mdloom:figure -->` markers and
 ASCII content. A `.source.md` containing:
 
 ```
-```proof:include kind=figure
+```mdloom:include kind=figure
 md://figures/nhl/edm-logo.md#edm-logo:0
 ```
 ```

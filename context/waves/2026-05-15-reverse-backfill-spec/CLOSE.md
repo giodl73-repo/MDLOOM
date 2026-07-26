@@ -2,12 +2,12 @@
 
 ## Mission
 
-Define how existing markdown systems can adopt proof quickly by generating
+Define how existing markdown systems can adopt mdloom quickly by generating
 reviewable `.source.md` candidates from current `.md` artifacts.
 
 ## Changes
 
-- Added `proof backfill` as the reverse compiler/adoption bridge in
+- Added `mdloom backfill` as the reverse compiler/adoption bridge in
   `design/SPEC.md`.
 - Defined the backfill pipeline: inventory/classify, extract candidates,
   generate source, compile, compare, and report.
@@ -28,5 +28,5 @@ reviewable `.source.md` candidates from current `.md` artifacts.
 ## Carry-forward
 
 Backfill should prioritize round-trip fidelity and reviewability before semantic
-extraction. Teams should be able to use proof automation against existing
+extraction. Teams should be able to use mdloom automation against existing
 markdown before committing to generated artifacts as the source of truth.

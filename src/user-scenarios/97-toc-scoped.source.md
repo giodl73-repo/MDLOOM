@@ -3,7 +3,7 @@
 Render a TOC for the doc, but narrow it to the descendants of `Setup` —
 exclude the rest of the document from the table.
 
-```proof:toc max-depth=3 style=tree section=Setup
+```mdloom:toc max-depth=3 style=tree section=Setup
 ```
 
 ## Setup

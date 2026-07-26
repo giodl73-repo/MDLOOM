@@ -4,7 +4,7 @@ Start with the planned budget, walk through approved deltas, land on the
 final figure. `▓` marks Start and End, `█` is a positive delta, `▒` is
 negative.
 
-```proof:chart kind=waterfall width=60 title="Budget walk ($K)"
+```mdloom:chart kind=waterfall width=60 title="Budget walk ($K)"
 Plan: 500
 Hardware: 80
 Staffing: -120

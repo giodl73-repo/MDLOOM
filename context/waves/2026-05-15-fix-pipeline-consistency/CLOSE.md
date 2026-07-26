@@ -2,17 +2,17 @@
 
 ## Mission
 
-Bring `proof fix` into the same command architecture contract as check, stats,
+Bring `mdloom fix` into the same command architecture contract as check, stats,
 draft, and compile.
 
 ## Changes
 
-- Routed `proof fix` through global command options.
+- Routed `mdloom fix` through global command options.
 - Verification now uses the explicit global `--config` override instead of
   loading a default config independently.
 - Verification checks the files modified by the applied plan.
 - Extended `FixResult` with `modified_files` for precise downstream reporting.
-- Added `.proof/last-fix.json` for every successful fix command run.
+- Added `.mdloom/last-fix.json` for every successful fix command run.
 - The fix log records:
   - schema version
   - plan path
@@ -37,6 +37,6 @@ test/build; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-Future fix work should connect `.proof/last-fix.json` to `proof status` and
+Future fix work should connect `.mdloom/last-fix.json` to `mdloom status` and
 extend the log with per-fix skip details if review tooling needs a richer audit
 trail.

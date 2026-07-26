@@ -10,13 +10,13 @@ status: complete
 
 | Area | Result |
 |---|---|
-| Wave system | Added proof-native wave, pulse, and plan skills plus `.claude/waves.json`. |
+| Wave system | Added mdloom-native wave, pulse, and plan skills plus `.claude/waves.json`. |
 | History backfill | Added `context/waves/PHASES.md` with backfilled waves from `CHANGELOG.md`. |
 | Active rail | Opened and closed the architecture/quality review wave with four pulses. |
 | Docs contract | Updated README fix-pipeline commands and refreshed SPEC check/output/backlog sections. |
 | Pitfall traceability | Updated AD-09, AD-10, and SC-01 test references/gaps. |
-| Coverage | Added tests for heading hash false positives, GFM table pipe parsing, and `proof init`. |
-| Warning cleanup | Removed local proof crate/test warnings; sibling `mdpath` warnings remain external carry-forward. |
+| Coverage | Added tests for heading hash false positives, GFM table pipe parsing, and `mdloom init`. |
+| Warning cleanup | Removed local mdloom crate/test warnings; sibling `mdpath` warnings remain external carry-forward. |
 
 ## Gates
 
@@ -24,9 +24,9 @@ status: complete
 cargo test
 cargo test --test integration_tests
 cargo build
-proof tests/fixtures/perfect_box.md
-proof tests/fixtures/width_mismatch.md
-proof --format json --no-fail tests/fixtures/width_mismatch.md
+mdloom tests/fixtures/perfect_box.md
+mdloom tests/fixtures/width_mismatch.md
+mdloom --format json --no-fail tests/fixtures/width_mismatch.md
 ```
 
 ## Carry-Forwards
@@ -35,5 +35,5 @@ proof --format json --no-fail tests/fixtures/width_mismatch.md
    `Option<bool>` so child configs can explicitly disable inherited checks.
 2. Corpus signal: the MAXIM warning flood is mostly `md_unexpected_section`; run
    the next active wave against schema allowlists and directory section schemas.
-3. Sibling warning cleanup: `mdpath` still emits six warnings during proof builds.
-4. Fix pipeline line endings: add a CRLF-preservation test for `proof fix`.
+3. Sibling warning cleanup: `mdpath` still emits six warnings during mdloom builds.
+4. Fix pipeline line endings: add a CRLF-preservation test for `mdloom fix`.

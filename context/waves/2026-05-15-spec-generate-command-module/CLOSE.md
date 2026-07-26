@@ -3,7 +3,7 @@
 ## Mission
 
 Continue the command-module split by extracting the invariant suggestion command,
-`proof spec-generate`.
+`mdloom spec-generate`.
 
 ## Changes
 
@@ -28,5 +28,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof compile` and `proof layout` remain in `main.rs`; `layout` is smaller,
+`mdloom compile` and `mdloom layout` remain in `main.rs`; `layout` is smaller,
 while `compile` may deserve a command module plus helper extraction.

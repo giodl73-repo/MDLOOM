@@ -11,16 +11,16 @@ governing_roles: [bench, parse]
 
 ## Mission
 
-Backfill tests for the review gaps and remove local proof warnings that obscure
+Backfill tests for the review gaps and remove local mdloom warnings that obscure
 real regressions.
 
 ## Deliverables
 
 - [x] Add AD-09 heading-format tests for `## Title ##` and `## Gotchas from C#`.
 - [x] Add AD-10 table parser tests for escaped pipes, code spans, and SQL concat.
-- [x] Add CLI test for `proof init` creating `proof.toml`.
+- [x] Add CLI test for `mdloom init` creating `mdloom.toml`.
 - [x] Keep stale `old_string`, dry-run, and reverse-line-order fix tests covered.
-- [x] Remove local proof crate/test warnings where safe.
+- [x] Remove local mdloom crate/test warnings where safe.
 
 ## Validation Gates
 

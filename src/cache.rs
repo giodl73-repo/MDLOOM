@@ -1,10 +1,10 @@
-/// Three-tier content-addressed build cache for proof compile.
+/// Three-tier content-addressed build cache for mdloom compile.
 ///
-/// Tier 1 (parse): ParsedDocument per .md file, keyed by content hash + proof version
+/// Tier 1 (parse): ParsedDocument per .md file, keyed by content hash + mdloom version
 /// Tier 2 (resolve): ResolvedElement per md:// URI, keyed by target parse_key + URI + version
 /// Tier 3 (compile): Full compiled output per source document
 ///
-/// All tiers live in `.proof/cache/` at the proof root.
+/// All tiers live in `.mdloom/cache/` at the mdloom root.
 /// See design/THREE-TIER-CACHE.md for full spec.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ─────────────────────────────────────────────────────────
 
 pub fn cache_dir(root: &Path) -> PathBuf {
-    root.join(".proof").join("cache")
+    root.join(".mdloom").join("cache")
 }
 
 fn parse_dir(root: &Path) -> PathBuf {
@@ -53,7 +53,7 @@ pub fn hash_file_content(content: &str) -> String {
     format!("{:016x}", h.finish())
 }
 
-fn proof_version() -> &'static str {
+fn mdloom_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
@@ -102,7 +102,7 @@ pub fn save_path_index(root: &Path, index: &PathIndex) {
 pub fn get_or_compute_parse_key(file_path: &Path, content: &str, index: &mut PathIndex) -> String {
     let rel = file_path.to_string_lossy().to_string();
     let content_hash = hash_file_content(content);
-    let parse_key = compute_key(&[&content_hash, proof_version()]);
+    let parse_key = compute_key(&[&content_hash, mdloom_version()]);
 
     // Check if index entry matches
     if let Some(entry) = index.get(&rel) {
@@ -145,9 +145,9 @@ pub struct CompileCacheEntry {
     pub output_path: String,
     pub compiled_text: String,
     pub resolved_uris: Vec<String>,
-    pub proof_version: String,
+    pub mdloom_version: String,
     pub created_at: u64,
-    /// Number of proof:* directives resolved during the compile that produced
+    /// Number of mdloom:* directives resolved during the compile that produced
     /// this entry. Restored on cache hit so the "(N directives)" output stays
     /// truthful across recompiles. `#[serde(default)]` keeps old entries
     /// loadable (they restore as 0 — acceptable; they'll be re-cached on miss).
@@ -164,7 +164,7 @@ pub fn compile_key(
     resolve_keys: &[String],
     directive_attrs_json: &str,
 ) -> String {
-    let mut parts: Vec<&str> = vec![source_parse_key, directive_attrs_json, proof_version()];
+    let mut parts: Vec<&str> = vec![source_parse_key, directive_attrs_json, mdloom_version()];
     let resolve_joined: String = resolve_keys.join("|");
     parts.push(&resolve_joined);
     // Re-borrow to avoid lifetime issues
@@ -172,7 +172,7 @@ pub fn compile_key(
         source_parse_key,
         &resolve_joined,
         directive_attrs_json,
-        proof_version(),
+        mdloom_version(),
     ])
 }
 
@@ -243,7 +243,7 @@ pub fn store_compile_cache(
         output_path: output_path.to_string_lossy().to_string(),
         compiled_text: compiled_text.to_string(),
         resolved_uris,
-        proof_version: proof_version().to_string(),
+        mdloom_version: mdloom_version().to_string(),
         created_at: epoch_ms(),
         directives_resolved: 0,
     };
@@ -255,11 +255,11 @@ pub fn store_compile_cache(
 // ─────────────────────────────────────────────────────────
 //
 // Caches the resolved content for a `md://` URI.
-// Key: (parse_key_of_target_file, uri_string, proof_version)
+// Key: (parse_key_of_target_file, uri_string, mdloom_version)
 // Value: the resolved figure content string.
 //
 // When the same figure is referenced by multiple source files in one
-// `proof compile` run, each call after the first is a disk-cache hit — the
+// `mdloom compile` run, each call after the first is a disk-cache hit — the
 // figure file is read and parsed only once across the entire build.
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -268,13 +268,13 @@ pub struct ResolveCacheEntry {
     pub uri: String,
     pub target_parse_key: String,
     pub content: String, // resolved figure content
-    pub proof_version: String,
+    pub mdloom_version: String,
     pub created_at: u64,
 }
 
 /// Compute the Tier 2 resolve key.
 pub fn resolve_key(target_parse_key: &str, uri: &str) -> String {
-    compute_key(&[target_parse_key, uri, proof_version()])
+    compute_key(&[target_parse_key, uri, mdloom_version()])
 }
 
 /// Load a Tier 2 resolve cache entry. Returns `None` on miss.
@@ -327,7 +327,7 @@ pub fn store_resolve_cache(
         uri: uri.to_string(),
         target_parse_key,
         content: content.to_string(),
-        proof_version: proof_version().to_string(),
+        mdloom_version: mdloom_version().to_string(),
         created_at: epoch_ms(),
     };
     save_resolve_cache(root, &entry);
@@ -355,7 +355,7 @@ fn snapshot_dir(root: &Path, name: &str) -> PathBuf {
 pub struct SnapshotManifest {
     pub name: String,
     pub created_at: u64,
-    pub proof_version: String,
+    pub mdloom_version: String,
     /// Source file paths covered by this snapshot, in compile-cache enumeration order.
     pub files: Vec<String>,
     /// Per-file three-tier keys. For each file: parse key, resolve keys (one per
@@ -458,7 +458,7 @@ pub fn snapshot_save(root: &Path, name: &str) -> std::io::Result<SnapshotManifes
     let mut manifest = SnapshotManifest {
         name: name.to_string(),
         created_at: epoch_ms(),
-        proof_version: proof_version().to_string(),
+        mdloom_version: mdloom_version().to_string(),
         files: files.clone(),
         tiers: tiers.clone(),
         total_size,
@@ -652,11 +652,11 @@ fn load_snapshot_manifest(snap_root: &Path) -> Option<SnapshotManifest> {
 }
 
 fn compute_integrity_hash(manifest: &SnapshotManifest) -> String {
-    // Canonicalize: name + created_at + proof_version + sorted files + sorted tier keys.
+    // Canonicalize: name + created_at + mdloom_version + sorted files + sorted tier keys.
     let mut parts: Vec<String> = vec![
         manifest.name.clone(),
         manifest.created_at.to_string(),
-        manifest.proof_version.clone(),
+        manifest.mdloom_version.clone(),
         manifest.total_size.to_string(),
     ];
     let mut files = manifest.files.clone();
@@ -787,7 +787,7 @@ mod tests {
             output_path: "docs/foo.md".to_string(),
             compiled_text: "# Hello\n".to_string(),
             resolved_uris: vec!["md://data.md".to_string()],
-            proof_version: proof_version().to_string(),
+            mdloom_version: mdloom_version().to_string(),
             created_at: epoch_ms(),
             directives_resolved: 3,
         };
@@ -814,7 +814,7 @@ mod tests {
             output_path: output_path.to_string(),
             compiled_text: text.to_string(),
             resolved_uris: vec![],
-            proof_version: proof_version().to_string(),
+            mdloom_version: mdloom_version().to_string(),
             created_at: epoch_ms(),
             directives_resolved: 1,
         };
@@ -958,7 +958,7 @@ mod tests {
             "output_path": "docs/x.md",
             "compiled_text": "old",
             "resolved_uris": [],
-            "proof_version": "0.5.0",
+            "mdloom_version": "0.5.0",
             "created_at": 0
         }"#;
         std::fs::write(compile_dir(root).join("oldkey.json"), raw).unwrap();
@@ -993,7 +993,7 @@ mod tests {
             uri: "md://fig.md#:0".to_string(),
             target_parse_key: "pkey1".to_string(),
             content: "```\nfigure\n```".to_string(),
-            proof_version: proof_version().to_string(),
+            mdloom_version: mdloom_version().to_string(),
             created_at: epoch_ms(),
         };
         save_resolve_cache(root, &entry);

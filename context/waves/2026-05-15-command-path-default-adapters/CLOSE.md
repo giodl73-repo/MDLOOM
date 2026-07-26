@@ -13,7 +13,7 @@ a pure command match.
 - Moved check/default-check path fallback rules into `cmd_check`.
 - Narrowed check internals further by making check flags, options, and low-level
   runner functions module-private.
-- Kept the root `proof PATH` default-check behavior unchanged.
+- Kept the root `mdloom PATH` default-check behavior unchanged.
 
 ## Validation
 
@@ -23,7 +23,7 @@ a pure command match.
 - `cargo test binary_stats_by_tag_reports_source_frontmatter`
 - `cargo test binary_help_documents_progress_only_for_compile`
 - `cargo test binary_check_summary_file_count_honors_include_exclude`
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 
 The sibling `mdpath` crate still emits its known warning set during workspace
 test/build; this wave did not change sibling repository code.

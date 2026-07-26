@@ -2,16 +2,16 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof pin` argument shape
+Continue modularizing the CLI shell by moving the `mdloom pin` argument shape
 into the pin command module.
 
 ## Changes
 
-- Added `cmd_pin::Args` with the clap argument definitions for `proof pin`.
+- Added `cmd_pin::Args` with the clap argument definitions for `mdloom pin`.
 - Replaced the inline `Command::Pin { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_pin::Args`.
 - Kept DaVinci pinning behavior in `cmd_pin::run` unchanged.
-- Preserved the pin CLI regression that appends a DaVinci entry to `proof.toml`.
+- Preserved the pin CLI regression that appends a DaVinci entry to `mdloom.toml`.
 
 ## Validation
 

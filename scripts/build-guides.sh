@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-guides.sh — Compile all proof guides from src/guides/ to docs/guides/
+# build-guides.sh — Compile all mdloom guides from src/guides/ to docs/guides/
 #
 # Usage:
 #   scripts/build-guides.sh           # compile all guides
@@ -14,9 +14,9 @@ OUT_DIR="${REPO_ROOT}/docs/guides"
 
 # Workspace target dir is one level up from the repo root
 WORKSPACE_TARGET="${REPO_ROOT}/../target"
-PROOF="${WORKSPACE_TARGET}/debug/proof"
-if [ ! -f "${PROOF}" ] && [ ! -f "${PROOF}.exe" ]; then
-    PROOF="${REPO_ROOT}/target/debug/proof"
+MDLOOM="${WORKSPACE_TARGET}/debug/mdloom"
+if [ ! -f "${MDLOOM}" ] && [ ! -f "${MDLOOM}.exe" ]; then
+    MDLOOM="${REPO_ROOT}/target/debug/mdloom"
 fi
 
 CHECK_ONLY=false
@@ -32,15 +32,15 @@ for arg in "$@"; do
     esac
 done
 
-if [ ! -f "${PROOF}" ] && [ ! -f "${PROOF}.exe" ]; then
-    echo "proof binary not found. Build from workspace root: cd C:/src && cargo build"
+if [ ! -f "${MDLOOM}" ] && [ ! -f "${MDLOOM}.exe" ]; then
+    echo "mdloom binary not found. Build from workspace root: cd C:/src && cargo build"
     exit 1
 fi
 
 mkdir -p "${OUT_DIR}"
 
 echo ""
-echo "proof guide build"
+echo "mdloom guide build"
 echo "  source: ${SRC_DIR}"
 echo "  output: ${OUT_DIR}"
 echo ""
@@ -53,10 +53,10 @@ if [ -n "$FILTER" ]; then
         [[ "$base" == *"${FILTER}"* ]] || continue
         echo "  compiling: ${base}"
         if $CHECK_ONLY; then
-            "${PROOF}" compile --check --root "${REPO_ROOT}" "${src}" 2>&1 \
+            "${MDLOOM}" compile --check --root "${REPO_ROOT}" "${src}" 2>&1 \
                 && echo "    [ok]" || { echo "    [FAIL]"; ERRORS=$((ERRORS+1)); }
         else
-            if "${PROOF}" compile --root "${REPO_ROOT}" --output-dir "${OUT_DIR}" "${src}" 2>&1; then
+            if "${MDLOOM}" compile --root "${REPO_ROOT}" --output-dir "${OUT_DIR}" "${src}" 2>&1; then
                 COMPILED=$((COMPILED+1))
             else
                 ERRORS=$((ERRORS+1))
@@ -70,9 +70,9 @@ if [ -n "$FILTER" ]; then
 else
     # No filter: compile the whole directory in one shot
     if $CHECK_ONLY; then
-        "${PROOF}" compile --check --root "${REPO_ROOT}" "${SRC_DIR}" 2>&1
+        "${MDLOOM}" compile --check --root "${REPO_ROOT}" "${SRC_DIR}" 2>&1
     else
-        "${PROOF}" compile --root "${REPO_ROOT}" --output-dir "${OUT_DIR}" "${SRC_DIR}" 2>&1
+        "${MDLOOM}" compile --root "${REPO_ROOT}" --output-dir "${OUT_DIR}" "${SRC_DIR}" 2>&1
         echo ""
         echo "compiled all guides → ${OUT_DIR}"
     fi

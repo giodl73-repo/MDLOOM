@@ -3,7 +3,7 @@
 ## Mission
 
 Continue the command-module split by extracting the tree generation command
-family, `proof tree`.
+family, `mdloom tree`.
 
 ## Changes
 
@@ -12,7 +12,7 @@ family, `proof tree`.
   command implementation.
 - Moved dirtree generation, schema-driven tree generation, source resolution,
   output-file handling, and tree-specific helper imports out of `main.rs`.
-- Added a CLI regression that runs `proof tree generate` against a temporary
+- Added a CLI regression that runs `mdloom tree generate` against a temporary
   directory and verifies dirtree output.
 
 ## Validation
@@ -27,5 +27,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof spec-generate`, `proof compile`, and `proof layout` remain in `main.rs`;
+`mdloom spec-generate`, `mdloom compile`, and `mdloom layout` remain in `main.rs`;
 `spec-generate` is the next medium-sized extraction candidate.

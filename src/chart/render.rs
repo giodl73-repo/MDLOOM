@@ -47,7 +47,7 @@ pub struct ChartPoint {
     pub extras: Vec<f64>,
 }
 
-/// Parsed attributes for a proof:chart directive.
+/// Parsed attributes for a mdloom:chart directive.
 #[derive(Debug, Clone)]
 pub struct ChartAttrs {
     pub kind: ChartKind,
@@ -108,7 +108,7 @@ pub fn render_chart(data: &ChartData, attrs: &ChartAttrs) -> Result<Vec<String>,
     Ok(lines)
 }
 
-/// Parse the body of a proof:chart directive: lines of `label: value` pairs.
+/// Parse the body of a mdloom:chart directive: lines of `label: value` pairs.
 /// The value side may be a single number (`label: 42`) or a comma-separated
 /// list (`label: 1, 2, 3, 4`) for multi-value kinds (candlestick, gantt,
 /// scatter, heatmap). The first number becomes `value`; the rest go to

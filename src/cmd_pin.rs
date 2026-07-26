@@ -21,7 +21,7 @@ pub(crate) struct Args {
     /// Root directory (default: current directory)
     #[arg(long)]
     root: Option<PathBuf>,
-    /// Config file to update (default: proof.toml in current directory)
+    /// Config file to update (default: mdloom.toml in current directory)
     #[arg(long)]
     config_file: Option<PathBuf>,
 }
@@ -37,7 +37,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
         config_file,
     } = args;
     let root = root.unwrap_or_else(|| std::env::current_dir().unwrap());
-    let config_path = config_file.unwrap_or_else(|| root.join("proof.toml"));
+    let config_path = config_file.unwrap_or_else(|| root.join("mdloom.toml"));
 
     let parsed = mdpath::parse(&uri).map_err(|e| anyhow::anyhow!("invalid md:// URI: {}", e))?;
     let element = mdpath::resolve(&parsed, &root)
@@ -86,7 +86,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
     }
     eprintln!();
     eprintln!("Add invariants to {}", config_path.display());
-    eprintln!("Then run: proof check --daVinci .");
+    eprintln!("Then run: mdloom check --daVinci .");
 
     Ok(())
 }

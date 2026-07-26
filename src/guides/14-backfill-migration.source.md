@@ -1,6 +1,6 @@
 # Backfill Migration Guide
 
-`proof backfill` is the bridge from an existing markdown corpus to proof-owned
+`mdloom backfill` is the bridge from an existing markdown corpus to mdloom-owned
 source. It is designed for MAXIM-style libraries: large, valuable `.md` trees
 where preserving current content is more important than guessing perfect
 semantics on the first pass.
@@ -13,7 +13,7 @@ Backfill is literal-first. The first generated `.source.md` should compile back
 to the original markdown, carry provenance, and produce a report that tells a
 reviewer what can be promoted later.
 
-```proof:tree kind=dependency
+```mdloom:tree kind=dependency
 root: Backfill migration
 - Inventory: scan existing .md files
 - Literal source: generate .source.md without losing content
@@ -29,12 +29,12 @@ root: Backfill migration
 Start with a separate output source tree so existing documents remain untouched.
 
 ```bash
-proof backfill docs/ --output-source proof-source/ --literal-first --check-roundtrip
+mdloom backfill docs/ --output-source mdloom-source/ --literal-first --check-roundtrip
 ```
 
 Expected outputs:
 
-- generated `.source.md` files in `proof-source/`
+- generated `.source.md` files in `mdloom-source/`
 - provenance frontmatter with `ops = ["backfill"]`
 - `backfill-report.json`
 - round-trip status for each file when `--check-roundtrip` is set
@@ -70,26 +70,26 @@ When the literal pass is clean, extract obvious markdown pipe tables into
 sidecar data while preserving the source body.
 
 ```bash
-proof backfill docs/ --output-source proof-source/ --extract-tables --check-roundtrip
+mdloom backfill docs/ --output-source mdloom-source/ --extract-tables --check-roundtrip
 ```
 
 This should write sidecar files such as:
 
 ```text
-proof-source/
+mdloom-source/
   guide.source.md
   guide.tables.json
   backfill-report.json
 ```
 
 The source stays readable; the sidecar gives future waves a stable data source
-for `proof:table`, `proof:row`, `proof:tree`, and `proof:chart` promotion.
+for `mdloom:table`, `mdloom:row`, `mdloom:tree`, and `mdloom:chart` promotion.
 
 ---
 
 ## Cutover checklist
 
-Before replacing hand-authored markdown with proof-owned source:
+Before replacing hand-authored markdown with mdloom-owned source:
 
 1. The literal pass round-trips.
 2. The backfill report has no unreviewed high-risk ambiguous blocks.

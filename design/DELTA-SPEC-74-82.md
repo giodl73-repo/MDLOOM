@@ -5,7 +5,7 @@
 
 ---
 
-## #74 — proof:chart compile directive
+## #74 — mdloom:chart compile directive
 
 **Status in existing spec:** CHART-SPEC.md (744 lines) and CHART-IMPL-PLAN.md (789 lines)  
 cover the full chart system in detail. No delta needed — read those.
@@ -19,12 +19,12 @@ Defer: scatter, heatmap, stacked-bar, waterfall, gantt, area, candlestick, sanke
 
 ---
 
-## #75 — proof check --unused
+## #75 — mdloom check --unused
 
 ### What it does
 
 Scans the corpus for figures (`.md` files in source directories) that are never
-referenced by any `.source.md` file via `proof:include` or `proof:layout`.
+referenced by any `.source.md` file via `mdloom:include` or `mdloom:layout`.
 
 Reports as a warning per unused file:
 
@@ -36,7 +36,7 @@ docs/figures/old-arch.md:1:1  warning  md_unused_figure  Figure never referenced
 
 "Figure" means any `.md` file that:
 - Lives under a `source_dir` declared in `[[compile]]`
-- OR ends with a figure-like pattern (configurable via `figure_dirs` in proof.toml)
+- OR ends with a figure-like pattern (configurable via `figure_dirs` in mdloom.toml)
 
 Compiled `.md` output files are **not** checked — only the resolved figures that
 source documents would include.
@@ -44,8 +44,8 @@ source documents would include.
 ### Invocation
 
 ```bash
-proof check . --unused           # includes unused figure warnings in normal check
-proof check . --unused-only      # only report unused figures (suppress all other checks)
+mdloom check . --unused           # includes unused figure warnings in normal check
+mdloom check . --unused-only      # only report unused figures (suppress all other checks)
 ```
 
 `--unused` is off by default (it requires a full corpus walk and is slow on large repos).
@@ -53,7 +53,7 @@ proof check . --unused-only      # only report unused figures (suppress all othe
 ### Algorithm
 
 1. Walk all `.source.md` files in the corpus
-2. Collect every `md://` URI found in `proof:include` and `proof:layout` directives
+2. Collect every `md://` URI found in `mdloom:include` and `mdloom:layout` directives
 3. Resolve each URI to an absolute file path
 4. Walk all `.md` files that could be figures (source dirs, or explicit figure_dirs)
 5. Report any that appear in step 4 but not in step 3
@@ -64,28 +64,28 @@ proof check . --unused-only      # only report unused figures (suppress all othe
 
 ---
 
-## #76 — proof status
+## #76 — mdloom status
 
 ### What it does
 
 Single-screen corpus health summary. No deep analysis — fast stat collection.
 
 ```bash
-proof status [dir]
+mdloom status [dir]
 ```
 
 Output format:
 
 ```
-proof status — C:\src\maxim
+mdloom status — C:\src\maxim
 
   Sources       2,703 files
   Compiled      2,703 files
   Stale           12 files  (source newer than output)
-  Errors           0        (last proof check)
-  Warnings        47        (last proof check)
+  Errors           0        (last mdloom check)
+  Warnings        47        (last mdloom check)
   Last compile    2026-04-28 14:23 (3 hours ago)
-  Config          proof.toml (root=true, 4 schemas, 2 compile targets)
+  Config          mdloom.toml (root=true, 4 schemas, 2 compile targets)
 ```
 
 ### Implementation
@@ -93,13 +93,13 @@ proof status — C:\src\maxim
 - "Sources" = count of `.source.md` files under configured `source_dir` paths
 - "Compiled" = count of corresponding `.md` output files that exist
 - "Stale" = sources where `source.mtime > output.mtime` (or output missing)
-- "Errors/Warnings" = read from a `.proof/last-check.json` cache file written by `proof check`
+- "Errors/Warnings" = read from a `.mdloom/last-check.json` cache file written by `mdloom check`
 - "Last compile" = mtime of the newest compiled output file
-- "Config" = summary of active proof.toml settings
+- "Config" = summary of active mdloom.toml settings
 
-### Cache file `.proof/last-check.json`
+### Cache file `.mdloom/last-check.json`
 
-`proof check` writes this after every run:
+`mdloom check` writes this after every run:
 
 ```json
 {
@@ -110,7 +110,7 @@ proof status — C:\src\maxim
 }
 ```
 
-`proof status` reads this if present, shows "(cached)" label; omits error/warning
+`mdloom status` reads this if present, shows "(cached)" label; omits error/warning
 counts if the file doesn't exist.
 
 ---
@@ -159,7 +159,7 @@ total canvas height is still `height`).
 
 ---
 
-## #78 — proof:slide layout=agenda
+## #78 — mdloom:slide layout=agenda
 
 ### What it does
 
@@ -167,7 +167,7 @@ Auto-generates an agenda slide from all `layout=section` slides in the deck.
 The agenda lists each section title as a bullet.
 
 ```markdown
-```proof:slide layout=agenda
+```mdloom:slide layout=agenda
 title: "Agenda"
 ```
 ```
@@ -176,7 +176,7 @@ title: "Agenda"
 
 1. Parser scans all slides in the deck for `layout=section`
 2. Collects their `title` values in order
-3. Renders as a `title-content` layout with `proof:bullets` body listing each title
+3. Renders as a `title-content` layout with `mdloom:bullets` body listing each title
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -237,16 +237,16 @@ cascade, it is forbidden for all files that inherit that level.
 
 ---
 
-## #80 — proof:blockquote
+## #80 — mdloom:blockquote
 
 ### What it does
 
-A prose document block quote — the document-context counterpart to `proof:quote`
-(which is slide-only and centered). `proof:blockquote` renders as a visually
+A prose document block quote — the document-context counterpart to `mdloom:quote`
+(which is slide-only and centered). `mdloom:blockquote` renders as a visually
 indented block with a left-margin bar, suitable for inline document prose.
 
 ```markdown
-```proof:blockquote attribution="Donald Knuth"
+```mdloom:blockquote attribution="Donald Knuth"
 Premature optimization is the root of all evil.
 ```
 ```
@@ -275,9 +275,9 @@ Premature optimization is the root of all evil.
 
 None. All valid inputs render.
 
-### Distinction from proof:quote
+### Distinction from mdloom:quote
 
-| | `proof:quote` | `proof:blockquote` |
+| | `mdloom:quote` | `mdloom:blockquote` |
 |-|---------------|--------------------|
 | Context | Slides only | Prose documents |
 | Alignment | Centered with curly quotes | Left-aligned with bar margin |
@@ -347,10 +347,10 @@ work. Only the **default** (when no ratio is specified) changes.
 |------|-----------|------------|
 | #74 chart | CHART-SPEC.md + CHART-IMPL-PLAN.md | Read existing — no delta needed |
 | #75 --unused | This file (new) | New feature |
-| #76 proof status | This file (new) | New command |
+| #76 mdloom status | This file (new) | New command |
 | #77 slide footer | SLIDE-SPEC.md | Additive section |
 | #78 agenda slide | SLIDE-SPEC.md | New layout |
 | #79 forbidden_h2 | SPEC.md | Additive config field |
-| #80 proof:blockquote | This file (new) | New directive |
+| #80 mdloom:blockquote | This file (new) | New directive |
 | #81 progress indicator | SLIDE-SPEC.md | Additive front-matter option |
 | #82 two-column ratio | SLIDE-SPEC.md | Default value change |

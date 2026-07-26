@@ -2,12 +2,12 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof draft` argument shape
+Continue modularizing the CLI shell by moving the `mdloom draft` argument shape
 into the draft command module.
 
 ## Changes
 
-- Added `cmd_draft::Args` with the clap argument definitions for `proof draft`.
+- Added `cmd_draft::Args` with the clap argument definitions for `mdloom draft`.
 - Replaced the inline `Command::Draft { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_draft::Args`.
 - Kept default path handling in `main.rs` through the shared `paths_or_cwd`

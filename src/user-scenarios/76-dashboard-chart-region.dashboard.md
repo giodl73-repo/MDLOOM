@@ -1,6 +1,6 @@
-<!-- proof:compiled from="proof:dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" -->
 ```dashboard
-PROOF release health
+MDLOOM release health
 
 v0.1  │ █████                                    12
 v0.2  │ ██████                                   15
@@ -13,4 +13,4 @@ v0.7  │ ███████████████████████�
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

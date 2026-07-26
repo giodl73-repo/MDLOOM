@@ -25,5 +25,5 @@ backfill vision, then add missing review coverage.
 
 ## Carry-forward
 
-Use BACKFILL whenever reviewing `proof backfill`, markdown-to-source migration,
+Use BACKFILL whenever reviewing `mdloom backfill`, markdown-to-source migration,
 extraction confidence, round-trip comparison, or source-of-truth cutover plans.

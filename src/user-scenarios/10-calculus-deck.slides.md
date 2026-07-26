@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=9 -->
+<!-- mdloom:compiled from="mdloom:slides" count=9 -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────────────────────────── 1/9
                                                                                 
@@ -208,4 +208,4 @@ SLIDE 9 ────────────────────────
                                                                                 
                                                                                 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

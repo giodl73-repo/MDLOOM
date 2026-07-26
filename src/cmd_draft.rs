@@ -2,9 +2,9 @@ use crate::cmd_context::GlobalOptions;
 use crate::cmd_paths::paths_or_cwd;
 use anyhow::Result;
 use colored::Colorize;
-use proof_lib::draft::build_draft_plan;
-use proof_lib::lint::lint_paths;
-use proof_lib::Severity;
+use mdloom_lib::draft::build_draft_plan;
+use mdloom_lib::lint::lint_paths;
+use mdloom_lib::Severity;
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -69,8 +69,8 @@ fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {
         "  1. Open {} — AI fills in `decision` and `new_string` for non-auto groups",
         output.display()
     );
-    eprintln!("  2. proof fix --plan {} --dry-run", output.display());
-    eprintln!("  3. proof fix --plan {}", output.display());
+    eprintln!("  2. mdloom fix --plan {} --dry-run", output.display());
+    eprintln!("  3. mdloom fix --plan {}", output.display());
 
     Ok(())
 }

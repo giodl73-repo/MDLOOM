@@ -17,7 +17,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before wave | After |
 |---|---:|---:|
@@ -30,4 +30,4 @@ status: complete
 1. Remaining MAXIM signal is mostly `ascii_cell_padding`.
 2. The remaining 61 `ascii_box_col` warnings should be sampled separately; they
    are no longer dominated by row-separator/embedded-border noise.
-3. Sibling `mdpath` warnings remain external to proof.
+3. Sibling `mdpath` warnings remain external to mdloom.

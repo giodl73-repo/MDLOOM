@@ -1,12 +1,12 @@
-# proof layout — ASCII Art Collage Composer v0.2
+# mdloom layout — ASCII Art Collage Composer v0.2
 
-**Status:** ✅ Implemented — `src/layout.rs`. `proof layout` CLI command and `proof:layout` compile directive both live. Side-by-side, stacked, and grid arrangements with configurable gap, alignment, direction, and labels.
+**Status:** ✅ Implemented — `src/layout.rs`. `mdloom layout` CLI command and `mdloom:layout` compile directive both live. Side-by-side, stacked, and grid arrangements with configurable gap, alignment, direction, and labels.
 
 ---
 
 ## What it is
 
-`proof layout` takes N figures (via `md://` URIs or inline content) and arranges
+`mdloom layout` takes N figures (via `md://` URIs or inline content) and arranges
 them side-by-side in a single fenced code block — like a wall of picture frames.
 The output is a clean, aligned ASCII art composition that fits naturally in wide
 markdown files, documentation, and presentations.
@@ -23,7 +23,7 @@ engine, authors copy-paste figures and manually align them, which:
 - Requires painstaking space counting to align rows
 - Breaks when a source figure changes width
 
-`proof layout` solves this by fetching figures by stable `md://` address and composing
+`mdloom layout` solves this by fetching figures by stable `md://` address and composing
 them programmatically with correct alignment.
 
 ---
@@ -32,30 +32,30 @@ them programmatically with correct alignment.
 
 ```bash
 # Compose 3 figures side-by-side, 4-space gap
-proof layout \
+mdloom layout \
     "md://languages/10-GO.md#concurrency-model:0" \
     "md://languages/09-RUST.md#ownership-model:0" \
     "md://languages/05-CSHARP.md#async-model:0" \
     --gap 4
 
 # From file paths (no md:// needed)
-proof layout fig1.md fig2.md fig3.md --gap 3
+mdloom layout fig1.md fig2.md fig3.md --gap 3
 
 # With labels above each frame
-proof layout \
+mdloom layout \
     "md://fig1.md#:0" \
     "md://fig2.md#:0" \
     --gap 4 \
     --labels "Go Concurrency" "Rust Ownership"
 
 # Output to file
-proof layout fig1.md fig2.md --gap 3 -o layout.md
+mdloom layout fig1.md fig2.md --gap 3 -o layout.md
 
 # In a presentation: 200-column wide layout, 3 columns
-proof layout *.fig.md --gap 4 --cols 3 --width 200
+mdloom layout *.fig.md --gap 4 --cols 3 --width 200
 
 # Vertical stacking (default is horizontal)
-proof layout fig1.md fig2.md --direction vertical --gap 2
+mdloom layout fig1.md fig2.md --direction vertical --gap 2
 ```
 
 ---
@@ -146,7 +146,7 @@ Wrap the composition in a ` ``` ` fence:
 
 **Command:**
 ```bash
-proof layout \
+mdloom layout \
     "md://languages/10-GO.md#type-system-snapshot:table:0" \
     "md://languages/09-RUST.md#type-system-snapshot:table:0" \
     "md://languages/05-CSHARP.md#type-system-snapshot:table:0" \
@@ -169,12 +169,12 @@ Type system  | Structural   Type system  | Affine      Type system  | Nominal
 
 ---
 
-## The `proof:layout` directive (compile mode)
+## The `mdloom:layout` directive (compile mode)
 
 When used inside a source document, the layout directive is a fenced block:
 
 ````markdown
-```proof:layout gap=4 align=top labels="Go,Rust,C#"
+```mdloom:layout gap=4 align=top labels="Go,Rust,C#"
 md://languages/10-GO.md#type-system-snapshot:table:0
 md://languages/09-RUST.md#type-system-snapshot:table:0
 md://languages/05-CSHARP.md#type-system-snapshot:table:0
@@ -199,7 +199,7 @@ the composed content is already ready to embed).
 
 ### Cache key for layout config
 
-When a source document uses `proof:layout`, the compile cache key includes a
+When a source document uses `mdloom:layout`, the compile cache key includes a
 `layout_config_hash`. This hash is computed from the **normalized** attribute set —
 all defaults are filled in before hashing. This guarantees that `gap=3` (explicit)
 and `gap` (omitted, using the default of 3) produce the same hash.
@@ -231,7 +231,7 @@ For 200-column wide presentations, the layout engine can fill the available spac
 intelligently:
 
 ```bash
-proof layout fig1.md fig2.md fig3.md fig4.md \
+mdloom layout fig1.md fig2.md fig3.md fig4.md \
     --width 200 \
     --gap 4 \
     --cols 4      # all 4 side-by-side
@@ -241,7 +241,7 @@ If figures don't fit in `--width`, the layout wraps to multiple rows. Lone figur
 the last row are left-aligned (not stretched to fill the row width):
 
 ```bash
-proof layout *.fig.md --width 200 --gap 3 --cols 3
+mdloom layout *.fig.md --width 200 --gap 3 --cols 3
 # Row 1: fig1 fig2 fig3
 # Row 2: fig4 fig5 fig6
 # Row 3: fig7            ← left-aligned, not stretched
@@ -266,7 +266,7 @@ figures/
     csharp-types.md
 ```
 
-**`proof figures .`** — list all figure files, their DaVinci status, and which
+**`mdloom figures .`** — list all figure files, their DaVinci status, and which
 documents include them:
 
 ```
@@ -285,13 +285,13 @@ figures/type-systems/go-types.md#:0
 
 ---
 
-## Integration with proof compile
+## Integration with mdloom compile
 
-The layout engine is the core primitive that `proof compile` uses. When a
-source document contains a `proof:layout` directive, the compile step:
+The layout engine is the core primitive that `mdloom compile` uses. When a
+source document contains a `mdloom:layout` directive, the compile step:
 1. Resolves each URI (with Tier 2 cache) → gets fence content (delimiters stripped)
 2. Calls the layout engine with the resolved content lines
-3. Replaces the `proof:layout` directive block with the composed output inline
+3. Replaces the `mdloom:layout` directive block with the composed output inline
 4. Caches the result (Tier 3 cache key includes layout config hash)
 
 Changes to any figure in a layout → Tier 2 cache miss → Tier 3 cache miss →

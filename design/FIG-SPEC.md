@@ -2,16 +2,16 @@
 
 The `md://` URI scheme provides stable, named addresses for individual elements
 (diagrams, charts, tables, code blocks, and prose) within markdown documents.
-It is the foundation of proof's DaVinci protection tier, cross-file consistency
+It is the foundation of mdloom's DaVinci protection tier, cross-file consistency
 checks, and stable error reporting.
 
 `md://` is an open addressing scheme — any tool (editors, CI systems, AI agents)
-can implement a resolver. `proof` is the reference implementation.
+can implement a resolver. `mdloom` is the reference implementation.
 
 The scheme describes the resource type (markdown content), not the resolver —
 the same principle as `http://` being independent of which browser opens it.
 
-**Status:** Design — implementation in progress in proof.
+**Status:** Design — implementation in progress in mdloom.
 
 ---
 
@@ -33,7 +33,7 @@ across edits, readable without opening the file, and natural for humans and AI.
 | Section | Heading text (normalized) | `#concurrency-model` |
 | Subsection | Parent heading / child heading | `#section/sub-section` |
 
-When proof generates a URI (error output, fix plans, `proof pin`), it always
+When mdloom generates a URI (error output, fix plans, `mdloom pin`), it always
 resolves to the named form first. Numeric fallback only when no name exists:
 
 ```
@@ -51,7 +51,7 @@ md://languages/10-GO.md#concurrency-model:figure:2
 ```
 md://path[#heading-path][:[type[.kind]:]selector][sub-selector][?query]
 
-path          = file path relative to proof root (.md file)
+path          = file path relative to mdloom root (.md file)
 heading-path  = segment[/segment]*   (parent/child heading hierarchy)
 segment       = GitHub-normalized heading text (lowercase, spaces→dashes)
 type          = figure | table | chart | text | heading
@@ -218,7 +218,7 @@ fall back to substring. Error `md_label_ambiguous` if multiple matches.
 
 ## Use in Error Reporting
 
-Every proof diagnostic carries a `uri` field with the md:// address of the
+Every mdloom diagnostic carries a `uri` field with the md:// address of the
 containing element. This makes errors:
 
 - **Stable** — survives line number changes
@@ -257,7 +257,7 @@ and fills `new_string` with the precise fix — no file-hunting required.
 
 ### Fix plan grouping
 
-`proof draft` groups all diagnostics sharing the same md:// base URI into one
+`mdloom draft` groups all diagnostics sharing the same md:// base URI into one
 fix group. All errors inside `goroutine-scheduler` figure = one group, one
 AI decision, one `decision` field in the plan.
 
@@ -289,7 +289,7 @@ protection = "error"
 
 ## Resolution Algorithm
 
-1. Locate file at `path` relative to proof root.
+1. Locate file at `path` relative to mdloom root.
 2. Parse into heading hierarchy. Walk `heading-path` segments to find the target section.
    If no heading path: whole file is the section.
 3. If type is absent and selector is absent: return the section.
@@ -334,13 +334,13 @@ kind = "figure.flowchart"
 ## CLI Commands
 
 ```bash
-proof resolve "md://..."                    # print element + metadata
-proof check "md://..."                      # validate against invariants
-proof pin "md://..." --id name --template t # register as DaVinci
-proof spec generate "md://..."              # AI generates invariants
-proof spec template "md://..."              # AI generates template YAML
-proof pin list                              # list all DaVinci elements
-proof scan . --suggest-daVinci              # suggest candidates for pinning
+mdloom resolve "md://..."                    # print element + metadata
+mdloom check "md://..."                      # validate against invariants
+mdloom pin "md://..." --id name --template t # register as DaVinci
+mdloom spec generate "md://..."              # AI generates invariants
+mdloom spec template "md://..."              # AI generates template YAML
+mdloom pin list                              # list all DaVinci elements
+mdloom scan . --suggest-daVinci              # suggest candidates for pinning
 ```
 
 ---
@@ -398,8 +398,8 @@ rules = ["same-box-count", "same-box-width"]
 
 ## Design Decisions
 
-**`md://` not `proof://`**: The scheme names the resource type, not the resolver.
-Any tool can implement an `md://` resolver. proof is the reference implementation.
+**`md://` not `mdloom://`**: The scheme names the resource type, not the resolver.
+Any tool can implement an `md://` resolver. mdloom is the reference implementation.
 
 **Strings over numbers**: Names are stable; numbers are not. Named URIs survive
 document editing; numeric URIs break whenever content is added above.
@@ -421,7 +421,7 @@ stable, groupable, and directly addressable by AI fix agents.
 ## Future Work
 
 - `md://` resolver as standalone library crate (editor plugins, GitHub Actions)
-- `proof diff md://A md://B` — diff two elements
+- `mdloom diff md://A md://B` — diff two elements
 - Cross-repo references: `md://repo:path#heading`
 - Watch mode: re-validate DaVinci on file change
 - Editor hover: show `md://` address + invariants for element under cursor

@@ -24,7 +24,7 @@ tested against a canonical test suite — not referenced as "GitHub-compatible."
 
 **Pattern:** A code block with a language info string (` ```python `) starts
 with `def foo():` — text-only, no box chars. The label detector incorrectly
-identifies `def foo():` as the figure label, and `proof pin` registers it.
+identifies `def foo():` as the figure label, and `mdloom pin` registers it.
 
 Later, `md://file.md#section:figure:my-function` resolves to the Python code
 block, not the diagram it was supposed to address.
@@ -100,7 +100,7 @@ picking first. Authors must use a more specific selector.
 
 ## MP-06: Numeric URI breaks when label added later
 
-**Pattern:** A figure has no label when first pinned. proof generates
+**Pattern:** A figure has no label when first pinned. mdloom generates
 `md://file.md#section:figure:0`. Later, an author adds an inline label
 `GOROUTINE SCHEDULER` to the figure. The figure now has a name, but the
 DaVinci entry still uses `:0`.
@@ -111,9 +111,9 @@ Two problems:
 2. If another figure is added ABOVE this one in the same section, `:0`
    now addresses the WRONG figure silently
 
-**Structural solution:** When proof resolves a numeric URI and discovers the
+**Structural solution:** When mdloom resolves a numeric URI and discovers the
 element now HAS a label, emit a warning: `[md_numeric_uri_stale]` with the
-named form. `proof pin` should refuse to register a numeric URI if a named
+named form. `mdloom pin` should refuse to register a numeric URI if a named
 form is available.
 
 **Status:** OPEN — warning not yet implemented

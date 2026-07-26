@@ -140,7 +140,7 @@ pub(crate) fn compile_toc(
             *resolved_count += 1;
             let toc = generate_toc(&content, max_depth, style, section.map(|s| s.as_str()));
             format!(
-                "<!-- proof:compiled from=\"proof:toc\" -->\n{}\n<!-- /proof:compiled -->",
+                "<!-- mdloom:compiled from=\"mdloom:toc\" -->\n{}\n<!-- /mdloom:compiled -->",
                 toc
             )
         }

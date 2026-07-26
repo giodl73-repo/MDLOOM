@@ -5,21 +5,21 @@ slides:
   show-numbers: true
 ---
 
-```proof:slide layout=title title="v0.7 — the spec-honesty release"
+```mdloom:slide layout=title title="v0.7 — the spec-honesty release"
 ```
 
 ---
 
-```proof:slide layout=stats title="Wave summary"
-proof:stat 18 Tasks shipped
-proof:stat 8 New chart kinds
-proof:stat 793 Tests green
+```mdloom:slide layout=stats title="Wave summary"
+mdloom:stat 18 Tasks shipped
+mdloom:stat 8 New chart kinds
+mdloom:stat 793 Tests green
 ```
 
 ---
 
-```proof:slide layout=title-content title="Eight new chart kinds"
-proof:bullets
+```mdloom:slide layout=title-content title="Eight new chart kinds"
+mdloom:bullets
 - area, stacked-bar, waterfall (bar/line variants)
 - scatter, heatmap (2D)
 - candlestick, gantt, timeline (time series)
@@ -28,7 +28,7 @@ proof:bullets
 
 ---
 
-```proof:slide layout=comparison title="Spec status — before vs after"
+```mdloom:slide layout=comparison title="Spec status — before vs after"
 ## axis:x release
 ## axis:y honesty
 ## q:tl
@@ -47,5 +47,5 @@ proof:bullets
 
 ---
 
-```proof:slide layout=section title="Next: real-world soak"
+```mdloom:slide layout=section title="Next: real-world soak"
 ```

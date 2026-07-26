@@ -19,9 +19,9 @@ files.
 
 ---
 
-## I-2: Named over numeric — proof never emits a numeric URI when a name exists
+## I-2: Named over numeric — mdloom never emits a numeric URI when a name exists
 
-**Claim:** When proof generates an `md://` URI (for error output, `proof pin`,
+**Claim:** When mdloom generates an `md://` URI (for error output, `mdloom pin`,
 fix plans), it always uses the named selector form if the element has a label.
 A numeric URI is only emitted when no label can be detected.
 
@@ -30,7 +30,7 @@ Named URIs are stable. Automatically emitting named URIs is the primary stabilit
 mechanism.
 
 **Test:** Pin a labeled figure → emitted URI contains the label. Pin an unlabeled
-figure → emitted URI contains `:N`. Add label later → `proof pin --update` emits named form.
+figure → emitted URI contains `:N`. Add label later → `mdloom pin --update` emits named form.
 
 ---
 
@@ -62,11 +62,11 @@ all numeric URIs from other tools.
 
 ## I-5: Percent-encoding is symmetric
 
-**Claim:** Any `md://` URI produced by proof can be parsed back by the resolver
+**Claim:** Any `md://` URI produced by mdloom can be parsed back by the resolver
 to the same (file, heading, type, kind, selector, sub-selector) tuple.
 Encode(Decode(uri)) == uri for all valid URIs.
 
-**Why it matters:** Round-trip stability is required for URIs stored in proof.toml
+**Why it matters:** Round-trip stability is required for URIs stored in mdloom.toml
 DaVinci entries, fix plans, and error output to remain valid across sessions.
 
 **Test:** Generate URIs for elements with special chars in labels, encode them,
@@ -94,25 +94,25 @@ wins, URI uses inline label, preceding label is ignored.
 **Claim:** Resolving an `md://` URI never modifies any file. The resolver is a
 pure read operation against the filesystem.
 
-**Why it matters:** If resolution had side effects, running `proof check` or
-`proof resolve` would corrupt documents. This must be guaranteed at the type level
+**Why it matters:** If resolution had side effects, running `mdloom check` or
+`mdloom resolve` would corrupt documents. This must be guaranteed at the type level
 — the resolver takes `&Path`, not `&mut Path`.
 
 **Test:** Verify no files are modified after resolving any URI against any fixture.
 
 ---
 
-## I-8: All md:// URIs are absolute from proof root
+## I-8: All md:// URIs are absolute from mdloom root
 
-**Claim:** The `path` component in `md://path` is always relative to the proof
-root (where proof.toml lives), never relative to the current working directory
-or the file being checked. Two invocations of proof from different working
+**Claim:** The `path` component in `md://path` is always relative to the mdloom
+root (where mdloom.toml lives), never relative to the current working directory
+or the file being checked. Two invocations of mdloom from different working
 directories, pointing at the same root, resolve the same URIs identically.
 
-**Why it matters:** URIs stored in proof.toml DaVinci entries must work regardless
-of where proof is invoked from.
+**Why it matters:** URIs stored in mdloom.toml DaVinci entries must work regardless
+of where mdloom is invoked from.
 
-**Test:** Run `proof resolve md://computing/01-PACKAGE.md#...` from C:\, C:\src,
+**Test:** Run `mdloom resolve md://computing/01-PACKAGE.md#...` from C:\, C:\src,
 and C:\src\maxim — all return the same result when --config points to same root.
 
 ---

@@ -2,7 +2,7 @@
 
 ## Outcome
 
-No additional broad proof-side detector wave was found after the latest cleanup.
+No additional broad mdloom-side detector wave was found after the latest cleanup.
 The remaining MAXIM warnings are now primarily content/schema/style carry-forward:
 
 - `ascii_cell_padding` (567): mostly true compact style in bordered boxes where
@@ -24,7 +24,7 @@ MAXIM remains at:
 
 ## Carry-forward
 
-Future reductions should be explicit MAXIM policy/content work rather than proof
+Future reductions should be explicit MAXIM policy/content work rather than mdloom
 detector suppression:
 
 - decide whether all content guides should require `Decision Cheat Sheet`;

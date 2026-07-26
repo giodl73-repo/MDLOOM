@@ -2,7 +2,7 @@
 
 ## Mission
 
-Continue the command-module split by extracting `proof status`, including its
+Continue the command-module split by extracting `mdloom status`, including its
 small cached-check JSON helper.
 
 ## Changes
@@ -11,7 +11,7 @@ small cached-check JSON helper.
 - Moved source/compiled/stale counting, last-check cache rendering, and config
   summary rendering out of `main.rs`.
 - Updated dispatch to call `cmd_status::run`.
-- Added a CLI smoke regression that verifies `proof status <dir>` reports the
+- Added a CLI smoke regression that verifies `mdloom status <dir>` reports the
   project summary fields.
 
 ## Validation

@@ -2,12 +2,12 @@
 
 ## Mission
 
-Finish the remaining inline command wrapper by moving the `proof tree`
+Finish the remaining inline command wrapper by moving the `mdloom tree`
 subcommand argument shape into the tree command module.
 
 ## Changes
 
-- Added `cmd_tree::Args` with the clap subcommand wrapper for `proof tree`.
+- Added `cmd_tree::Args` with the clap subcommand wrapper for `mdloom tree`.
 - Replaced the inline `Command::Tree { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_tree::Args`.
 - Kept the existing `TreeAction` subcommand enum and tree behavior in

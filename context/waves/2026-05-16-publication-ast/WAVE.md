@@ -9,14 +9,14 @@ source_request: "Get the right publication AST and invest in themes, fonts, colo
 
 ## Mission
 
-Introduce a shared publication AST and theme token system so PROOF's publish
+Introduce a shared publication AST and theme token system so MDLOOM's publish
 backends move from correct first-scope artifacts toward professionally styled,
 consistent, target-native outputs.
 
 ## Claim boundary
 
-PROOF owns source resolution, publication semantics, theme tokens, and
-target-native mappings. PROOF does not yet own full desktop-publishing fidelity,
+MDLOOM owns source resolution, publication semantics, theme tokens, and
+target-native mappings. MDLOOM does not yet own full desktop-publishing fidelity,
 browser-equivalent PDF layout, corporate template import, rich PPTX animation
 systems, chart/media embedding, or LaTeX.
 
@@ -26,7 +26,7 @@ systems, chart/media embedding, or LaTeX.
   `pdf`, `docx`, and `pptx`.
 - Existing publish helpers in `src/publish.rs`.
 - Existing slide parser/model in `src/slide/`.
-- Existing artifact manifest `.proof/artifacts.json`.
+- Existing artifact manifest `.mdloom/artifacts.json`.
 - `docs/specs/publish-backends.md`.
 - New spec: `docs/specs/publication-ast.md`.
 - Roles: COMPOSE, BOOK, SCHEMA, STAGE, OFFICE, BENCH.

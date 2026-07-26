@@ -1,10 +1,10 @@
 /// Dashboard region content parsing and rendering.
 ///
-/// A proof:region block contains:
-/// - Directive lines (starting with proof:element, proof:tree, proof:chart, proof:row)
+/// A mdloom:region block contains:
+/// - Directive lines (starting with mdloom:element, mdloom:tree, mdloom:chart, mdloom:row)
 /// - Literal content lines (everything else — rendered verbatim)
 ///
-/// No nested fences. The proof:region fence IS the container.
+/// No nested fences. The mdloom:region fence IS the container.
 use crate::dashboard::canvas::Canvas;
 #[allow(unused_imports)]
 use unicode_width::UnicodeWidthChar;
@@ -139,25 +139,25 @@ pub fn validate_regions(
 // Content rendering
 // ─────────────────────────────────────────────────────────
 
-/// Classify a line inside a proof:region block.
-/// Directive lines start with one of the proof: directive keywords.
+/// Classify a line inside a mdloom:region block.
+/// Directive lines start with one of the mdloom: directive keywords.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegionLine<'a> {
-    Directive(&'a str), // proof:element, proof:tree, proof:chart, proof:row
+    Directive(&'a str), // mdloom:element, mdloom:tree, mdloom:chart, mdloom:row
     Literal(&'a str),   // plain text — rendered verbatim
 }
 
 pub fn classify_region_line(line: &str) -> RegionLine<'_> {
     let trimmed = line.trim_start();
-    if trimmed.starts_with("proof:element")
-        || trimmed.starts_with("proof:tree")
-        || trimmed.starts_with("proof:chart")
-        || trimmed.starts_with("proof:row")
-        || trimmed.starts_with("proof:symbol")
-        || trimmed.starts_with("proof:shape")
-        || trimmed.starts_with("proof:bullets")
-        || trimmed.starts_with("proof:centered")
-        || trimmed.starts_with("proof:stat")
+    if trimmed.starts_with("mdloom:element")
+        || trimmed.starts_with("mdloom:tree")
+        || trimmed.starts_with("mdloom:chart")
+        || trimmed.starts_with("mdloom:row")
+        || trimmed.starts_with("mdloom:symbol")
+        || trimmed.starts_with("mdloom:shape")
+        || trimmed.starts_with("mdloom:bullets")
+        || trimmed.starts_with("mdloom:centered")
+        || trimmed.starts_with("mdloom:stat")
     {
         RegionLine::Directive(trimmed)
     } else {
@@ -168,7 +168,7 @@ pub fn classify_region_line(line: &str) -> RegionLine<'_> {
 /// Render region content lines into a Canvas.
 ///
 /// By the time content reaches this function, `compile_region::render_region_body`
-/// has already resolved every embedded `proof:*` directive and written the
+/// has already resolved every embedded `mdloom:*` directive and written the
 /// rendered glyph rows back into `content_lines`. So at this stage every line
 /// is treated as literal: clipped to region width, padded, and pasted.
 ///
@@ -463,12 +463,12 @@ mod tests {
     #[test]
     fn classify_directive_line() {
         assert_eq!(
-            classify_region_line("proof:element kind=value"),
-            RegionLine::Directive("proof:element kind=value")
+            classify_region_line("mdloom:element kind=value"),
+            RegionLine::Directive("mdloom:element kind=value")
         );
         assert_eq!(
-            classify_region_line("  proof:tree kind=org"),
-            RegionLine::Directive("proof:tree kind=org")
+            classify_region_line("  mdloom:tree kind=org"),
+            RegionLine::Directive("mdloom:tree kind=org")
         );
     }
 

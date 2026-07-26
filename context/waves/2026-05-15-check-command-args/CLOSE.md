@@ -2,12 +2,12 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the `proof check` argument shape
+Continue modularizing the CLI shell by moving the `mdloom check` argument shape
 into the check command module.
 
 ## Changes
 
-- Added `cmd_check::Args` with the clap argument definitions for `proof check`.
+- Added `cmd_check::Args` with the clap argument definitions for `mdloom check`.
 - Replaced the inline `Command::Check { ... }` fields in `main.rs` with a tuple
   variant that references `cmd_check::Args`.
 - Kept default check path resolution and global flag handling in `main.rs`.

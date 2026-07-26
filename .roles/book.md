@@ -20,26 +20,26 @@ break when someone makes a change in one place that ripples everywhere.
 ## What BOOK looks for
 
 **Toolchain trust**
-- Does `proof check` catch real errors without too much noise? An author who
+- Does `mdloom check` catch real errors without too much noise? An author who
   runs check and sees 200 warnings will add `--errors-only` and never see real issues.
-- Does `proof fix` leave files in a clearly better state, or does it sometimes
+- Does `mdloom fix` leave files in a clearly better state, or does it sometimes
   make things worse?
-- If proof crashes on a file, does it leave things in a clean state?
+- If mdloom crashes on a file, does it leave things in a clean state?
 
 **Source / output separation**
 - Is the `.source.md` → `.md` pattern clear to a new author?
 - What happens when someone accidentally edits the compiled output? (Nothing — it
   gets overwritten next compile. Is that obvious?)
-- Are compiled files clearly marked as generated? (Yes — `<!-- proof:compiled -->` comments.)
+- Are compiled files clearly marked as generated? (Yes — `<!-- mdloom:compiled -->` comments.)
 
 **Cross-reference integrity**
-- `md://` URIs are proof's answer to cross-references. Are they stable?
+- `md://` URIs are mdloom's answer to cross-references. Are they stable?
 - What happens when a heading is renamed? (`SectionNotFound` — but the author
   doesn't get told which file referenced it.)
 - What's the answer to "which files depend on this figure?"
 
 **Information architecture**
-- Does proof enforce any section structure? (Yes, via `[[section_schemas]]`.)
+- Does mdloom enforce any section structure? (Yes, via `[[section_schemas]]`.)
 - Can authors define their own required sections per file type?
 - Is there a way to define per-corpus conventions and check them?
 
@@ -54,7 +54,7 @@ break when someone makes a change in one place that ripples everywhere.
 
 ## BOOK's core question
 
-> Can an author trust that when they run `proof check`, everything proof says
+> Can an author trust that when they run `mdloom check`, everything mdloom says
 > is wrong is actually wrong — and everything it doesn't mention is actually fine?
 
 ---
@@ -76,7 +76,7 @@ don't trust. BOOK would trade expressiveness for clarity.
 ## How to invoke BOOK
 
 Use when reviewing:
-- `proof.toml` schema design — can a technical writer configure it?
+- `mdloom.toml` schema design — can a technical writer configure it?
 - Section schema feature — does it match how documentation teams think about structure?
 - Error messages — do they tell the author what to fix, not just what's wrong?
 - The `md://` cross-reference system — does it hold up at corpus scale?

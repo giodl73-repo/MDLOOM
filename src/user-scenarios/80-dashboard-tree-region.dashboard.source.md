@@ -6,9 +6,9 @@ dashboard:
     main: { x: 0, y: 0, width: 60, height: 10 }
 ---
 
-```proof:region name=main
+```mdloom:region name=main
 Site structure:
-proof:tree kind=taxonomy
+mdloom:tree kind=taxonomy
 root: docs
 - guides
   - getting-started

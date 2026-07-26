@@ -1,7 +1,7 @@
-# proof md:// Query Parameters — Filter, Slice, Project Tables
+# mdloom md:// Query Parameters — Filter, Slice, Project Tables
 
-Every proof directive that pulls data from a markdown table — `proof:chart`,
-`proof:tree`, `proof:element`, `proof:row`, `proof:table`, `proof:include` —
+Every mdloom directive that pulls data from a markdown table — `mdloom:chart`,
+`mdloom:tree`, `mdloom:element`, `mdloom:row`, `mdloom:table`, `mdloom:include` —
 accepts a query string on the URI to transform the resolved content before
 the directive sees it. The query string follows the standard `?key=val&key=val`
 form and applies after mdpath element extraction.
@@ -22,7 +22,7 @@ compose with AND.
 
 Examples below use this 6-row fixture committed at `src/data/features.md`:
 
-```proof:include
+```mdloom:include
 md://src/data/features.md#:table:0
 ```
 
@@ -36,7 +36,7 @@ a `#:table:N` element you can address.
 Drop columns you don't care about; keep ordering of the requested list. Use
 this when a chart or element only needs two columns from a wide table.
 
-```proof:table
+```mdloom:table
 md://src/data/features.md#:table:0?select=name,status
 ```
 
@@ -53,13 +53,13 @@ sides to f64; equality is plain string compare.
 
 Single filter — keep only stable items:
 
-```proof:table
+```mdloom:table
 md://src/data/features.md#:table:0?filter=status=stable&select=name,category
 ```
 
 Multiple filters compose with AND — repeat the `?filter=` key:
 
-```proof:table
+```mdloom:table
 md://src/data/features.md#:table:0?filter=status=stable&filter=category=elements&select=name,directive
 ```
 
@@ -76,7 +76,7 @@ md://stats.md#:table:0?filter=goals>50
 `?top=N` keeps the first N rows. `?skip=N` drops the first N. They compose
 into SQL-style paging when used together (skip first, then top):
 
-```proof:table
+```mdloom:table
 md://src/data/features.md#:table:0?skip=2&top=3&select=name
 ```
 
@@ -87,9 +87,9 @@ Skip past the first two rows, then keep the next three.
 ## ?count — replace with a single-cell row count
 
 `?count` replaces the entire result with a one-cell synthetic table holding
-the row count. Useful when feeding `proof:element kind=value` from a count:
+the row count. Useful when feeding `mdloom:element kind=value` from a count:
 
-```proof:table
+```mdloom:table
 md://src/data/features.md#:table:0?filter=category=math&count
 ```
 
@@ -103,7 +103,7 @@ A chart that shows only the top three stable elements by category — assuming
 your data table has a numeric `score` or `count` column to chart:
 
 ```text
-proof:chart kind=bar width=60 label-field=name value-field=score
+mdloom:chart kind=bar width=60 label-field=name value-field=score
             source=md://stats.md#:table:0?filter=status=stable&filter=category=elements&top=3
 ```
 
@@ -117,16 +117,16 @@ two named fields anyway.
 ## Where the transforms apply
 
 The query string runs at the URI-resolution layer, so it works for **every**
-md:// consumer in proof, not just one directive:
+md:// consumer in mdloom, not just one directive:
 
 | Directive | URI path | Notes |
 |-----------|----------|-------|
-| `proof:chart` | `source=md://...?...` | filter rows before charting |
-| `proof:tree` | `source=md://...?...` | drop rows from org/taxonomy/dependency tables |
-| `proof:element` | `source=md://...?...` | with `?count` to feed a numeric value |
-| `proof:row` | `source=md://...?...` | filter rows before per-row layout |
-| `proof:table` | body URI `?...` | filter the embedded table itself |
-| `proof:include` | inline `pin=md://...?...` | rare; mostly applies to data files |
+| `mdloom:chart` | `source=md://...?...` | filter rows before charting |
+| `mdloom:tree` | `source=md://...?...` | drop rows from org/taxonomy/dependency tables |
+| `mdloom:element` | `source=md://...?...` | with `?count` to feed a numeric value |
+| `mdloom:row` | `source=md://...?...` | filter rows before per-row layout |
+| `mdloom:table` | body URI `?...` | filter the embedded table itself |
+| `mdloom:include` | inline `pin=md://...?...` | rare; mostly applies to data files |
 
 The Tier-2 resolve cache keys on the *clean* URI (without the query string),
 so multiple queries against the same source share a single cache entry —

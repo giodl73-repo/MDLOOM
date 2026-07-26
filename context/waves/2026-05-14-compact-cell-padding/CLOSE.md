@@ -16,7 +16,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before wave | After |
 |---|---:|---:|
@@ -29,4 +29,4 @@ status: complete
 1. Remaining MAXIM warning families are now small enough for manual sampling:
    `ascii_cell_padding`, markdown table padding, barchart warnings, and schema
    missing-section/pattern warnings.
-2. Sibling `mdpath` warnings remain external to proof.
+2. Sibling `mdpath` warnings remain external to mdloom.

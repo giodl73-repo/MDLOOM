@@ -3,14 +3,14 @@
 ## Mission
 
 Continue the command-module split by extracting the small DaVinci listing
-command, `proof pin-list`.
+command, `mdloom pin-list`.
 
 ## Changes
 
 - Added `src/cmd_pin_list.rs`.
 - Moved DaVinci-entry listing out of `main.rs`.
 - Preserved explicit `--config` behavior through
-  `proof_lib::lint::load_config_for_path`.
+  `mdloom_lib::lint::load_config_for_path`.
 - Added a CLI regression that verifies registered DaVinci entries are rendered.
 
 ## Validation
@@ -25,5 +25,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-The larger `proof pin` command still lives in `main.rs`; it is a natural
+The larger `mdloom pin` command still lives in `main.rs`; it is a natural
 follow-up once URI/config mutation behavior is covered by focused tests.

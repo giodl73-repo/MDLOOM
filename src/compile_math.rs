@@ -19,7 +19,7 @@ pub(crate) fn render_math_compiled(
         format!("```\n{}\n```", rendered)
     } else {
         format!(
-            "<!-- proof:compiled from=\"proof:math\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+            "<!-- mdloom:compiled from=\"mdloom:math\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
             rendered
         )
     };

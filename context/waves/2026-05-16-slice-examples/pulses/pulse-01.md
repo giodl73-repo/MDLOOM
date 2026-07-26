@@ -2,8 +2,8 @@
 
 ## Goal
 
-Prove PROOF can use SLICE selectors over prepared artifact rows without adding
-selector semantics to PROOF's compile or render pipeline.
+Prove MDLOOM can use SLICE selectors over prepared artifact rows without adding
+selector semantics to MDLOOM's compile or render pipeline.
 
 ## Changes
 

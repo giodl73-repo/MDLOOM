@@ -6,7 +6,7 @@ A broad reference covering all modules.
 
 ## Authentication
 
-```proof:toc section="Authentication" max-depth=4 style=numbered
+```mdloom:toc section="Authentication" max-depth=4 style=numbered
 ```
 
 ### Basic Auth

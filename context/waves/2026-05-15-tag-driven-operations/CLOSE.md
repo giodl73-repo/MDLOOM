@@ -8,12 +8,12 @@ selectors while preserving inclusive default behavior.
 ## Changes
 
 - Added reusable `FrontmatterFilter` for exact-match source metadata filtering.
-- Added opt-in filters to `proof check`:
+- Added opt-in filters to `mdloom check`:
   - `--tag <TAG>`
   - `--op <OP>`
   - `--content-tag <TAG>`
-- Added the same filters to `proof compile`.
-- Added the same filters to `proof stats`.
+- Added the same filters to `mdloom compile`.
+- Added the same filters to `mdloom stats`.
 - Filters are additive: when multiple filters are supplied, a source must match
   all requested fields.
 - Defaults remain behavior-safe: without filters, tags never exclude content.

@@ -1,7 +1,7 @@
 /// End-to-end pipeline tests.
 ///
-/// Full cycle: copy fixtures → glint check --format rich → verify rich.json →
-///             apply plan.json → glint check → verify zero errors → cleanup.
+/// Full cycle: copy fixtures → mdloom check --format rich → verify rich.json →
+///             apply plan.json → mdloom check → verify zero errors → cleanup.
 ///
 /// The plan.json is pre-authored (we know the exact fixes for the fixtures).
 /// In production, Stage 2 (plan generation) is done by the fix-guide AI skill
@@ -14,8 +14,8 @@ use std::process::Command;
 // Helpers
 // ─────────────────────────────────────────────────────────
 
-fn proof_bin() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/proof")
+fn mdloom_bin() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("target/debug/mdloom")
 }
 
 fn e2e_fixture(name: &str) -> PathBuf {
@@ -37,8 +37,8 @@ fn setup_workspace() -> tempfile::TempDir {
     dir
 }
 
-fn run_glint_in(dir: &Path, args: &[&str]) -> std::process::Output {
-    let bin = proof_bin();
+fn run_mdloom_in(dir: &Path, args: &[&str]) -> std::process::Output {
+    let bin = mdloom_bin();
     if !bin.exists() {
         panic!("debug binary not found — run `cargo build` first");
     }
@@ -46,23 +46,23 @@ fn run_glint_in(dir: &Path, args: &[&str]) -> std::process::Output {
         .args(args)
         .current_dir(dir)
         .output()
-        .unwrap_or_else(|e| panic!("failed to run proof {args:?}: {e}"))
+        .unwrap_or_else(|e| panic!("failed to run mdloom {args:?}: {e}"))
 }
 
 // ─────────────────────────────────────────────────────────
-// Stage 1: glint check --format rich
+// Stage 1: mdloom check --format rich
 // ─────────────────────────────────────────────────────────
 
 #[test]
 fn e2e_stage1_rich_output_contains_errors_with_context() {
-    if !proof_bin().exists() {
+    if !mdloom_bin().exists() {
         return;
     }
     let ws = setup_workspace();
     let rich_path = ws.path().join("rich.json");
 
     // Run check --format rich, write to rich.json
-    let out = run_glint_in(
+    let out = run_mdloom_in(
         ws.path(),
         &[
             "check",
@@ -154,13 +154,13 @@ fn e2e_stage1_rich_output_contains_errors_with_context() {
 
 #[test]
 fn e2e_stage3_fix_plan_resolves_all_errors() {
-    if !proof_bin().exists() {
+    if !mdloom_bin().exists() {
         return;
     }
     let ws = setup_workspace();
 
     // Verify errors exist before fixing
-    let before = run_glint_in(ws.path(), &["check", "--no-fail", "."]);
+    let before = run_mdloom_in(ws.path(), &["check", "--no-fail", "."]);
     let before_stderr = String::from_utf8_lossy(&before.stderr);
     assert!(
         !before.status.success() || before_stderr.contains("error"),
@@ -218,7 +218,7 @@ fn e2e_stage3_fix_plan_resolves_all_errors() {
         .expect("write plan.json");
 
     // Stage 3a: dry-run — no files written
-    let dry = run_glint_in(
+    let dry = run_mdloom_in(
         ws.path(),
         &[
             "fix",
@@ -242,7 +242,7 @@ fn e2e_stage3_fix_plan_resolves_all_errors() {
     );
 
     // Stage 3b: apply the plan
-    let apply = run_glint_in(
+    let apply = run_mdloom_in(
         ws.path(),
         &["fix", "--plan", plan_path.to_str().unwrap(), "--no-verify"],
     );
@@ -279,7 +279,7 @@ fn e2e_stage3_fix_plan_resolves_all_errors() {
     assert_eq!(clean_content, original_clean, "clean.md must be unchanged");
 
     // Stage 4: re-run check — must be clean (exit 0, zero errors)
-    let after = run_glint_in(ws.path(), &["check", "."]);
+    let after = run_mdloom_in(ws.path(), &["check", "."]);
     assert!(
         after.status.success(),
         "check after fix should exit 0 (zero errors), stderr:\n{}",
@@ -293,14 +293,14 @@ fn e2e_stage3_fix_plan_resolves_all_errors() {
 
 #[test]
 fn e2e_full_pipeline_check_rich_fix_verify() {
-    if !proof_bin().exists() {
+    if !mdloom_bin().exists() {
         return;
     }
     let ws = setup_workspace();
 
     // Stage 1: generate rich.json
     let rich_path = ws.path().join("rich.json");
-    let s1 = run_glint_in(
+    let s1 = run_mdloom_in(
         ws.path(),
         &[
             "check",
@@ -369,7 +369,7 @@ fn e2e_full_pipeline_check_rich_fix_verify() {
     std::fs::write(&plan_path, serde_json::to_string_pretty(&plan).unwrap()).unwrap();
 
     // Stage 3: apply plan
-    let s3 = run_glint_in(
+    let s3 = run_mdloom_in(
         ws.path(),
         &["fix", "--plan", plan_path.to_str().unwrap(), "--no-verify"],
     );
@@ -380,7 +380,7 @@ fn e2e_full_pipeline_check_rich_fix_verify() {
     );
 
     // Stage 4: verify
-    let s4 = run_glint_in(ws.path(), &["check", "."]);
+    let s4 = run_mdloom_in(ws.path(), &["check", "."]);
     assert!(
         s4.status.success(),
         "Stage 4: check after fix must exit 0\nstdout: {}\nstderr: {}",

@@ -1,6 +1,6 @@
 # US-86 — Display math with stacked fractions
 
-```proof:math
+```mdloom:math
 \frac{a + b}{c - d} = \frac{1}{2}
 ```
 

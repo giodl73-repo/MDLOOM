@@ -1,6 +1,6 @@
-# proof chart — ASCII Chart Composer and Validator
+# mdloom chart — ASCII Chart Composer and Validator
 
-> **Status**: ✅ Implemented — `src/chart/`. Kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. **Removed from scope:** `sankey` — proportional flow diagrams quantize poorly to fixed-width character cells (flow widths can't be sub-cell, and overlapping/crossing flows are unrepresentable without color). Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or render an SVG via an external tool and embed via `proof:include`.
+> **Status**: ✅ Implemented — `src/chart/`. Kinds live: bar, line, area, stacked-bar, waterfall, scatter, heatmap, candlestick, gantt, timeline. **Removed from scope:** `sankey` — proportional flow diagrams quantize poorly to fixed-width character cells (flow widths can't be sub-cell, and overlapping/crossing flows are unrepresentable without color). Authors who need flow visualizations should use `kind=stacked-bar` for level transitions or render an SVG via an external tool and embed via `mdloom:include`.
 
 ---
 
@@ -25,8 +25,8 @@ fire for bar charts depending on which checker runs first.
 
 ## What it is
 
-`proof chart` validates existing ASCII charts in code blocks, generates charts
-from source data at `md://` URIs, and embeds them via the `proof:chart` compile
+`mdloom chart` validates existing ASCII charts in code blocks, generates charts
+from source data at `md://` URIs, and embeds them via the `mdloom:chart` compile
 directive. All chart kinds share a common source schema (markdown table) and
 a common generation pipeline.
 
@@ -154,7 +154,7 @@ origin_row = round(y_max / (y_max + abs(y_min)) * chart_height)
 Axis configuration:
 
 ```toml
-# In proof:chart directive attributes or source YAML front-matter
+# In mdloom:chart directive attributes or source YAML front-matter
 x_min = -4
 x_max = 4
 y_min = -3
@@ -234,7 +234,7 @@ table; override with `format=json` for JSON array sources.
 
 - `item`: row label
 - `value`: the data value (determines bar length)
-- `max`: optional. If absent, proof auto-scales to `max(value)` across all rows.
+- `max`: optional. If absent, mdloom auto-scales to `max(value)` across all rows.
   If present, bars exceeding `max` are clamped and flagged with `ascii_chart_scale`.
 - Optional: `color` column (future: ANSI color blocks)
 
@@ -416,7 +416,7 @@ bar does not equal `start + sum(deltas)` (rounding ±1 char allowed).
 ### Histogram
 
 A bar chart where bars represent equal-width bins and the y-axis shows count
-(frequency). Can be driven by pre-binned data or raw values that proof buckets
+(frequency). Can be driven by pre-binned data or raw values that mdloom buckets
 automatically.
 
 **Pre-binned source schema:**
@@ -439,7 +439,7 @@ automatically.
 | 22 |
 ```
 
-When using raw data, proof computes bin count using **Sturges' rule**:
+When using raw data, mdloom computes bin count using **Sturges' rule**:
 `bins = ceil(log2(n) + 1)`. Override with attribute `bins=N`.
 
 Bins are always equal-width. No gaps are rendered between adjacent bars
@@ -548,7 +548,7 @@ Source C ═╗  ╠═════╣
 
 The width of each flow segment is `round(value / total * chart_width)`.
 Nodes are labeled on the left (sources) and right (sinks). Multi-hop flows
-(source → intermediate → sink) are supported; proof lays out intermediate
+(source → intermediate → sink) are supported; mdloom lays out intermediate
 nodes between source and sink columns.
 
 Diagnostic code: `ascii_chart_sankey_balance` — emitted if the sum of
@@ -566,7 +566,7 @@ outgoing flows from a node does not equal the sum of incoming flows
 > `stacked-bar` instead for composition displays. `pie` is included for
 > completeness and may be removed in a future version.
 
-proof renders pie charts as labeled wedge text rather than a geometric arc:
+mdloom renders pie charts as labeled wedge text rather than a geometric arc:
 
 ```markdown
 | slice | value | label |
@@ -588,7 +588,7 @@ Generated (text-layout approximation):
 └─────────────────────────────────────┘
 ```
 
-proof warns if pie is used with < 3 slices or > 8 slices.
+mdloom warns if pie is used with < 3 slices or > 8 slices.
 
 ---
 
@@ -596,47 +596,47 @@ proof warns if pie is used with < 3 slices or > 8 slices.
 
 ```bash
 # Validate an existing chart code block
-proof chart check [--kind bar|line|scatter|area|stacked-bar|waterfall|histogram|bullet|lollipop|candlestick|sankey|...] <uri>
+mdloom chart check [--kind bar|line|scatter|area|stacked-bar|waterfall|histogram|bullet|lollipop|candlestick|sankey|...] <uri>
 
 # Generate a chart from source data
-proof chart generate --kind bar md://data/perf.md#results:table:0
-proof chart generate --kind line --x-min -4 --x-max 4 --y-min -3 --y-max 3 \
+mdloom chart generate --kind bar md://data/perf.md#results:table:0
+mdloom chart generate --kind line --x-min -4 --x-max 4 --y-min -3 --y-max 3 \
     md://math/sin-cos.md#data:table:0
-proof chart generate --kind area --fill-char ░ md://data/volume.md#:table:0
-proof chart generate --kind stacked-bar md://data/breakdown.md#:table:0
-proof chart generate --kind waterfall md://finance/pnl.md#deltas:table:0
-proof chart generate --kind histogram --bins 10 md://data/raw.md#:table:0
-proof chart generate --kind bullet md://kpis/q4.md#metrics:table:0
-proof chart generate --kind lollipop md://data/perf.md#results:table:0
-proof chart generate --kind candlestick md://finance/ohlc.md#:table:0
-proof chart generate --kind sankey md://finance/budget.md#flows:table:0
-proof chart generate --kind timeline md://history/computing.md#timeline:table:0
-proof chart generate --kind sparkline md://metrics/monthly.md#traffic:table:0
-proof chart generate --kind gantt md://project/plan.md#schedule:table:0
-proof chart generate --kind heatmap md://data/activity.md#heatmap:table:0
+mdloom chart generate --kind area --fill-char ░ md://data/volume.md#:table:0
+mdloom chart generate --kind stacked-bar md://data/breakdown.md#:table:0
+mdloom chart generate --kind waterfall md://finance/pnl.md#deltas:table:0
+mdloom chart generate --kind histogram --bins 10 md://data/raw.md#:table:0
+mdloom chart generate --kind bullet md://kpis/q4.md#metrics:table:0
+mdloom chart generate --kind lollipop md://data/perf.md#results:table:0
+mdloom chart generate --kind candlestick md://finance/ohlc.md#:table:0
+mdloom chart generate --kind sankey md://finance/budget.md#flows:table:0
+mdloom chart generate --kind timeline md://history/computing.md#timeline:table:0
+mdloom chart generate --kind sparkline md://metrics/monthly.md#traffic:table:0
+mdloom chart generate --kind gantt md://project/plan.md#schedule:table:0
+mdloom chart generate --kind heatmap md://data/activity.md#heatmap:table:0
 
 # Output to file or stdout
-proof chart generate --kind bar md://data.md#:0 -o charts/perf.md
+mdloom chart generate --kind bar md://data.md#:0 -o charts/perf.md
 ```
 
 ---
 
-## The `proof:chart` directive (compile mode)
+## The `mdloom:chart` directive (compile mode)
 
 ````markdown
-```proof:chart kind=bar width=40
+```mdloom:chart kind=bar width=40
 md://data/benchmarks.md#results:table:0
 ```
 ````
 
 ````markdown
-```proof:chart kind=line x-min=-3.14 x-max=3.14 y-min=-1 y-max=1 points=40
+```mdloom:chart kind=line x-min=-3.14 x-max=3.14 y-min=-1 y-max=1 points=40
 md://math/sinusoid.md#sin-data:table:0
 ```
 ````
 
 ````markdown
-```proof:chart kind=timeline
+```mdloom:chart kind=timeline
 md://history/unix.md#milestones:table:0
 ```
 ````
@@ -741,4 +741,4 @@ md://history/unix.md#milestones:table:0
 
 - [Tree Spec](./tree-spec.md) — ASCII trees (dirtree, org, taxonomy, etc.)
 - [Layout Spec](./layout-spec.md) — compose multiple charts side by side
-- [Compile Spec](./compile-spec.md) — `proof:chart` directive in compile mode
+- [Compile Spec](./compile-spec.md) — `mdloom:chart` directive in compile mode

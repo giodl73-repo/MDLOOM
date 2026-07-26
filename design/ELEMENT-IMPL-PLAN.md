@@ -1,4 +1,4 @@
-# ELEMENT-IMPL-PLAN — proof:element + proof:row
+# ELEMENT-IMPL-PLAN — mdloom:element + mdloom:row
 
 > Prerequisite: MAPPING-SPEC partial impl (FieldMap, parse_md_table, parse_json_source) already in
 > `src/tree/schema.rs`. Waves 2 and 3 consume these directly.
@@ -132,13 +132,13 @@ fn align_in_width(s: &str, width: usize, align: Align) -> String
 | 27 | visual_width of sparkline output = cfg.width (block chars measured at 1) |
 
 **Exit criterion**: all 27 tests pass. No I/O, no mdpath dependency.
-`cargo test -p proof-lib element::` is clean.
+`cargo test -p mdloom-lib element::` is clean.
 
 ---
 
-## Wave 2 — `proof:element` compile directive (300 LOC)
+## Wave 2 — `mdloom:element` compile directive (300 LOC)
 
-**Goal**: `proof:element` fenced blocks in `.source.md` files are recognized, source-resolved,
+**Goal**: `mdloom:element` fenced blocks in `.source.md` files are recognized, source-resolved,
 field-extracted, rendered via Wave 1, and replaced with output (fenced or raw per `no-chrome`).
 
 ### Changes to existing files
@@ -173,7 +173,7 @@ struct ElementAttrs {
 }
 ```
 
-Extend `proof_directive_kind()`:
+Extend `mdloom_directive_kind()`:
 
 ```rust
 else if rest.starts_with("element") { Some("element") }
@@ -197,7 +197,7 @@ New formatting helper:
 ```rust
 fn format_element_block(uri: &str, rendered: &str) -> String {
     format!(
-        "<!-- proof:compiled from=\"proof:element\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:element\" uri=\"{}\" -->\n```\n{}\n```\n<!-- /mdloom:compiled -->",
         uri, rendered
     )
 }
@@ -216,29 +216,29 @@ Diagnostic codes emitted from compile arm:
 
 | # | What |
 |---|------|
-| 1 | `collect_directives` recognizes `proof:element` kind=value |
-| 2 | `collect_directives` recognizes `proof:element` kind=sparkline with no-chrome |
+| 1 | `collect_directives` recognizes `mdloom:element` kind=value |
+| 2 | `collect_directives` recognizes `mdloom:element` kind=sparkline with no-chrome |
 | 3 | `ElementAttrs::parse` — all keys parsed correctly |
 | 4 | `ElementAttrs::parse` — `no-chrome` flag (no `=`) |
 | 5 | `ElementAttrs::parse` — defaults |
-| 6 | `proof_directive_kind` returns "element" for `\`\`\`proof:element` |
+| 6 | `mdloom_directive_kind` returns "element" for `\`\`\`mdloom:element` |
 | 7 | E2E: `kind=value inline_value="42" width=4` → compiled `" 42 "` (no mdpath) |
 | 8 | E2E: `kind=label inline_value="McDavid" width=8 align=left` → `"McDavid "` |
 | 9 | E2E: `kind=badge inline_value="UFA" width=5` → `"UFA  "` |
 | 10 | E2E: `no-chrome=true` → output has no fence, no HTML comment |
-| 11 | E2E: `no-chrome=false` → output wrapped in `<!-- proof:compiled -->` fence |
+| 11 | E2E: `no-chrome=false` → output wrapped in `<!-- mdloom:compiled -->` fence |
 | 12 | E2E: `field=X` with `X` absent from table → ELEMENT-005 violation emitted |
 
-**Exit criterion**: `proof compile test.source.md` with a `proof:element kind=value inline_value=...`
-block produces a compiled `.md` with the rendered value inline. `proof check` on a `proof:element`
+**Exit criterion**: `mdloom compile test.source.md` with a `mdloom:element kind=value inline_value=...`
+block produces a compiled `.md` with the rendered value inline. `mdloom check` on a `mdloom:element`
 where rendered output would exceed `width` emits ELEMENT-001.
 
 ---
 
-## Wave 3 — `proof:row` compositor (350 LOC)
+## Wave 3 — `mdloom:row` compositor (350 LOC)
 
-**Goal**: `proof:row foreach=X in md://... separator=" "` iterates source table rows and emits
-one output line per row, with child `proof:element` blocks rendered as fixed-width columns.
+**Goal**: `mdloom:row foreach=X in md://... separator=" "` iterates source table rows and emits
+one output line per row, with child `mdloom:element` blocks rendered as fixed-width columns.
 
 ### New file
 
@@ -304,16 +304,16 @@ Row {
 }
 ```
 
-Extend `proof_directive_kind()`:
+Extend `mdloom_directive_kind()`:
 
 ```rust
 else if rest.starts_with("row") { Some("row") }
 ```
 
 Extend `collect_directives()` — new `"row"` arm:
-- Parse `foreach=VAR in URI` from info string after `proof:row`
+- Parse `foreach=VAR in URI` from info string after `mdloom:row`
 - Parse `separator=`, `width=`, `no-chrome` from remaining attrs
-- Parse body lines: each line starting with `proof:element` becomes a `RowElement`
+- Parse body lines: each line starting with `mdloom:element` becomes a `RowElement`
 
 Extend `compile_file()` — new `Directive::Row` arm:
 - Resolve source URI via `resolve_uri`
@@ -334,16 +334,16 @@ Extend `compile_file()` — new `Directive::Row` arm:
 | 5 | `validate_r1` — sum less than declared_width → error |
 | 6 | `render_row_foreach` — 3-row source → 3 output lines |
 | 7 | `render_row_foreach` — field not in row → ELEMENT-005 propagated |
-| 8 | `collect_directives` — `proof:row foreach=p in md://x` → Directive::Row parsed |
-| 9 | `collect_directives` — body `proof:element` lines parsed as RowElements |
+| 8 | `collect_directives` — `mdloom:row foreach=p in md://x` → Directive::Row parsed |
+| 9 | `collect_directives` — body `mdloom:element` lines parsed as RowElements |
 | 10 | `collect_directives` — `separator=" "` default |
 | 11 | `collect_directives` — `separator=","` explicit |
-| 12 | E2E compile: `proof:row foreach=p in ...` with 2 source rows → 2 output lines |
+| 12 | E2E compile: `mdloom:row foreach=p in ...` with 2 source rows → 2 output lines |
 | 13 | E2E compile: R-1 violation in source.md → ELEMENT-004 emitted |
 | 14 | Column pinning: element N always starts at sum of widths 1..N-1 + separators |
 | 15 | `render_row` no-chrome: output has no fence |
 
-**Exit criterion**: a `.source.md` with a `proof:row foreach=player in md://stats.md#edm:table:0`
+**Exit criterion**: a `.source.md` with a `mdloom:row foreach=player in md://stats.md#edm:table:0`
 directive compiles to a block with one row line per player. R-1 violation in the directive
 (element widths don't sum to declared width) emits ELEMENT-004 and blocks compilation.
 

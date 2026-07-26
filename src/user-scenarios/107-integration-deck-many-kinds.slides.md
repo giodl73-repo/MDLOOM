@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=5 -->
+<!-- mdloom:compiled from="mdloom:slides" count=5 -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────────────────────────── 1/5
 
@@ -37,7 +37,7 @@ Wave summary
 
 
 
-proof:stat 18 Tasks shipp…proof:stat 8 New chart ki… proof:stat 793 Tests green
+mdloom:stat 18 Tasks shipp…mdloom:stat 8 New chart ki… mdloom:stat 793 Tests green
 
 
 
@@ -126,4 +126,4 @@ SLIDE 5 ────────────────────────
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

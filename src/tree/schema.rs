@@ -203,11 +203,11 @@ fn parse_table_row(line: &str) -> Vec<String> {
 }
 
 // ─────────────────────────────────────────────────────────
-// JSON parsing (simple — no serde dependency beyond what proof already has)
+// JSON parsing (simple — no serde dependency beyond what mdloom already has)
 // ─────────────────────────────────────────────────────────
 
 /// Parse a JSON array of objects into rows for tree generation.
-/// Uses serde_json which is already a proof dependency.
+/// Uses serde_json which is already a mdloom dependency.
 pub fn parse_json_source(content: &str) -> Result<(Vec<String>, Vec<HashMap<String, String>>)> {
     let value: serde_json::Value =
         serde_json::from_str(content).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))?;
@@ -1139,7 +1139,7 @@ mod tests {
     const DECISION_TABLE: &str = "| Node | Condition | Yes | No |\n\
         |------|-----------|-----|-----|\n\
         | root | Is the file .md? | parse | skip |\n\
-        | parse | Has proof: directive? | compile | check-only |\n\
+        | parse | Has mdloom: directive? | compile | check-only |\n\
         | compile | DaVinci pin exists? | validate | embed |\n";
 
     #[test]
@@ -1153,7 +1153,7 @@ mod tests {
         );
         // Yes/No prefixes appear on branches.
         assert!(
-            out.contains("Yes → Has proof: directive?"),
+            out.contains("Yes → Has mdloom: directive?"),
             "Yes branch into nested node:\n{}",
             out
         );

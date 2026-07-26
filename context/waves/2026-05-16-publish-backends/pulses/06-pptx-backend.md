@@ -11,7 +11,7 @@ governing_roles: ["COMPOSE", "STAGE", "SCHEMA", "OFFICE", "BENCH"]
 
 ## Mission
 
-Add a native PPTX target for explicit slide-oriented PROOF sources without
+Add a native PPTX target for explicit slide-oriented MDLOOM sources without
 guessing decks from arbitrary prose or rasterizing slide content.
 
 ## Scope inventory
@@ -27,7 +27,7 @@ guessing decks from arbitrary prose or rasterizing slide content.
   - `tests/integration_tests.rs`
 - Generated/user artifacts:
   - `*.pptx`
-  - `.proof/artifacts.json` entries with `target = "pptx"`
+  - `.mdloom/artifacts.json` entries with `target = "pptx"`
 
 ## Pre-implementation scout
 
@@ -65,7 +65,7 @@ guessing decks from arbitrary prose or rasterizing slide content.
 - `cargo test binary_compile_target_pptx_writes_deck`
 - `cargo test pptx_ooxml_package_contains_native_bullets_and_notes`
 - `cargo test --test integration_tests`
-- `proof compile <fixture>.slides.source.md --target pptx -o <out>.pptx`
+- `mdloom compile <fixture>.slides.source.md --target pptx -o <out>.pptx`
 - `git diff --check`
 
 ## Non-goals
@@ -80,7 +80,7 @@ guessing decks from arbitrary prose or rasterizing slide content.
 
 ## Evidence
 
-- Added `proof compile --target pptx` with `.pptx` output derivation and a
+- Added `mdloom compile --target pptx` with `.pptx` output derivation and a
   `.slides.source.md` boundary guard so arbitrary prose is not treated as a deck.
 - Generated native editable OOXML parts for presentation, slides, slide
   relationships, notes slides, notes relationships, masters, layouts, theme,
@@ -97,7 +97,7 @@ guessing decks from arbitrary prose or rasterizing slide content.
   - `cargo test binary_compile_target_pptx_writes_deck`
   - `cargo test pptx_ooxml_package_contains_native_bullets_and_notes`
   - `cargo test --test integration_tests`
-  - `proof compile <fixture>.slides.source.md --target pptx -o <out>.pptx`
+  - `mdloom compile <fixture>.slides.source.md --target pptx -o <out>.pptx`
   - `cargo test`
   - `cargo build`
   - `git diff --check`

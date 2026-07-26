@@ -3,7 +3,7 @@
     "allow": [
       "Bash(cargo test *)",
       "Bash(cargo build *)",
-      "Bash(./target/release/proof.exe compile *)",
+      "Bash(./target/release/mdloom.exe compile *)",
       "Bash(gh issue *)",
       "Bash(gh auth *)"
     ]

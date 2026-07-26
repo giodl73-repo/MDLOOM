@@ -1,12 +1,12 @@
-# proof math — LaTeX Math Rendering for ASCII/Terminal Output
+# mdloom math — LaTeX Math Rendering for ASCII/Terminal Output
 
-> **Status**: ✅ Implemented — `src/math/`. Inline `$...$` expansion and `proof:math` block directive live. 60+ symbols, superscripts, subscripts, fractions, integrals, matrices, cases. `proof-math` standalone crate extracted.
+> **Status**: ✅ Implemented — `src/math/`. Inline `$...$` expansion and `mdloom:math` block directive live. 60+ symbols, superscripts, subscripts, fractions, integrals, matrices, cases. `mdloom-math` standalone crate extracted.
 
 ---
 
 ## What it is
 
-`proof math` renders LaTeX math notation to Unicode symbols and ASCII art.
+`mdloom math` renders LaTeX math notation to Unicode symbols and ASCII art.
 It uses the LaTeX formula syntax (`$...$` for inline, `$$...$$` for display)
 because LaTeX math is the universal language for mathematical notation and
 authors already know it.
@@ -44,26 +44,26 @@ The derivative df/dx = f′(x) at point x₀.
 
 ### Display (block) math
 
-Display math requires the `proof:math` directive — a fenced code block:
+Display math requires the `mdloom:math` directive — a fenced code block:
 
 > **Note**: The `$$...$$` syntax is reserved for future use. Do not use `$$` in
-> prose — it will conflict with inline `$` handling. Use `` `proof:math` ``
+> prose — it will conflict with inline `$` handling. Use `` `mdloom:math` ``
 > blocks for display math.
 
 ````markdown
-```proof:math
+```mdloom:math
 \frac{d}{dx} e^x = e^x
 ```
 ````
 
 ````markdown
-```proof:math
+```mdloom:math
 \int_0^{\infty} e^{-x}\, dx = 1
 ```
 ````
 
 ````markdown
-```proof:math
+```mdloom:math
 \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
 ```
 ````
@@ -406,28 +406,28 @@ All unsupported commands emit MATH-001 and are passed through unchanged.
 
 ---
 
-## Integration with other proof directives
+## Integration with other mdloom directives
 
-### In proof:bullets
+### In mdloom:bullets
 
 Inline math works in bullet labels (Tier 1 and Tier 2 constructs only — Tier 3 in inline context triggers MATH-005 downgrade):
 
 ```
-proof:bullets
+mdloom:bullets
 - For $\epsilon > 0$, choose $\delta = \epsilon / M$
 - Energy: $E = mc^2$
 ```
 
-### In proof:element kind=value
+### In mdloom:element kind=value
 
 ```
-proof:element kind=value field=formula format="$\nabla \cdot E = \rho/\epsilon_0$"
+mdloom:element kind=value field=formula format="$\nabla \cdot E = \rho/\epsilon_0$"
 ```
 
 ### In slide title/subtitle
 
 ```
-```proof:slide layout=title
+```mdloom:slide layout=title
 title: "$\nabla \times B = \mu_0 J$"
 subtitle: "One of Maxwell's equations"
 ```
@@ -439,16 +439,16 @@ Math in regions renders as literal text. Display math uses the block renderer.
 
 ---
 
-## The `proof:math` directive (compile mode)
+## The `mdloom:math` directive (compile mode)
 
 ````markdown
-```proof:math
+```mdloom:math
 \frac{d}{dx} e^x = e^x
 ```
 ````
 
 ````markdown
-```proof:math width=40 align=center
+```mdloom:math width=40 align=center
 \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
 ```
 ````
@@ -483,13 +483,13 @@ When a Tier 3 construct (`\frac`, `\int` with limits, matrix, cases) appears ins
 | `$\int_0^n f(x) dx$` | `∫_(0)^(n) f(x) dx` |
 | `$\sum_{i=1}^n i$` | `∑_(i=1)^(n) i` |
 
-MATH-005 is emitted as a warning with suggestion: "Move to a `proof:math` block for multi-line rendering."
+MATH-005 is emitted as a warning with suggestion: "Move to a `mdloom:math` block for multi-line rendering."
 
 ---
 
 ## LaTeX command mapping reference
 
-### Combining `proof:math` with `proof:symbol`
+### Combining `mdloom:math` with `mdloom:symbol`
 
 `[sym:name]` is for semantic symbols in non-math contexts (decorations, status icons, ratings).
 `$...$` is for mathematical notation within formulas.
@@ -537,7 +537,7 @@ Each diagnostic includes: code, severity, line:column, problematic expression, a
 ```
 WARNING MATH-005 at line 3, col 12:
   Inline math with `\frac`: $\frac{a}{b}$
-  Suggestion: move to a `proof:math` block for multi-line rendering.
+  Suggestion: move to a `mdloom:math` block for multi-line rendering.
 
 WARNING MATH-001 at line 7, col 5:
   Unknown command `\alph` — did you mean `\alpha`?
@@ -566,8 +566,8 @@ WARNING MATH-001 at line 7, col 5:
 - `src/math/matrix.rs`: matrix/pmatrix/bmatrix/cases environments
 - 25+ tests: fractions with nested expressions, integrals with limits, 2×2/3×3 matrices
 
-### Wave 4 — proof:math directive + inline expansion (~200 LOC)
-- `proof:math` directive in compile.rs
+### Wave 4 — mdloom:math directive + inline expansion (~200 LOC)
+- `mdloom:math` directive in compile.rs
 - Inline `$...$` expansion in render_body_lines() and slide text paths
 - `MATH-001` through `MATH-005` diagnostic codes
 - L1 integration tests: compile .source.md with inline and block math
@@ -608,7 +608,7 @@ a² + b² = c²
 - [Symbol Spec](./symbol-spec.md) — decorative symbols `[sym:name]` (non-math)
 - [Element Spec](./element-spec.md) — inline math in element labels
 - [Slide Spec](./slide-spec.md) — math in slide titles and body
-- [Compile Spec](./compile-spec.md) — proof:math directive
+- [Compile Spec](./compile-spec.md) — mdloom:math directive
 
 ---
 
@@ -675,7 +675,7 @@ A "simple single-token numerator" is a single character or single Tier 1 command
 MATH-005 (Tier 3 in inline context) is a **warning**. Documents emitting MATH-005 still compile and write successfully:
 
 - `written = true` after compile
-- `proof check` reports MATH-005 but does NOT block (non-blocking)
+- `mdloom check` reports MATH-005 but does NOT block (non-blocking)
 - The downgraded Tier 2 rendering (per F42) is what appears in output
 
 ### F44 — Public API delimiter conventions

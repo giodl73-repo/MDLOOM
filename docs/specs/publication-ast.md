@@ -1,12 +1,12 @@
 # Publication AST and Theme Spec
 
-PROOF now has several publish backends. The next quality jump is a shared
+MDLOOM now has several publish backends. The next quality jump is a shared
 publication model: one target-neutral document tree plus one target-neutral theme
 token set that every backend can map into its own native output.
 
 ## Mission
 
-Turn resolved PROOF content into a structured publication AST before rendering to
+Turn resolved MDLOOM content into a structured publication AST before rendering to
 HTML, site pages, PDF, DOCX, PPTX, JSON report, or Pebble. The AST owns document
 semantics; themes own visual intent. Backends own target-specific serialization.
 
@@ -51,7 +51,7 @@ The first AST version should be intentionally small and stable.
 
 ```text
 PublicationDocument
-  schema = "proof.publication_ast.v1"
+  schema = "mdloom.publication_ast.v1"
   kind = document | deck
   title
   metadata
@@ -145,7 +145,7 @@ Initial built-in themes:
 Theme selection should be usable from both CLI and config:
 
 ```powershell
-proof compile deck.slides.source.md --target pptx --theme professional -o deck.pptx
+mdloom compile deck.slides.source.md --target pptx --theme professional -o deck.pptx
 ```
 
 ```toml

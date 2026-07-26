@@ -1,4 +1,4 @@
-# proof compile + layout — Spec Validation Scenarios
+# mdloom compile + layout — Spec Validation Scenarios
 
 Hand-simulations of the compile and layout specs against concrete inputs.
 Each scenario traces through the spec step-by-step; **Findings** are spec gaps
@@ -10,13 +10,13 @@ Related specs: [COMPILE-SPEC.md](./compile-spec.md) · [LAYOUT-SPEC.md](./layout
 
 ## Scenario 01 — Basic single include
 
-**Tests:** Simplest compile path. One source document, one `proof:include`, one figure file.
+**Tests:** Simplest compile path. One source document, one `mdloom:include`, one figure file.
 
 ### Input
 
 `figures/goroutine-scheduler.md`:
 ````markdown
-<!-- proof:figure id="goroutine-scheduler" kind="figure.flowchart" -->
+<!-- mdloom:figure id="goroutine-scheduler" kind="figure.flowchart" -->
 ```
 GOROUTINE SCHEDULER — M:N multiplexing
 ┌──────────────────────────────────────┐
@@ -28,7 +28,7 @@ GOROUTINE SCHEDULER — M:N multiplexing
 │  P  P  P  P  ← OS threads           │
 └──────────────────────────────────────┘
 ```
-<!-- /proof:figure -->
+<!-- /mdloom:figure -->
 ````
 
 `languages/10-GO.source.md`:
@@ -37,7 +37,7 @@ GOROUTINE SCHEDULER — M:N multiplexing
 
 Go uses M:N multiplexing — goroutines run on OS threads managed by the runtime.
 
-```proof:include
+```mdloom:include
 md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 ```
 
@@ -52,7 +52,7 @@ The scheduler is cooperative: goroutines yield at blocking calls.
 
 Go uses M:N multiplexing — goroutines run on OS threads managed by the runtime.
 
-<!-- proof:compiled from="md://figures/goroutine-scheduler.md#goroutine-scheduler:0" -->
+<!-- mdloom:compiled from="md://figures/goroutine-scheduler.md#goroutine-scheduler:0" -->
 ```
 GOROUTINE SCHEDULER — M:N multiplexing
 ┌──────────────────────────────────────┐
@@ -64,7 +64,7 @@ GOROUTINE SCHEDULER — M:N multiplexing
 │  P  P  P  P  ← OS threads           │
 └──────────────────────────────────────┘
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 The scheduler is cooperative: goroutines yield at blocking calls.
 ````
@@ -73,45 +73,45 @@ The scheduler is cooperative: goroutines yield at blocking calls.
 
 **Step 1 — Parse `languages/10-GO.source.md`**
 - Hash file content → compute parse_key → check Tier 1 cache (miss, first run)
-- Result: `ParsedDocument` with one `proof:include` directive at line 5
+- Result: `ParsedDocument` with one `mdloom:include` directive at line 5
 
 **Step 2 — Find directives**
-- One `proof:include` block: URI = `md://figures/goroutine-scheduler.md#goroutine-scheduler:0`
+- One `mdloom:include` block: URI = `md://figures/goroutine-scheduler.md#goroutine-scheduler:0`
 
 **Step 3 — Compute resolve_keys**
 - Target file: `figures/goroutine-scheduler.md`
-- Hash target file content → parse_key_of_target → `resolve_key = SHA-256(parse_key_of_target, uri_string, proof_version)`
-- **Finding F01**: The spec says "hash target file content → parse_key". But the parse_key of the TARGET file is `SHA-256(file_content_hash, proof_version)`. So step 3 requires hashing the target file. This is documented correctly but the spec doesn't say WHERE the target file is searched from. Is `figures/goroutine-scheduler.md` relative to the source file's directory? The proof.toml root? The current working directory? **The md:// root resolution base is unspecified in the compile spec.** (COMPILE-SPEC.md says "Resolve via mdpath" but doesn't specify the base path for resolution.)
+- Hash target file content → parse_key_of_target → `resolve_key = SHA-256(parse_key_of_target, uri_string, mdloom_version)`
+- **Finding F01**: The spec says "hash target file content → parse_key". But the parse_key of the TARGET file is `SHA-256(file_content_hash, mdloom_version)`. So step 3 requires hashing the target file. This is documented correctly but the spec doesn't say WHERE the target file is searched from. Is `figures/goroutine-scheduler.md` relative to the source file's directory? The mdloom.toml root? The current working directory? **The md:// root resolution base is unspecified in the compile spec.** (COMPILE-SPEC.md says "Resolve via mdpath" but doesn't specify the base path for resolution.)
 
 **Step 4 — Compute compile_key and check Tier 3**
-- `compile_key = SHA-256(source_parse_key, [resolve_key], layout_config_hash=none, proof_version)`
+- `compile_key = SHA-256(source_parse_key, [resolve_key], layout_config_hash=none, mdloom_version)`
 - **Finding F02**: `layout_config_hash` is undefined when there are no layout directives. The spec says this is an input to compile_key but doesn't specify the value when no layout is present. Zero? Empty hash? Omit from hash input? Any inconsistency here creates key collisions between "no layout" and "layout with some specific config."
 
 **Step 5 — Fetch resolved content**
 - Resolve `md://figures/goroutine-scheduler.md#goroutine-scheduler:0` via mdpath
-- **Finding F03**: The `#goroutine-scheduler:0` selector uses `id="goroutine-scheduler"` — the figure marker. But the `proof:figure` marker is an HTML comment OUTSIDE the code block (before it). The COMPILE-SPEC shows the marker before the ` ``` ` opening. The mdpath resolver (MDPATH spec) resolves by heading path and ordinal. How does it handle a `proof:figure id=` marker? Is this a SEPARATE selector mechanism from the standard `#heading:kind:ordinal` mdpath syntax? The compile spec uses a named figure ID in the URI fragment but the mdpath spec doesn't define how figure IDs are indexed.
+- **Finding F03**: The `#goroutine-scheduler:0` selector uses `id="goroutine-scheduler"` — the figure marker. But the `mdloom:figure` marker is an HTML comment OUTSIDE the code block (before it). The COMPILE-SPEC shows the marker before the ` ``` ` opening. The mdpath resolver (MDPATH spec) resolves by heading path and ordinal. How does it handle a `mdloom:figure id=` marker? Is this a SEPARATE selector mechanism from the standard `#heading:kind:ordinal` mdpath syntax? The compile spec uses a named figure ID in the URI fragment but the mdpath spec doesn't define how figure IDs are indexed.
 
 **Step 6 — No layout directives, skip**
 
 **Step 7 — Compose output**
-- Replace `proof:include` block with resolved content wrapped in `<!-- proof:compiled ... -->` comments
-- **Finding F04**: The spec shows the compiled figure wrapped in a code fence (` ``` `), but the figure's content is ALREADY a code fence in `goroutine-scheduler.md`. So the output would be a code fence inside HTML comments. The spec doesn't say whether the outer code fence is preserved, stripped, or re-wrapped. Does `proof:include` embed the raw code block (fence and all) or just the content inside the fence?
+- Replace `mdloom:include` block with resolved content wrapped in `<!-- mdloom:compiled ... -->` comments
+- **Finding F04**: The spec shows the compiled figure wrapped in a code fence (` ``` `), but the figure's content is ALREADY a code fence in `goroutine-scheduler.md`. So the output would be a code fence inside HTML comments. The spec doesn't say whether the outer code fence is preserved, stripped, or re-wrapped. Does `mdloom:include` embed the raw code block (fence and all) or just the content inside the fence?
 
 **Step 8 — Write output atomically to `languages/10-GO.md`**
-- **Finding F05**: The output path drops `.source.` from the filename. But `proof compile languages/10-GO.source.md` — is the output relative to the source file's directory? Or the proof.toml root? If source is `src/languages/10-GO.source.md`, is output `src/languages/10-GO.md` or `languages/10-GO.md`?
+- **Finding F05**: The output path drops `.source.` from the filename. But `mdloom compile languages/10-GO.source.md` — is the output relative to the source file's directory? Or the mdloom.toml root? If source is `src/languages/10-GO.source.md`, is output `src/languages/10-GO.md` or `languages/10-GO.md`?
 
 **Step 9 — Update Tier 3 cache**
-- Write compile cache entry to `.proof/cache/compile/{compile_key}.json`
+- Write compile cache entry to `.mdloom/cache/compile/{compile_key}.json`
 - **Finding F06**: The compile cache stores "compiled markdown" — but what is the JSON schema? The THREE-TIER-CACHE spec shows `.json` files but doesn't specify the structure. Parse cache stores `ParsedDocument`, resolve cache stores `ResolvedElement`. What does compile cache store? Just the compiled text? Or metadata too (which URIs were resolved, which DaVinci checks passed)?
 
 ### Findings
 
 | # | Severity | Finding |
 |---|----------|---------|
-| F01 | High | md:// URI base path for resolution is unspecified — relative to source file, proof.toml, or cwd? |
+| F01 | High | md:// URI base path for resolution is unspecified — relative to source file, mdloom.toml, or cwd? |
 | F02 | Medium | `layout_config_hash` when no layout directives present — undefined value in compile_key |
-| F03 | High | Named figure IDs (`#goroutine-scheduler:0`) — spec doesn't define how `proof:figure id=` markers integrate with the mdpath URI scheme |
-| F04 | High | Does `proof:include` embed the code fence or just the code fence content? Outer fences in figure files create fence-in-fence ambiguity |
+| F03 | High | Named figure IDs (`#goroutine-scheduler:0`) — spec doesn't define how `mdloom:figure id=` markers integrate with the mdpath URI scheme |
+| F04 | High | Does `mdloom:include` embed the code fence or just the code fence content? Outer fences in figure files create fence-in-fence ambiguity |
 | F05 | Medium | Output path resolution when compiling from a subdirectory — relative to source dir, project root, or cwd? |
 | F06 | Low | Compile cache entry JSON schema is unspecified — what fields besides the compiled text? |
 
@@ -119,13 +119,13 @@ The scheduler is cooperative: goroutines yield at blocking calls.
 
 ## Scenario 02 — Layout: two figures side-by-side
 
-**Tests:** `proof:layout` directive in compile mode, two-figure horizontal composition.
+**Tests:** `mdloom:layout` directive in compile mode, two-figure horizontal composition.
 
 ### Input
 
 `figures/go-types.md`:
 ````markdown
-<!-- proof:figure id="go-type-system" kind="table.key-value" -->
+<!-- mdloom:figure id="go-type-system" kind="table.key-value" -->
 ```
 Axis         | Value
 -------------|----------
@@ -134,12 +134,12 @@ Typing       | Static
 Strength     | Strong
 Type system  | Structural
 ```
-<!-- /proof:figure -->
+<!-- /mdloom:figure -->
 ````
 
 `figures/rust-types.md`:
 ````markdown
-<!-- proof:figure id="rust-type-system" kind="table.key-value" -->
+<!-- mdloom:figure id="rust-type-system" kind="table.key-value" -->
 ```
 Axis         | Value
 -------------|----------
@@ -148,14 +148,14 @@ Typing       | Static
 Strength     | Strong
 Type system  | Affine
 ```
-<!-- /proof:figure -->
+<!-- /mdloom:figure -->
 ````
 
 `comparison.source.md`:
 ````markdown
 ## Type System Comparison
 
-```proof:layout gap=4 align=top labels="Go,Rust"
+```mdloom:layout gap=4 align=top labels="Go,Rust"
 md://figures/go-types.md#go-type-system:0
 md://figures/rust-types.md#rust-type-system:0
 ```
@@ -167,7 +167,7 @@ md://figures/rust-types.md#rust-type-system:0
 ````markdown
 ## Type System Comparison
 
-<!-- proof:compiled from="proof:layout" -->
+<!-- mdloom:compiled from="mdloom:layout" -->
 ```
       Go                         Rust
 Axis         | Value        Axis         | Value
@@ -177,7 +177,7 @@ Typing       | Static       Typing       | Static
 Strength     | Strong       Strength     | Strong
 Type system  | Structural   Type system  | Affine
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ````
 
 ### Trace
@@ -200,10 +200,10 @@ Type system  | Structural   Type system  | Affine
 - Step 4 (Labels): "Go" centered over 28 chars = 13 spaces + "Go" + 13 spaces. "Rust" centered over 28 chars = 12 spaces + "Rust" + 12 spaces.
 - **Finding F09**: Label centering spec: `centered over the frame width`. For odd-length strings in even-width frames (or vice versa), is the extra space on the left or right? The spec says "centered" but doesn't specify tie-breaking. Different implementations could produce different whitespace, which would be a cache key issue if labels are compared.
 - Step 5 (Compose rows): join label lines with gap=4 → join content lines with gap=4
-- **Finding F10**: The gap is specified in the `proof:layout` directive. But the compile cache key uses `layout_config_hash`. If the directive is `gap=4` and the CLI uses `--gap 4`, are these identical? Yes. But what about default values? If `gap` is omitted from the directive (using the default of 3), the hash input should be `gap=3` (normalized), not "omitted". The spec doesn't say whether defaults are normalized before hashing or whether the raw attribute string is hashed. If the raw string is hashed, `gap=3` (explicit) and `gap` (omitted default) would produce different cache keys for identical output — a cache correctness bug.
+- **Finding F10**: The gap is specified in the `mdloom:layout` directive. But the compile cache key uses `layout_config_hash`. If the directive is `gap=4` and the CLI uses `--gap 4`, are these identical? Yes. But what about default values? If `gap` is omitted from the directive (using the default of 3), the hash input should be `gap=3` (normalized), not "omitted". The spec doesn't say whether defaults are normalized before hashing or whether the raw attribute string is hashed. If the raw string is hashed, `gap=3` (explicit) and `gap` (omitted default) would produce different cache keys for identical output — a cache correctness bug.
 
 **Step 7 — Compose final document**
-- **Finding F11**: When a `proof:layout` is compiled, the traceability comment says `from="proof:layout"`. But this loses the specific URIs that were composed. If `proof check` runs on the compiled output, it can't verify which figures were embedded. The traceability comment should include the resolved URIs, e.g. `from="proof:layout md://figures/go-types.md#go-type-system:0 md://figures/rust-types.md#rust-type-system:0"`.
+- **Finding F11**: When a `mdloom:layout` is compiled, the traceability comment says `from="mdloom:layout"`. But this loses the specific URIs that were composed. If `mdloom check` runs on the compiled output, it can't verify which figures were embedded. The traceability comment should include the resolved URIs, e.g. `from="mdloom:layout md://figures/go-types.md#go-type-system:0 md://figures/rust-types.md#rust-type-system:0"`.
 
 ### Findings
 
@@ -213,7 +213,7 @@ Type system  | Structural   Type system  | Affine
 | F08 | High | Layout engine input ambiguity: does it compose raw code fence content or the fence lines including delimiters? |
 | F09 | Low | Label centering tie-breaking (odd label width in even frame) not specified |
 | F10 | Medium | Default attribute values must be normalized before hashing — raw attribute string vs. resolved value |
-| F11 | Medium | Traceability comment for `proof:layout` loses the composed URIs — compiled output can't be re-validated against sources |
+| F11 | Medium | Traceability comment for `mdloom:layout` loses the composed URIs — compiled output can't be re-validated against sources |
 
 ---
 
@@ -223,7 +223,7 @@ Type system  | Structural   Type system  | Affine
 
 ### Input
 
-`proof.toml`:
+`mdloom.toml`:
 ```toml
 [[davinci]]
 id = "goroutine-scheduler"
@@ -241,21 +241,21 @@ protection = "error"
 
 `figures/goroutine-scheduler.md` (MODIFIED — someone removed the inner box):
 ````markdown
-<!-- proof:figure id="goroutine-scheduler" kind="figure.flowchart" -->
+<!-- mdloom:figure id="goroutine-scheduler" kind="figure.flowchart" -->
 ```
 GOROUTINE SCHEDULER — M:N multiplexing
 ┌──────────────────────────────────────┐
 │  goroutines → OS threads             │
 └──────────────────────────────────────┘
 ```
-<!-- /proof:figure -->
+<!-- /mdloom:figure -->
 ````
 
 `languages/10-GO.source.md`:
 ````markdown
 ## Concurrency Model
 
-```proof:include
+```mdloom:include
 md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 ```
 ````
@@ -274,7 +274,7 @@ md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 
 **Finding F12**: The spec says "output file is NOT written." But what if `languages/10-GO.md` ALREADY EXISTS from a previous successful compile? The spec doesn't say whether the existing file is preserved, deleted, or left stale. If it's left stale, the compiled output is now out-of-date with the source. If it's deleted, the author loses the last good version. The correct behavior (preserve the last good compile, emit an error) is not stated.
 
-**Finding F13**: The spec says the error "shows which figure, which invariant, which URI." But does it show the figure's current content so the author can see what changed? Does it show the invariant as written in proof.toml (`box-count min=2`) or in a human-readable form ("expected at least 2 boxes, found 1")? Error message format is unspecified.
+**Finding F13**: The spec says the error "shows which figure, which invariant, which URI." But does it show the figure's current content so the author can see what changed? Does it show the invariant as written in mdloom.toml (`box-count min=2`) or in a human-readable form ("expected at least 2 boxes, found 1")? Error message format is unspecified.
 
 **Finding F14**: What if multiple figures in a source document violate invariants? Does compile report ALL violations before aborting, or abort on the first? The spec says "compile fails" but not whether it's fail-fast or fail-all.
 
@@ -340,13 +340,13 @@ Same as Scenario 01, after one successful compile.
 ````markdown
 ## Go Scheduler
 
-```proof:include
+```mdloom:include
 md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 ```
 
 See also:
 
-```proof:include
+```mdloom:include
 md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 ```
 ````
@@ -377,7 +377,7 @@ md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 ### Input (command line)
 
 ```bash
-proof layout \
+mdloom layout \
     "md://fig/a.md#:0" \
     "md://fig/b.md#:0" \
     "md://fig/c.md#:0" \
@@ -398,7 +398,7 @@ Figures A and B are 20 lines tall. C is 12 lines tall. D is 20 lines tall.
 - Row 1: `A_line[0] + " " * 4 + B_line[0]` for each of 20 lines
 - Row 2: `C_line[0] + " " * 4 + D_line[0]` for each of 20 lines (C is blank-padded for lines 12-19)
 
-**Finding F23**: When C is blank-padded on the right with `align=top`, lines 12-19 of C are all spaces padded to C's frame_width. Combined with the gap (4 spaces), the right side of the row separator has `frame_width_C + 4 + frame_width_D` characters. If the blank pad for C is spaces-only, proof's ASCII checker would likely flag these as trailing-space errors in the compiled output. The spec doesn't address trailing space in blank padding.
+**Finding F23**: When C is blank-padded on the right with `align=top`, lines 12-19 of C are all spaces padded to C's frame_width. Combined with the gap (4 spaces), the right side of the row separator has `frame_width_C + 4 + frame_width_D` characters. If the blank pad for C is spaces-only, mdloom's ASCII checker would likely flag these as trailing-space errors in the compiled output. The spec doesn't address trailing space in blank padding.
 
 **Finding F24**: The spec says each frame's lines are padded to `frame_width` (max line width of that figure). Then blank lines for height equalization are also padded to `frame_width`. But a "blank line" padded to `frame_width` is all spaces — this is N trailing spaces in the output. Should blank padding lines be empty (no spaces) or padded? If empty, the gap alignment in subsequent rows would be wrong (lines from different frames would be different lengths causing visual misalignment in some editors).
 
@@ -407,7 +407,7 @@ Figures A and B are 20 lines tall. C is 12 lines tall. D is 20 lines tall.
 | # | Severity | Finding |
 |---|----------|---------|
 | F22 | Low | Row separator width (between `--cols` wrapping) not specified — "a blank line" is ambiguous |
-| F23 | Medium | Blank-padded lines produce trailing spaces in compiled output — proof would flag its own output |
+| F23 | Medium | Blank-padded lines produce trailing spaces in compiled output — mdloom would flag its own output |
 | F24 | Medium | Blank height-equalization lines: all-spaces (for alignment) vs empty (avoids trailing spaces) — spec is silent, the choice has visual correctness implications |
 
 ---
@@ -450,22 +450,22 @@ Both compiled successfully. Now `goroutine-scheduler.md` is edited.
 
 ### Trace
 
-**`proof cache snapshot save "before-edit"`**
+**`mdloom cache snapshot save "before-edit"`**
 
-- **Finding F28**: The snapshot save spec says "Read current cache state for all source documents." But "all source documents" is undefined — does it mean all `.source.md` files under the proof.toml root? What if some have never been compiled and have no cache entries? The snapshot should capture only files that HAVE cache entries, but the spec doesn't say so explicitly.
+- **Finding F28**: The snapshot save spec says "Read current cache state for all source documents." But "all source documents" is undefined — does it mean all `.source.md` files under the mdloom.toml root? What if some have never been compiled and have no cache entries? The snapshot should capture only files that HAVE cache entries, but the spec doesn't say so explicitly.
 
 **Edit `goroutine-scheduler.md`, recompile `go.source.md`**
 
-**`proof cache snapshot diff "before-edit" "current"`**
+**`mdloom cache snapshot diff "before-edit" "current"`**
 
-- **Finding F29**: The diff command compares two named snapshots. But "current" is not a named snapshot — it's the current cache state. The CLI in CACHE-SNAPSHOTS.md shows `diff <name-a> <name-b>` — both must be named snapshots. To diff against current state, the author would need to `save "current"` first. But then they have a snapshot called "current" that may be confusing. Should there be a special `current` keyword? Or `proof cache snapshot diff "before-edit" --vs-current`?
+- **Finding F29**: The diff command compares two named snapshots. But "current" is not a named snapshot — it's the current cache state. The CLI in CACHE-SNAPSHOTS.md shows `diff <name-a> <name-b>` — both must be named snapshots. To diff against current state, the author would need to `save "current"` first. But then they have a snapshot called "current" that may be confusing. Should there be a special `current` keyword? Or `mdloom cache snapshot diff "before-edit" --vs-current`?
 
-**`proof cache snapshot restore "before-edit"`**
+**`mdloom cache snapshot restore "before-edit"`**
 
 - Verify integrity hash → copy snapshot entries to active cache
-- **Finding F30**: After restore, the active cache is in the "before-edit" state. But the WORKING FILES (`goroutine-scheduler.md`, `go.source.md`) are still in their edited state. The next `proof compile .` will hit the restored cache keys for UNEDITED files, but MISS for `go.source.md` (whose parse_key has changed since the edit). So restore doesn't actually prevent recompile of edited files — it only restores cache entries for UNCHANGED files. The spec doesn't clarify that restore is a cache operation, not a file system rollback. Authors may expect it to work like `git checkout`.
+- **Finding F30**: After restore, the active cache is in the "before-edit" state. But the WORKING FILES (`goroutine-scheduler.md`, `go.source.md`) are still in their edited state. The next `mdloom compile .` will hit the restored cache keys for UNEDITED files, but MISS for `go.source.md` (whose parse_key has changed since the edit). So restore doesn't actually prevent recompile of edited files — it only restores cache entries for UNCHANGED files. The spec doesn't clarify that restore is a cache operation, not a file system rollback. Authors may expect it to work like `git checkout`.
 
-- **Finding F31**: The CACHE-SNAPSHOTS spec says restore is rejected with `COMPILE-005` if "compilation is in progress." But proof compile is a one-shot command (not a daemon). How does the tool know if "compilation is in progress"? This guard makes sense for a long-lived session/server mode, but for CLI invocation, it's unclear when this guard would ever fire.
+- **Finding F31**: The CACHE-SNAPSHOTS spec says restore is rejected with `COMPILE-005` if "compilation is in progress." But mdloom compile is a one-shot command (not a daemon). How does the tool know if "compilation is in progress"? This guard makes sense for a long-lived session/server mode, but for CLI invocation, it's unclear when this guard would ever fire.
 
 ### Findings
 
@@ -508,9 +508,9 @@ Both compiled successfully. Now `goroutine-scheduler.md` is edited.
 
 - **F20**: `sorted_resolve_keys[]` must NOT deduplicate — deduplication is a silent cache correctness bug
 - **F25**: Watch mode must watch figure files, not just `.source.md` files
-- **F01**: md:// base path for resolution — relative to source file, proof.toml root, or cwd?
+- **F01**: md:// base path for resolution — relative to source file, mdloom.toml root, or cwd?
 - **F03**: Named figure ID selector (`#id:0`) integration with mdpath URI scheme — undefined
-- **F04**: Does `proof:include` embed raw code fence or just the content inside?
+- **F04**: Does `mdloom:include` embed raw code fence or just the content inside?
 - **F08**: Layout engine input — operates on fence content or raw fence including delimiters?
 - **F12**: Behavior when existing compiled output is present and compile fails
 - **F15**: `protection = "warn"` during compile — does compile succeed and write output?
@@ -601,14 +601,14 @@ Slide title rendered as: `E = mc²`
 
 ---
 
-## Scenario 11 — `proof:math` display block — fraction
+## Scenario 11 — `mdloom:math` display block — fraction
 
 **Tests:** Display-math block renders `\frac{n(n+1)}{2}` as a 3-line stacked output.
 
 ### Input
 
 ````markdown
-```proof:math
+```mdloom:math
 \frac{n(n+1)}{2}
 ```
 ````
@@ -643,14 +643,14 @@ Slide title rendered as: `E = mc²`
 
 ---
 
-## Scenario 12 — `proof:math` integral with limits
+## Scenario 12 — `mdloom:math` integral with limits
 
 **Tests:** `\int_0^{\infty} e^{-x} dx` produces a 4-line integral display.
 
 ### Input
 
 ````markdown
-```proof:math
+```mdloom:math
 \int_0^{\infty} e^{-x} dx
 ```
 ````
@@ -685,14 +685,14 @@ Slide title rendered as: `E = mc²`
 
 ---
 
-## Scenario 13 — `proof:math` pmatrix environment
+## Scenario 13 — `mdloom:math` pmatrix environment
 
 **Tests:** `\begin{pmatrix} a & b \\ c & d \end{pmatrix}` renders as a parenthesized matrix.
 
 ### Input
 
 ````markdown
-```proof:math
+```mdloom:math
 \begin{pmatrix} a & b \\ c & d \end{pmatrix}
 ```
 ````
@@ -757,18 +757,18 @@ Plus diagnostic: `MATH-005 [WARN]: inline \frac downgraded to a/b (line 1, col 1
 ### Findings
 
 - **F42**: Downgrade rule for `\frac` is `num/den`. For `\frac{x+y}{z}` the result is `x+y/z` — ambiguous precedence. Spec should require parentheses: `(x+y)/z`.
-- **F43**: MATH-005 is a warning, not an error — `written=true`. Spec must confirm this for all MATH-005 occurrences, and that `proof check` reports them as warnings not failures.
+- **F43**: MATH-005 is a warning, not an error — `written=true`. Spec must confirm this for all MATH-005 occurrences, and that `mdloom check` reports them as warnings not failures.
 
 ---
 
-## Scenario 15 — proof-math standalone public API
+## Scenario 15 — mdloom-math standalone public API
 
-**Tests:** External caller uses `proof_math::expand_inline_math("$\\pi r^2$")` directly without invoking the compiler.
+**Tests:** External caller uses `mdloom_math::expand_inline_math("$\\pi r^2$")` directly without invoking the compiler.
 
 ### Input
 
 ```rust
-let result = proof_math::expand_inline_math("$\\pi r^2$");
+let result = mdloom_math::expand_inline_math("$\\pi r^2$");
 ```
 
 ### Expected output
@@ -879,7 +879,7 @@ width: 80
 
 ## Scenario 18 — title-content slide with 3-level bullets
 
-**Tests:** `proof:bullets` with three indent levels renders ●/◦/▸ with correct hanging indent for wrapped lines.
+**Tests:** `mdloom:bullets` with three indent levels renders ●/◦/▸ with correct hanging indent for wrapped lines.
 
 ### Input
 
@@ -890,7 +890,7 @@ width: 60
 ---
 # Ownership Rules
 
-```proof:bullets
+```mdloom:bullets
 - Memory is owned by exactly one variable
   - Owner goes out of scope → value dropped
     - Destructor called automatically
@@ -918,14 +918,14 @@ width: 60
 
 ### Findings
 
-- **F49**: Indent-per-level is 2 spaces in the example but spec should state whether this is configurable (slide attrs? proof.toml?) or fixed.
+- **F49**: Indent-per-level is 2 spaces in the example but spec should state whether this is configurable (slide attrs? mdloom.toml?) or fixed.
 - **F50**: Level detection is by leading-space count. Tab characters break level detection. Spec must state that tabs in bullet source are an error or normalized to spaces.
 
 ---
 
 ## Scenario 19 — Two-column layout ratio=60:40
 
-**Tests:** `proof:two-column ratio=60:40` at width=80 allocates 48-col left and 32-col right body with height equalization.
+**Tests:** `mdloom:two-column ratio=60:40` at width=80 allocates 48-col left and 32-col right body with height equalization.
 
 ### Input
 
@@ -934,7 +934,7 @@ width: 60
 layout: title-content
 width: 80
 ---
-```proof:two-column ratio=60:40
+```mdloom:two-column ratio=60:40
 LEFT_BODY
 ---
 RIGHT_BODY
@@ -961,9 +961,9 @@ RIGHT_BODY
 
 ---
 
-## Scenario 20 — Stats layout with 4 proof:stat cells
+## Scenario 20 — Stats layout with 4 mdloom:stat cells
 
-**Tests:** Four `proof:stat` cells render as a horizontally tiled row with centered values and labels.
+**Tests:** Four `mdloom:stat` cells render as a horizontally tiled row with centered values and labels.
 
 ### Input
 
@@ -972,7 +972,7 @@ RIGHT_BODY
 layout: stats
 width: 80
 ---
-```proof:stat
+```mdloom:stat
 value: 4.2ms
 label: P99 Latency
 ---
@@ -1012,14 +1012,14 @@ P99 Latency   Uptime        RPS      Regions
 
 ---
 
-## Scenario 21 — proof:callout styles
+## Scenario 21 — mdloom:callout styles
 
-**Tests:** `proof:callout style=warning` produces distinct border chars and label; style enum validated.
+**Tests:** `mdloom:callout style=warning` produces distinct border chars and label; style enum validated.
 
 ### Input
 
 ````markdown
-```proof:callout style=warning
+```mdloom:callout style=warning
 Check your configuration before proceeding.
 ```
 ````
@@ -1050,14 +1050,14 @@ Check your configuration before proceeding.
 
 ---
 
-## Scenario 22 — proof:ol numbered list with sub-items
+## Scenario 22 — mdloom:ol numbered list with sub-items
 
-**Tests:** `proof:ol` renders a numbered outline with decimal sub-counters.
+**Tests:** `mdloom:ol` renders a numbered outline with decimal sub-counters.
 
 ### Input
 
 ````markdown
-```proof:ol
+```mdloom:ol
 - Top item one
   - Sub item A
   - Sub item B
@@ -1149,9 +1149,9 @@ layout: title
 
 ---
 
-## Scenario 24 — proof:notes excluded from compiled output
+## Scenario 24 — mdloom:notes excluded from compiled output
 
-**Tests:** A `proof:notes` block present in source does not appear in compiled output (SL-5 invariant).
+**Tests:** A `mdloom:notes` block present in source does not appear in compiled output (SL-5 invariant).
 
 ### Input
 
@@ -1161,7 +1161,7 @@ layout: title-content
 ---
 Main content here.
 
-```proof:notes
+```mdloom:notes
 Speaker notes: emphasize the third point.
 ```
 ```
@@ -1177,18 +1177,18 @@ Main content here.
 ### Trace
 
 **Step 1 — parse slide body**
-- Compiler identifies `proof:notes` fenced block in body
+- Compiler identifies `mdloom:notes` fenced block in body
 
 **Step 2 — SL-5 invariant**
-- `proof:notes` content is excluded from compiled output; block silently dropped (no diagnostic)
+- `mdloom:notes` content is excluded from compiled output; block silently dropped (no diagnostic)
 
 **Step 3 — exact match guard**
-- `assert!(!output.contains("proof:notes"))` passes
+- `assert!(!output.contains("mdloom:notes"))` passes
 
 ### Findings
 
 - **F61**: SL-5 says notes are excluded. But should notes content be written to a sidecar `.notes.md` file for presenter tools? If silently dropped, notes are lost. Spec should address sidecar output.
-- **F62**: `proof check` should verify SL-5 — if notes accidentally leak into compiled output, that is a bug. Spec should include a check mode rule for SL-5 verification.
+- **F62**: `mdloom check` should verify SL-5 — if notes accidentally leak into compiled output, that is a bug. Spec should include a check mode rule for SL-5 verification.
 
 ---
 
@@ -1277,7 +1277,7 @@ DASHBOARD-003: regions "left" and "right" overlap at x=40..49, y=0..9
 - Error logged with region IDs and overlap rect; `has_errors = true`
 
 **Step 3 — written=false**
-- Output file not touched; `proof compile` exits non-zero
+- Output file not touched; `mdloom compile` exits non-zero
 
 ### Findings
 
@@ -1286,15 +1286,15 @@ DASHBOARD-003: regions "left" and "right" overlap at x=40..49, y=0..9
 
 ---
 
-## Scenario 27 — proof:element in dashboard region body
+## Scenario 27 — mdloom:element in dashboard region body
 
-**Tests:** A `proof:element kind=value` directive inside a dashboard region body renders within the region's column bounds.
+**Tests:** A `mdloom:element kind=value` directive inside a dashboard region body renders within the region's column bounds.
 
 ### Input
 
 Region body (region width=30):
 ````markdown
-```proof:element kind=value
+```mdloom:element kind=value
 value: 99.9%
 label: Uptime
 width: 20
@@ -1311,8 +1311,8 @@ Within region:
 
 ### Trace
 
-**Step 1 — render_region_body dispatches proof:element**
-- `proof:element` fenced block found; dispatched to `compile_element`
+**Step 1 — render_region_body dispatches mdloom:element**
+- `mdloom:element` fenced block found; dispatched to `compile_element`
 
 **Step 2 — compile_element for kind=value**
 - `ElementAttrs { kind: Value, value: "99.9%", label: "Uptime", width: 20 }`
@@ -1328,15 +1328,15 @@ Within region:
 
 ---
 
-## Scenario 28 — Dashboard with proof:tree region
+## Scenario 28 — Dashboard with mdloom:tree region
 
-**Tests:** A `proof:tree kind=org` directive inside a dashboard region renders and is pasted at the correct canvas position.
+**Tests:** A `mdloom:tree kind=org` directive inside a dashboard region renders and is pasted at the correct canvas position.
 
 ### Input
 
 Region (x=0, y=5, width=40, height=10) body:
 ````markdown
-```proof:tree kind=org
+```mdloom:tree kind=org
 root: Engineering
 - Platform
 - Product
@@ -1354,8 +1354,8 @@ Engineering
 
 ### Trace
 
-**Step 1 — render_region_body dispatches proof:tree**
-- `proof:tree kind=org` fenced block → `generate_tree_block(attrs, body)`
+**Step 1 — render_region_body dispatches mdloom:tree**
+- `mdloom:tree kind=org` fenced block → `generate_tree_block(attrs, body)`
 
 **Step 2 — generate_tree_block**
 - Root=`Engineering`; children=[`Platform`, `Product`]; `render_inline_tree` produces 3 lines
@@ -1376,7 +1376,7 @@ Engineering
 
 ### Input
 
-Six separate `proof:element` directives with kinds: value, delta, sparkline, mini-bar, label, badge.
+Six separate `mdloom:element` directives with kinds: value, delta, sparkline, mini-bar, label, badge.
 
 ### Trace
 
@@ -1401,16 +1401,16 @@ Six separate `proof:element` directives with kinds: value, delta, sparkline, min
 
 ---
 
-## Scenario 30 — proof:row from md:// data table
+## Scenario 30 — mdloom:row from md:// data table
 
-**Tests:** `proof:row` with `source=md://data.md#table:0` iterates over 5 rows and applies R-1 column pinning.
+**Tests:** `mdloom:row` with `source=md://data.md#table:0` iterates over 5 rows and applies R-1 column pinning.
 
 ### Input
 
 `data.md` — 5-row table with columns Name, Score, Status.
 
 ````markdown
-```proof:row source=md://data.md#table:0 separator=" │ "
+```mdloom:row source=md://data.md#table:0 separator=" │ "
 - kind=label col=Name
 - kind=value col=Score
 - kind=badge col=Status
@@ -1445,14 +1445,14 @@ Eve   │ 88 │ Pass
 
 ---
 
-## Scenario 31 — proof:element kind=sparkline width=14
+## Scenario 31 — mdloom:element kind=sparkline width=14
 
 **Tests:** Sparkline with 10 data points normalized and rendered as block characters; ELEMENT-003 if too few points.
 
 ### Input
 
 ````markdown
-```proof:element kind=sparkline width=14
+```mdloom:element kind=sparkline width=14
 series: 1,3,2,8,5,9,4,7,6,10
 ```
 ````
@@ -1480,9 +1480,9 @@ series: 1,3,2,8,5,9,4,7,6,10
 
 ---
 
-## Scenario 32 — proof:row with empty data table
+## Scenario 32 — mdloom:row with empty data table
 
-**Tests:** `proof:row` source table has header but zero data rows — COMPILE-004 emitted, no rows in output.
+**Tests:** `mdloom:row` source table has header but zero data rows — COMPILE-004 emitted, no rows in output.
 
 ### Input
 
@@ -1490,7 +1490,7 @@ series: 1,3,2,8,5,9,4,7,6,10
 
 ### Expected output
 
-`COMPILE-004 [WARN]: proof:row source table has 0 data rows`; output file written with empty block.
+`COMPILE-004 [WARN]: mdloom:row source table has 0 data rows`; output file written with empty block.
 
 ### Trace
 
@@ -1505,19 +1505,19 @@ series: 1,3,2,8,5,9,4,7,6,10
 
 ### Findings
 
-- **F77**: Empty `proof:row` — leave a blank fence in output or remove entirely? Spec must state the empty-block representation.
+- **F77**: Empty `mdloom:row` — leave a blank fence in output or remove entirely? Spec must state the empty-block representation.
 - **F78**: An empty table may be intentional during development. Spec should note whether COMPILE-004 can be suppressed with `warn=false` or similar attribute.
 
 ---
 
-## Scenario 33 — proof:element value with formatted string "1,024"
+## Scenario 33 — mdloom:element value with formatted string "1,024"
 
 **Tests:** `value: "1,024"` — comma-stripped parse succeeds; original display string preserved.
 
 ### Input
 
 ````markdown
-```proof:element kind=value
+```mdloom:element kind=value
 value: "1,024"
 label: Records
 ```
@@ -1549,14 +1549,14 @@ label: Records
 
 ---
 
-## Scenario 34 — proof:row separator=" │ " column alignment
+## Scenario 34 — mdloom:row separator=" │ " column alignment
 
 **Tests:** Three-column row with separator ` │ ` satisfies R-1 — all rows same total visual width.
 
 ### Input
 
 ````markdown
-```proof:row source=md://scores.md#table:0 separator=" │ "
+```mdloom:row source=md://scores.md#table:0 separator=" │ "
 - kind=label col=Name   width=8
 - kind=value col=Score  width=5
 - kind=badge col=Grade  width=4
@@ -1589,14 +1589,14 @@ Bob      │ 82    │ B
 
 ---
 
-## Scenario 35 — proof:tree kind=dirtree
+## Scenario 35 — mdloom:tree kind=dirtree
 
-**Tests:** `proof:tree kind=dirtree root=src max_depth=2 exclude=target` scans filesystem and produces a tree.
+**Tests:** `mdloom:tree kind=dirtree root=src max_depth=2 exclude=target` scans filesystem and produces a tree.
 
 ### Input
 
 ````markdown
-```proof:tree kind=dirtree root=src max_depth=2 exclude=target
+```mdloom:tree kind=dirtree root=src max_depth=2 exclude=target
 ```
 ````
 
@@ -1629,14 +1629,14 @@ src
 
 ---
 
-## Scenario 36 — proof:tree kind=org inline body
+## Scenario 36 — mdloom:tree kind=org inline body
 
-**Tests:** `proof:tree kind=org` with inline body renders with `├──`/`└──` connector chars.
+**Tests:** `mdloom:tree kind=org` with inline body renders with `├──`/`└──` connector chars.
 
 ### Input
 
 ````markdown
-```proof:tree kind=org
+```mdloom:tree kind=org
 root: Engineering
 - Platform
 - Product
@@ -1673,7 +1673,7 @@ Engineering
 
 ---
 
-## Scenario 37 — proof:tree kind=taxonomy from md:// source
+## Scenario 37 — mdloom:tree kind=taxonomy from md:// source
 
 **Tests:** Flat table with a `Category` column builds synthetic parent nodes in a taxonomy tree.
 
@@ -1682,7 +1682,7 @@ Engineering
 `taxonomy.md` — table with columns Category, Item; 3 rows (Mammals/Dog, Mammals/Cat, Reptiles/Lizard).
 
 ````markdown
-```proof:tree kind=taxonomy source=md://taxonomy.md#table:0 parent-col=Category child-col=Item
+```mdloom:tree kind=taxonomy source=md://taxonomy.md#table:0 parent-col=Category child-col=Item
 ```
 ````
 
@@ -1716,17 +1716,17 @@ Engineering
 
 ---
 
-## Scenario 38 — proof:tree kind=dependency inline body
+## Scenario 38 — mdloom:tree kind=dependency inline body
 
-**Tests:** `proof:tree kind=dependency` renders identically to `kind=org` — same connectors, different semantic label only.
+**Tests:** `mdloom:tree kind=dependency` renders identically to `kind=org` — same connectors, different semantic label only.
 
 ### Input
 
 ````markdown
-```proof:tree kind=dependency
-root: proof-compile
-- proof-canvas
-- proof-math
+```mdloom:tree kind=dependency
+root: mdloom-compile
+- mdloom-canvas
+- mdloom-math
   - unicode-width
 ```
 ````
@@ -1734,9 +1734,9 @@ root: proof-compile
 ### Expected output
 
 ```
-proof-compile
-├── proof-canvas
-└── proof-math
+mdloom-compile
+├── mdloom-canvas
+└── mdloom-math
     └── unicode-width
 ```
 
@@ -1758,14 +1758,14 @@ proof-compile
 
 ---
 
-## Scenario 39 — proof:tree kind=outline passthrough
+## Scenario 39 — mdloom:tree kind=outline passthrough
 
-**Tests:** `proof:tree kind=outline` renders a numbered hierarchy by preserving author-provided number prefixes.
+**Tests:** `mdloom:tree kind=outline` renders a numbered hierarchy by preserving author-provided number prefixes.
 
 ### Input
 
 ````markdown
-```proof:tree kind=outline
+```mdloom:tree kind=outline
 1. Introduction
    1. Background
    2. Motivation
@@ -1791,23 +1791,23 @@ proof-compile
 - No connector chars; indentation preserved from input
 
 **Step 3 — no synthetic numbering**
-- Unlike `proof:ol`, `proof:tree kind=outline` does NOT auto-number
+- Unlike `mdloom:ol`, `mdloom:tree kind=outline` does NOT auto-number
 
 ### Findings
 
-- **F91**: `proof:tree kind=outline` preserves author numbers; `proof:ol` auto-generates. Spec must make this distinction clear with a guidance note on when to use each.
+- **F91**: `mdloom:tree kind=outline` preserves author numbers; `mdloom:ol` auto-generates. Spec must make this distinction clear with a guidance note on when to use each.
 - **F92**: If author's outline numbers are inconsistent (e.g., `1.` then `3.`), renderer passes them through silently. Spec should state whether sequential validation is performed.
 
 ---
 
-## Scenario 40 — proof:tree broken source
+## Scenario 40 — mdloom:tree broken source
 
-**Tests:** `proof:tree source=md://missing.md` — resolution fails, COMPILE-002 emitted, output NOT written.
+**Tests:** `mdloom:tree source=md://missing.md` — resolution fails, COMPILE-002 emitted, output NOT written.
 
 ### Input
 
 ````markdown
-```proof:tree kind=taxonomy source=md://missing.md#table:0 parent-col=Category child-col=Item
+```mdloom:tree kind=taxonomy source=md://missing.md#table:0 parent-col=Category child-col=Item
 ```
 ````
 
@@ -1879,14 +1879,14 @@ title: "✓ Build Passing"
 
 ---
 
-## Scenario 42 — proof:symbol block with size=3
+## Scenario 42 — mdloom:symbol block with size=3
 
-**Tests:** `proof:symbol name=checkmark size=3` renders a 3×3 grid of the glyph.
+**Tests:** `mdloom:symbol name=checkmark size=3` renders a 3×3 grid of the glyph.
 
 ### Input
 
 ````markdown
-```proof:symbol name=checkmark size=3
+```mdloom:symbol name=checkmark size=3
 ```
 ````
 
@@ -1916,14 +1916,14 @@ title: "✓ Build Passing"
 
 ---
 
-## Scenario 43 — proof:shape banner
+## Scenario 43 — mdloom:shape banner
 
-**Tests:** `proof:shape name=banner width=24 height=3 label="COMPILE"` renders a filled banner with centered label.
+**Tests:** `mdloom:shape name=banner width=24 height=3 label="COMPILE"` renders a filled banner with centered label.
 
 ### Input
 
 ````markdown
-```proof:shape name=banner width=24 height=3 label="COMPILE"
+```mdloom:shape name=banner width=24 height=3 label="COMPILE"
 ```
 ````
 
@@ -1988,14 +1988,14 @@ Result: ✓ α = 0.05
 
 ---
 
-## Scenario 45 — proof:toc generation
+## Scenario 45 — mdloom:toc generation
 
-**Tests:** `proof:toc max-depth=2 style=list` scans headings, skips headings inside code blocks, emits list TOC.
+**Tests:** `mdloom:toc max-depth=2 style=list` scans headings, skips headings inside code blocks, emits list TOC.
 
 ### Input
 
 ````markdown
-```proof:toc max-depth=2 style=list
+```mdloom:toc max-depth=2 style=list
 ```
 
 ## Introduction
@@ -2039,19 +2039,19 @@ Result: ✓ α = 0.05
 
 ### Findings
 
-- **F102**: TOC directive appears before the headings it references. Heading scan must skip the `proof:toc` fence itself. Spec must clarify the scan start point.
+- **F102**: TOC directive appears before the headings it references. Heading scan must skip the `mdloom:toc` fence itself. Spec must clarify the scan start point.
 - **F103**: `style=list` produces a bullet list. Spec should enumerate other style values (e.g., `style=numbered`, `style=links`) and their output formats.
 
 ---
 
-## Scenario 46 — proof:ol counter stack
+## Scenario 46 — mdloom:ol counter stack
 
-**Tests:** `proof:ol` with two-level nesting produces correct `1.` / `1.1.` / `1.2.` prefixes.
+**Tests:** `mdloom:ol` with two-level nesting produces correct `1.` / `1.1.` / `1.2.` prefixes.
 
 ### Input
 
 ````markdown
-```proof:ol
+```mdloom:ol
 - First
   - Sub one
   - Sub two
@@ -2087,14 +2087,14 @@ Result: ✓ α = 0.05
 
 ---
 
-## Scenario 47 — proof:right text alignment
+## Scenario 47 — mdloom:right text alignment
 
-**Tests:** `proof:right` in a 40-column slide right-aligns each line by left-padding with spaces.
+**Tests:** `mdloom:right` in a 40-column slide right-aligns each line by left-padding with spaces.
 
 ### Input
 
 ````markdown
-```proof:right width=40
+```mdloom:right width=40
 Aligned right.
 Short.
 ```
@@ -2122,17 +2122,17 @@ Short.
 ### Findings
 
 - **F105**: If a line is wider than `width`, padding is negative. Spec must define behavior: truncate, emit warning, or leave as-is.
-- **F106**: `width` attr on `proof:right` vs inherited slide width — precedence rule needed. If in a two-column region, use region width or slide width?
+- **F106**: `width` attr on `mdloom:right` vs inherited slide width — precedence rule needed. If in a two-column region, use region width or slide width?
 
 ---
 
-## Scenario 48 — proof compile --watch initial pass
+## Scenario 48 — mdloom compile --watch initial pass
 
 **Tests:** `--watch` mode performs an initial compile of all targets, then enters the file-watch loop.
 
 ### Input
 
-`proof.toml` with two `[[compile]]` targets. Run: `proof compile --watch`
+`mdloom.toml` with two `[[compile]]` targets. Run: `mdloom compile --watch`
 
 ### Trace
 
@@ -2155,11 +2155,11 @@ Short.
 
 ## Scenario 49 — [[compile]] multi-target routing
 
-**Tests:** Two `[[compile]]` targets in `proof.toml` route different source directories to different output directories.
+**Tests:** Two `[[compile]]` targets in `mdloom.toml` route different source directories to different output directories.
 
 ### Input
 
-`proof.toml`:
+`mdloom.toml`:
 ```toml
 [[compile]]
 source_dir = "src/guides"
@@ -2173,7 +2173,7 @@ output_dir = "docs/presentations"
 ### Trace
 
 **Step 1 — source_dir_pairs construction**
-- Parse `proof.toml` → `Vec<CompileTarget>`; two targets with distinct source and output dirs
+- Parse `mdloom.toml` → `Vec<CompileTarget>`; two targets with distinct source and output dirs
 
 **Step 2 — per-target output_dir**
 - `src/guides/01-intro.source.md` → strip `src/guides/` → `01-intro.md` → prepend `docs/guides/` → `docs/guides/01-intro.md`
@@ -2185,18 +2185,18 @@ output_dir = "docs/presentations"
 ### Findings
 
 - **F109**: A source file matching two `source_dir` globs would be compiled twice to different output dirs. Spec must state whether overlapping targets are an error or handled (last target wins).
-- **F110**: `source_dir` paths in `proof.toml` are relative to the `proof.toml` file location. Spec must confirm this base path rule.
+- **F110**: `source_dir` paths in `mdloom.toml` are relative to the `mdloom.toml` file location. Spec must confirm this base path rule.
 
 ---
 
-## Scenario 50 — proof compile --output-dir override
+## Scenario 50 — mdloom compile --output-dir override
 
 **Tests:** `--output-dir docs/out` on the CLI overrides all `[[compile]]` target `output_dir` values.
 
 ### Input
 
-`proof.toml` has two targets: `docs/guides` and `docs/presentations`.
-Run: `proof compile --output-dir docs/out`
+`mdloom.toml` has two targets: `docs/guides` and `docs/presentations`.
+Run: `mdloom compile --output-dir docs/out`
 
 ### Expected output
 
@@ -2223,15 +2223,15 @@ Both targets write to `docs/out/`:
 
 ---
 
-## Scenario 51 — Broken md:// caught by proof check
+## Scenario 51 — Broken md:// caught by mdloom check
 
-**Tests:** `proof check` with `SourceLinkCheck` finds a `md://missing.md` reference and emits `md_broken_uri` diagnostic.
+**Tests:** `mdloom check` with `SourceLinkCheck` finds a `md://missing.md` reference and emits `md_broken_uri` diagnostic.
 
 ### Input
 
 `guide.source.md` containing:
 ````markdown
-```proof:include
+```mdloom:include
 md://figures/missing-figure.md#fig:0
 ```
 ````
@@ -2241,7 +2241,7 @@ md://figures/missing-figure.md#fig:0
 ### Trace
 
 **Step 1 — fence detection**
-- `proof check` scans `.source.md` files for fenced blocks; `proof:include` found
+- `mdloom check` scans `.source.md` files for fenced blocks; `mdloom:include` found
 
 **Step 2 — URI extraction**
 - Body: `md://figures/missing-figure.md#fig:0`; path: `figures/missing-figure.md`
@@ -2252,19 +2252,19 @@ md://figures/missing-figure.md#fig:0
 
 ### Findings
 
-- **F113**: `proof check` is a lint pass, not a compile pass — it does not write output files. Spec must confirm exit code: non-zero if any `md_broken_uri` found?
+- **F113**: `mdloom check` is a lint pass, not a compile pass — it does not write output files. Spec must confirm exit code: non-zero if any `md_broken_uri` found?
 - **F114**: URI extraction must handle multi-line directive bodies (URI on second line, comments on others). Spec should define the URI extraction rule (first non-blank line? all lines matching `md://` prefix?).
 
 ---
 
-## Scenario 52 — proof:tree empty body and no source
+## Scenario 52 — mdloom:tree empty body and no source
 
-**Tests:** `proof:tree` with empty body and no `source=` attribute emits COMPILE-002 and does not write output.
+**Tests:** `mdloom:tree` with empty body and no `source=` attribute emits COMPILE-002 and does not write output.
 
 ### Input
 
 ````markdown
-```proof:tree kind=org
+```mdloom:tree kind=org
 ```
 ````
 
@@ -2279,24 +2279,24 @@ md://figures/missing-figure.md#fig:0
 - `attrs.source == None`; both body and source absent
 
 **Step 3 — COMPILE-002 emitted, written=false**
-- `COMPILE-002 [ERROR]: proof:tree has no body and no source attribute`
+- `COMPILE-002 [ERROR]: mdloom:tree has no body and no source attribute`
 - `has_errors = true`; output file not written
 
 ### Findings
 
 - **F115**: COMPILE-002 is reused for "missing source file" (Scenario 40) and "missing body+source" (here). Spec should either use distinct sub-codes or provide enough context in the message to distinguish the two failure modes.
-- **F116**: An empty `proof:tree` body might be a work-in-progress stub. Spec should note whether a `stub=true` attribute suppresses the error for intentional stubs during authoring.
+- **F116**: An empty `mdloom:tree` body might be a work-in-progress stub. Spec should note whether a `stub=true` attribute suppresses the error for intentional stubs during authoring.
 
 ---
 
-## Scenario 53 — proof:math MATH-003 mismatched environment
+## Scenario 53 — mdloom:math MATH-003 mismatched environment
 
 **Tests:** `\begin{pmatrix}...\end{bmatrix}` emits MATH-003 and renders partial output.
 
 ### Input
 
 ````markdown
-```proof:math
+```mdloom:math
 \begin{pmatrix} a & b \\ c & d \end{bmatrix}
 ```
 ````
@@ -2321,13 +2321,13 @@ md://figures/missing-figure.md#fig:0
 
 ---
 
-## Scenario 54 — proof compile with errors: output file untouched
+## Scenario 54 — mdloom compile with errors: output file untouched
 
 **Tests:** When `has_errors=true`, the output file is not written — existing compiled output left unchanged.
 
 ### Input
 
-`guide.source.md` has a `proof:tree` with missing source (COMPILE-002). Previous compile produced `guide.md`.
+`guide.source.md` has a `mdloom:tree` with missing source (COMPILE-002). Previous compile produced `guide.md`.
 
 ### Trace
 
@@ -2344,18 +2344,18 @@ md://figures/missing-figure.md#fig:0
 ### Findings
 
 - **F119**: Leaving stale output on disk can mislead tooling that serves `guide.md`. Spec should consider a `--keep-stale` vs `--delete-on-error` policy flag, or at minimum document stale-output behavior.
-- **F120**: `proof compile` should report "1 file had errors, 0 files written" in stdout even when `has_errors` — the operator needs to know which files were not updated.
+- **F120**: `mdloom compile` should report "1 file had errors, 0 files written" in stdout even when `has_errors` — the operator needs to know which files were not updated.
 
 ---
 
-## Scenario 55 — proof:row missing source URI
+## Scenario 55 — mdloom:row missing source URI
 
-**Tests:** `proof:row` with empty `source_uri` emits COMPILE-002.
+**Tests:** `mdloom:row` with empty `source_uri` emits COMPILE-002.
 
 ### Input
 
 ````markdown
-```proof:row
+```mdloom:row
 - kind=label col=Name
 ```
 ````
@@ -2371,24 +2371,24 @@ md://figures/missing-figure.md#fig:0
 - `if source_uri.is_empty() { return Err(CompileError::MissingSource); }`
 
 **Step 3 — COMPILE-002 emitted**
-- `COMPILE-002 [ERROR]: proof:row missing required source= attribute`
+- `COMPILE-002 [ERROR]: mdloom:row missing required source= attribute`
 - `has_errors = true`; `written = false`
 
 ### Findings
 
 - **F121**: `compile_row` with empty URI vs URI that resolves to missing file — both emit COMPILE-002 but with different messages. Spec should provide distinct error text to help authors diagnose quickly.
-- **F122**: `source=` is a required attribute for `proof:row`. Spec should list it as required in the directive reference, and `proof check` should catch its absence before compile time.
+- **F122**: `source=` is a required attribute for `mdloom:row`. Spec should list it as required in the directive reference, and `mdloom check` should catch its absence before compile time.
 
 ---
 
-## Scenario 56 — proof:math overflow — width=5 for wide expression
+## Scenario 56 — mdloom:math overflow — width=5 for wide expression
 
-**Tests:** `proof:math width=5` for a wide fraction triggers MATH-004 warning and clips output.
+**Tests:** `mdloom:math width=5` for a wide fraction triggers MATH-004 warning and clips output.
 
 ### Input
 
 ````markdown
-```proof:math width=5
+```mdloom:math width=5
 \frac{alpha+beta}{gamma}
 ```
 ````
@@ -2413,7 +2413,7 @@ Expression natural width = 11 (`alpha+beta`). Width constraint = 5.
 
 ---
 
-## Scenario 57 — proof-canvas TUI integration: three regions
+## Scenario 57 — mdloom-canvas TUI integration: three regions
 
 **Tests:** Three regions pasted at specific positions produce a clean 80×24 render with no bleed.
 
@@ -2447,7 +2447,7 @@ let output = canvas.render();
 
 ---
 
-## Scenario 58 — proof-canvas wide char at column boundary
+## Scenario 58 — mdloom-canvas wide char at column boundary
 
 **Tests:** A CJK character (visual_width=2) at column 78 of an 80-wide canvas is placed correctly; second column filled with placeholder space.
 
@@ -2480,14 +2480,14 @@ Row 0: 78 spaces + `界` + placeholder space (total: 80 display cols)
 
 ---
 
-## Scenario 59 — proof-math standalone: summation with limits
+## Scenario 59 — mdloom-math standalone: summation with limits
 
-**Tests:** `proof_math::expand_inline_math("$\\sum_{i=1}^n i$")` produces best-effort Unicode expansion via the public API.
+**Tests:** `mdloom_math::expand_inline_math("$\\sum_{i=1}^n i$")` produces best-effort Unicode expansion via the public API.
 
 ### Input
 
 ```rust
-let result = proof_math::expand_inline_math("$\\sum_{i=1}^n i$");
+let result = mdloom_math::expand_inline_math("$\\sum_{i=1}^n i$");
 ```
 
 ### Expected output
@@ -2513,14 +2513,14 @@ let result = proof_math::expand_inline_math("$\\sum_{i=1}^n i$");
 
 ---
 
-## Scenario 60 — proof-math render_display_math: centered π at width=40
+## Scenario 60 — mdloom-math render_display_math: centered π at width=40
 
 **Tests:** `render_display_math("\\pi", width=40, align=center)` produces `π` centered in 40 columns.
 
 ### Input
 
 ```rust
-let block = proof_math::render_display_math(
+let block = mdloom_math::render_display_math(
     "\\pi",
     DisplayOpts { width: 40, align: MathAlign::Center }
 );
@@ -2585,7 +2585,7 @@ let block = proof_math::render_display_math(
 | F59 | 23 | `---` front-matter vs slide separator parsing |
 | F60 | 23 | `<!-- count=N -->` sentinel purpose and absence handling |
 | F61 | 24 | Notes sidecar output for presenter tools |
-| F62 | 24 | `proof check` SL-5 verification rule |
+| F62 | 24 | `mdloom check` SL-5 verification rule |
 | F63 | 25 | Region under-fill: remaining rows stay as spaces |
 | F64 | 25 | Canvas default fill character is U+0020 |
 | F65 | 26 | AABB overlap check complexity |
@@ -2600,7 +2600,7 @@ let block = proof_math::render_display_math(
 | F74 | 30 | Separator width included in total row width |
 | F75 | 31 | Sparkline width > point count: stretch vs pad |
 | F76 | 31 | Constant-series normalization (division by zero) |
-| F77 | 32 | Empty proof:row block representation in output |
+| F77 | 32 | Empty mdloom:row block representation in output |
 | F78 | 32 | COMPILE-004 suppression mechanism |
 | F79 | 33 | Cleaning steps applied before numeric parse |
 | F80 | 33 | Original display string preservation |
@@ -2614,7 +2614,7 @@ let block = proof_math::render_display_math(
 | F88 | 37 | Multi-level taxonomy (3+ columns) |
 | F89 | 38 | kind=dependency vs kind=org rendering difference |
 | F90 | 38 | Cycle detection in dependency trees |
-| F91 | 39 | proof:tree kind=outline vs proof:ol distinction |
+| F91 | 39 | mdloom:tree kind=outline vs mdloom:ol distinction |
 | F92 | 39 | Outline number validation |
 | F93 | 40 | Stale output file handling when written=false |
 | F94 | 40 | COMPILE-002 sub-cases (file missing vs section missing) |
@@ -2627,19 +2627,19 @@ let block = proof_math::render_display_math(
 | F101 | 44 | `[sym:...]` inside `$...$` not expanded |
 | F102 | 45 | TOC heading scan start (skip TOC fence itself) |
 | F103 | 45 | TOC style enumeration |
-| F104 | 46 | Sub-item indent formula for proof:ol |
-| F105 | 47 | proof:right overflow (line wider than width) |
-| F106 | 47 | proof:right width precedence (attr vs region vs slide) |
+| F104 | 46 | Sub-item indent formula for mdloom:ol |
+| F105 | 47 | mdloom:right overflow (line wider than width) |
+| F106 | 47 | mdloom:right width precedence (attr vs region vs slide) |
 | F107 | 48 | Watch set includes md:// URIs from initial compile |
 | F108 | 48 | Watch mode continues after initial compile errors |
 | F109 | 49 | Overlapping source_dir targets between compile entries |
-| F110 | 49 | source_dir relative to proof.toml location |
+| F110 | 49 | source_dir relative to mdloom.toml location |
 | F111 | 50 | Filename collision when --output-dir flattens hierarchy |
 | F112 | 50 | --output-dir persists for entire watch session |
-| F113 | 51 | proof check exit code for broken URIs |
+| F113 | 51 | mdloom check exit code for broken URIs |
 | F114 | 51 | URI extraction rule from multi-line directive bodies |
 | F115 | 52 | COMPILE-002 reuse for distinct failure modes |
-| F116 | 52 | stub=true suppression for empty proof:tree |
+| F116 | 52 | stub=true suppression for empty mdloom:tree |
 | F117 | 53 | MATH-003 written policy (partial output vs suppress) |
 | F118 | 53 | Best-effort render for mismatched environments |
 | F119 | 54 | Stale output policy flag (--keep-stale) |

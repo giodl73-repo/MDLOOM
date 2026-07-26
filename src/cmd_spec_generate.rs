@@ -1,8 +1,8 @@
 use crate::cmd_context::GlobalOptions;
 use anyhow::{Context, Result};
 use colored::Colorize;
-use proof_lib::lint::load_config_for_path as load_config;
-use proof_lib::spec_gen;
+use mdloom_lib::lint::load_config_for_path as load_config;
+use mdloom_lib::spec_gen;
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -21,8 +21,8 @@ pub(crate) struct Args {
     /// Write output to file instead of stdout
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
-    /// Use the configured AI CLI (proof.toml [ai]) to generate richer invariants.
-    /// Falls back to static analysis when not set. Configure in proof.toml:
+    /// Use the configured AI CLI (mdloom.toml [ai]) to generate richer invariants.
+    /// Falls back to static analysis when not set. Configure in mdloom.toml:
     ///   [ai]
     ///   command = "claude"
     ///   args    = ["-p", "{prompt}"]
@@ -83,14 +83,14 @@ fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {
             "→".cyan(),
             ai_cfg.command
         );
-        let prompt = proof_lib::ai::spec_generate_prompt(&uri, &element.content);
-        let response = proof_lib::ai::call_ai(&prompt, ai_cfg)
+        let prompt = mdloom_lib::ai::spec_generate_prompt(&uri, &element.content);
+        let response = mdloom_lib::ai::call_ai(&prompt, ai_cfg)
             .with_context(|| format!(
-                "AI CLI {:?} failed. Check [ai] in proof.toml or run without --ai for static analysis.",
+                "AI CLI {:?} failed. Check [ai] in mdloom.toml or run without --ai for static analysis.",
                 ai_cfg.command
             ))?;
         eprintln!(
-            "{} AI response received — paste the block below into proof.toml",
+            "{} AI response received — paste the block below into mdloom.toml",
             "✓".green()
         );
         eprintln!();
@@ -133,8 +133,8 @@ fn run(args: Args, config_override: &Option<PathBuf>) -> Result<()> {
         );
     }
     eprintln!();
-    eprintln!("Paste the output below into your proof.toml, then run:");
-    eprintln!("  proof check --daVinci .");
+    eprintln!("Paste the output below into your mdloom.toml, then run:");
+    eprintln!("  mdloom check --daVinci .");
     eprintln!();
 
     match output {

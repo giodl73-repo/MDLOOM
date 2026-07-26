@@ -5,10 +5,10 @@
 `md-path` is a standalone Rust library crate that implements the `md://` URI
 scheme for addressing elements within markdown documents.
 
-It is deliberately separated from `proof` so that:
-- Editors, CI systems, and other tools can adopt `md://` without depending on proof
-- The addressing scheme is an open standard; proof is the reference implementation
-- The resolver can be tested independently of proof's validation logic
+It is deliberately separated from `mdloom` so that:
+- Editors, CI systems, and other tools can adopt `md://` without depending on mdloom
+- The addressing scheme is an open standard; mdloom is the reference implementation
+- The resolver can be tested independently of mdloom's validation logic
 
 ## Crate name
 
@@ -17,9 +17,9 @@ It is deliberately separated from `proof` so that:
 ## Workspace structure
 
 ```
-proof/                     ← Cargo workspace root
-├── Cargo.toml             ← [workspace] members = ["proof", "md-path"]
-├── proof/                 ← The proof CLI crate
+mdloom/                     ← Cargo workspace root
+├── Cargo.toml             ← [workspace] members = ["mdloom", "md-path"]
+├── mdloom/                 ← The mdloom CLI crate
 │   ├── Cargo.toml         ← depends on md-path
 │   └── src/
 │       └── main.rs
@@ -82,9 +82,9 @@ pub enum Selector { Named(String), Index(usize), None }
 
 ## Design directory
 
-All md-path design docs live in `proof/design/md-path/`:
+All md-path design docs live in `mdloom/design/md-path/`:
 
-- `FIG-SPEC.md` — full specification (in `proof/design/`, shared)
+- `FIG-SPEC.md` — full specification (in `mdloom/design/`, shared)
 - `PITFALLS.md` — this directory: failure mode catalog
 - `INVARIANTS.md` — this directory: properties that must always hold
 - `CRATE.md` — this file: crate structure
@@ -133,4 +133,4 @@ md-path/tests/
 
 ## Status
 
-Not yet implemented. Specification complete. See `proof/design/FIG-SPEC.md`.
+Not yet implemented. Specification complete. See `mdloom/design/FIG-SPEC.md`.

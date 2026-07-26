@@ -28,7 +28,7 @@ impl SideInfoKind {
 pub(crate) fn side_info_path(root: &Path, explicit: Option<&str>, kind: SideInfoKind) -> PathBuf {
     explicit
         .map(|p| root.join(p))
-        .unwrap_or_else(|| root.join(".proof").join("side-info").join(kind.filename()))
+        .unwrap_or_else(|| root.join(".mdloom").join("side-info").join(kind.filename()))
 }
 
 pub(crate) fn side_info_dependencies(directives: &[Directive], root: &Path) -> Vec<PathBuf> {
@@ -112,7 +112,7 @@ pub(crate) fn render_backlinks(
     let report_path = side_info_path(root, side_info, SideInfoKind::Backlinks);
     let rendered = crop_side_info::render_backlinks(target, &report_path, format)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:backlinks\" target=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:backlinks\" target=\"{}\" -->\n{}\n<!-- /mdloom:compiled -->",
         target, rendered
     ))
 }
@@ -128,7 +128,7 @@ pub(crate) fn render_links(
     let filter = link_filter(source_doc, status)?;
     let rendered = crop_side_info::render_links(&report_path, &filter, format)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:links\" -->\n{}\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:links\" -->\n{}\n<!-- /mdloom:compiled -->",
         rendered
     ))
 }
@@ -142,7 +142,7 @@ pub(crate) fn render_headings(
     let report_path = side_info_path(root, side_info, SideInfoKind::Headings);
     let rendered = crop_side_info::render_headings(source_doc, &report_path, format)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:headings\" source=\"{}\" -->\n{}\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:headings\" source=\"{}\" -->\n{}\n<!-- /mdloom:compiled -->",
         source_doc, rendered
     ))
 }
@@ -159,7 +159,7 @@ pub(crate) fn render_frontmatter(
     let filter = frontmatter_filter(field, value, op)?;
     let rendered = crop_side_info::render_frontmatter(&report_path, &filter, format)?;
     Ok(format!(
-        "<!-- proof:compiled from=\"proof:frontmatter\" -->\n{}\n<!-- /proof:compiled -->",
+        "<!-- mdloom:compiled from=\"mdloom:frontmatter\" -->\n{}\n<!-- /mdloom:compiled -->",
         rendered
     ))
 }
@@ -342,21 +342,21 @@ mod tests {
         assert_eq!(
             side_info_path(root, None, SideInfoKind::Backlinks),
             PathBuf::from("repo")
-                .join(".proof")
+                .join(".mdloom")
                 .join("side-info")
                 .join("backlinks.json")
         );
         assert_eq!(
             side_info_path(root, None, SideInfoKind::Headings),
             PathBuf::from("repo")
-                .join(".proof")
+                .join(".mdloom")
                 .join("side-info")
                 .join("headings.json")
         );
         assert_eq!(
             side_info_path(root, None, SideInfoKind::Frontmatter),
             PathBuf::from("repo")
-                .join(".proof")
+                .join(".mdloom")
                 .join("side-info")
                 .join("frontmatter.json")
         );

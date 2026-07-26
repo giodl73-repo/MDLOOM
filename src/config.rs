@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
-pub struct GlintConfig {
+pub struct MdloomConfig {
     /// Explicit parent config to inherit from (overrides auto-cascade).
     /// Path is relative to this config file's directory.
     pub extends: Option<String>,
@@ -35,10 +35,10 @@ pub struct GlintConfig {
     #[serde(default)]
     pub davinci: Vec<DaVinciEntry>,
     /// Compile targets — one or more source/output directory pairs.
-    /// Use [[compile]] in proof.toml to declare multiple targets.
+    /// Use [[compile]] in mdloom.toml to declare multiple targets.
     #[serde(default)]
     pub compile: Vec<CompileTarget>,
-    /// AI CLI configuration for `proof spec-generate` and future AI-assisted commands.
+    /// AI CLI configuration for `mdloom spec-generate` and future AI-assisted commands.
     #[serde(default)]
     pub ai: AiConfig,
 }
@@ -57,16 +57,16 @@ pub struct GlintConfig {
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct CompileTarget {
     /// Source directory containing `.source.md` files.
-    /// Relative to the proof root.
+    /// Relative to the mdloom root.
     pub source_dir: Option<String>,
     /// Output directory for compiled files.
-    /// Relative to the proof root.
+    /// Relative to the mdloom root.
     pub output_dir: Option<String>,
 }
 
 /// AI CLI configuration.
 ///
-/// proof shells out to any CLI that can generate text. Configure the command
+/// mdloom shells out to any CLI that can generate text. Configure the command
 /// and its argument template once; all AI-assisted commands use it.
 ///
 /// ```toml
@@ -108,8 +108,8 @@ impl Default for AiConfig {
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct SectionSchema {
     /// Glob patterns — files matching ANY of these are candidates.
-    /// In a directory-level proof.toml, paths are relative to that directory.
-    /// In the root proof.toml, paths are relative to the root.
+    /// In a directory-level mdloom.toml, paths are relative to that directory.
+    /// In the root mdloom.toml, paths are relative to the root.
     /// Example: `["*.md"]` matches all markdown files in the directory.
     pub paths: Vec<String>,
 
@@ -176,7 +176,7 @@ pub struct MarkdownTableConfig {
     pub ignore_extra_body_cols: bool,
     /// Warn when `.source.md` files contain inline pipe tables.
     /// Source documents should keep durable row data in sidecar JSON/CSV or
-    /// generated proof tables so PEBBLE/CROP can cite normalized evidence.
+    /// generated mdloom tables so PEBBLE/CROP can cite normalized evidence.
     #[serde(default = "bool_true")]
     pub flag_inline_source_tables: bool,
 }
@@ -421,7 +421,7 @@ pub struct AsciiTreeConfig {
     /// Verify that each path in the tree exists on disk (opt-in)
     #[serde(default)]
     pub verify_paths: bool,
-    /// Root directory for path verification (defaults to the directory containing proof.toml)
+    /// Root directory for path verification (defaults to the directory containing mdloom.toml)
     #[serde(default)]
     pub verify_root: Option<String>,
 }
@@ -611,11 +611,11 @@ struct ConfigExplicitness {
 
 #[derive(Debug, Clone)]
 struct LoadedConfig {
-    config: GlintConfig,
+    config: MdloomConfig,
     explicit: ConfigExplicitness,
 }
 
-impl GlintConfig {
+impl MdloomConfig {
     pub fn load(path: &Path) -> Result<Self> {
         Ok(load_with_explicitness(path)?.config)
     }
@@ -624,7 +624,7 @@ impl GlintConfig {
     /// the directory tree. Configs are merged: parent first, then child overrides.
     ///
     /// section_schemas paths are automatically prefixed with the config file's
-    /// directory relative to root_dir. This means a `languages/proof.toml` can
+    /// directory relative to root_dir. This means a `languages/mdloom.toml` can
     /// write `paths = ["02-*.md"]` instead of `paths = ["languages/02-*.md"]`.
     ///
     /// Cascade stops when a config has `files.root = true` or we hit root_dir.
@@ -664,29 +664,29 @@ impl GlintConfig {
                 loaded
             });
 
-        prefixed.fold(GlintConfig::default(), |acc, loaded| {
+        prefixed.fold(MdloomConfig::default(), |acc, loaded| {
             merge_with_explicitness(acc, loaded.config, &loaded.explicit)
         })
     }
 
     pub fn load_or_default(dir: &Path) -> Self {
-        for name in &["proof.toml", ".proof.toml", ".proof/config.toml"] {
+        for name in &["mdloom.toml", ".mdloom.toml", ".mdloom/config.toml"] {
             let path = dir.join(name);
             if path.exists() {
                 match Self::load(&path) {
                     Ok(cfg) => return cfg,
-                    Err(e) => eprintln!("proof: warning: {}", e),
+                    Err(e) => eprintln!("mdloom: warning: {}", e),
                 }
             }
         }
-        GlintConfig::default()
+        MdloomConfig::default()
     }
 }
 
 fn load_with_explicitness(path: &Path) -> Result<LoadedConfig> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("reading config file: {}", path.display()))?;
-    let config: GlintConfig = toml::from_str(&content)
+    let config: MdloomConfig = toml::from_str(&content)
         .with_context(|| format!("parsing config file: {}", path.display()))?;
     let raw: toml::Value = toml::from_str(&content)
         .with_context(|| format!("parsing config file: {}", path.display()))?;
@@ -703,12 +703,12 @@ fn load_with_explicitness(path: &Path) -> Result<LoadedConfig> {
     Ok(LoadedConfig { config, explicit })
 }
 
-/// Walk from `dir` up to `root_dir`, collecting every proof.toml found.
+/// Walk from `dir` up to `root_dir`, collecting every mdloom.toml found.
 /// Returns (origin_directory, config) pairs ordered nearest-first.
 ///
-/// The origin_directory is the directory where each proof.toml was found.
+/// The origin_directory is the directory where each mdloom.toml was found.
 /// It is used by resolve_for() to prefix section_schema paths so that a
-/// `languages/proof.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
+/// `languages/mdloom.toml` can write `paths = ["02-*.md"]` not `["languages/02-*.md"]`.
 fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, LoadedConfig)> {
     let mut configs: Vec<(PathBuf, LoadedConfig)> = Vec::new();
     let mut current = dir.to_path_buf();
@@ -727,7 +727,7 @@ fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, 
                         configs.push((parent_dir, parent));
                     }
                     Err(e) => {
-                        eprintln!("proof: warning: extends {:?} failed: {}", parent_abs, e);
+                        eprintln!("mdloom: warning: extends {:?} failed: {}", parent_abs, e);
                         configs.push((current.clone(), loaded));
                     }
                 }
@@ -755,12 +755,12 @@ fn collect_configs_up_with_origin(dir: &Path, root_dir: &Path) -> Vec<(PathBuf, 
 }
 
 fn try_load_config(dir: &Path) -> Option<LoadedConfig> {
-    for name in &["proof.toml", ".proof.toml"] {
+    for name in &["mdloom.toml", ".mdloom.toml"] {
         let path = dir.join(name);
         if path.exists() {
             match load_with_explicitness(&path) {
                 Ok(cfg) => return Some(cfg),
-                Err(e) => eprintln!("proof: warning: {}", e),
+                Err(e) => eprintln!("mdloom: warning: {}", e),
             }
         }
     }
@@ -773,7 +773,7 @@ fn try_load_config(dir: &Path) -> Option<LoadedConfig> {
 ///   - Lists (required sections, patterns, rules) → ADDITIVE (parent + child)
 ///   - Scalars (tolerance, max_h1, enabled) → child wins
 ///   - Absent optional scalars (None) → fall through to parent's value
-pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
+pub fn merge(parent: MdloomConfig, child: MdloomConfig) -> MdloomConfig {
     // Public callers pass already-effective configs, so infer explicitness from
     // non-default values. TOML-loaded cascades use load_with_explicitness() to
     // preserve explicit defaults such as include = ["**/*.md"].
@@ -785,11 +785,11 @@ pub fn merge(parent: GlintConfig, child: GlintConfig) -> GlintConfig {
 }
 
 fn merge_with_explicitness(
-    parent: GlintConfig,
-    child: GlintConfig,
+    parent: MdloomConfig,
+    child: MdloomConfig,
     explicit: &ConfigExplicitness,
-) -> GlintConfig {
-    GlintConfig {
+) -> MdloomConfig {
+    MdloomConfig {
         extends: child.extends,
         meta: if child.meta.name.is_some() {
             child.meta
@@ -925,14 +925,14 @@ fn merge_markdown(
 // DaVinci — pinned figures with invariant protection
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A pinned figure entry in [[davinci]] of proof.toml.
+/// A pinned figure entry in [[davinci]] of mdloom.toml.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DaVinciEntry {
     /// Stable identifier — used in diagnostics and reports
     pub id: String,
     /// md:// URI addressing the pinned element
     pub uri: String,
-    /// Human description (shown in `proof pin list`)
+    /// Human description (shown in `mdloom pin list`)
     #[serde(default)]
     pub description: String,
     /// Optional template name — inherits its base invariants

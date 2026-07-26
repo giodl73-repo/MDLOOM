@@ -1,16 +1,16 @@
-# CROP Index and TOC Integration for PROOF
+# CROP Index and TOC Integration for MDLOOM
 
 ## Goal
 
-Make PROOF depend on CROP for corpus index and TOC primitives while PROOF keeps
+Make MDLOOM depend on CROP for corpus index and TOC primitives while MDLOOM keeps
 ownership of Markdown, HTML, ASCII-art, and source-to-output compilation.
 
 ## Motivation
 
-PROOF already generates Markdown from `.source.md`, now also HTML, and validates
+MDLOOM already generates Markdown from `.source.md`, now also HTML, and validates
 links, tables, ASCII figures, directives, and source references. CROP has the
 right local corpus view layer: filtered roots, named views, inspection, extension
-profiles, source samples, and Markdown index generation. PROOF should reuse that
+profiles, source samples, and Markdown index generation. MDLOOM should reuse that
 library surface instead of rebuilding corpus discovery and source-table logic.
 
 ## Dependency
@@ -38,30 +38,30 @@ crop-core = { git = "https://github.com/giodl73-repo/CROP.git", package = "crop-
 - `inspect_view_store(store) -> Result<CropViewStoreInspect, CropError>`
 - `IngestOptions { include_extensions, exclude_dirs }`
 
-## PROOF commands
+## MDLOOM commands
 
 Add non-destructive commands first:
 
 ```powershell
-proof index --root . --extension md --extension html --exclude-dir target
-proof index --view .proof\views\docs.json --output INDEX.md
-proof toc --root docs --extension md --output TOC.md
-proof inspect-views --dir .proof\views --strict
+mdloom index --root . --extension md --extension html --exclude-dir target
+mdloom index --view .mdloom\views\docs.json --output INDEX.md
+mdloom toc --root docs --extension md --output TOC.md
+mdloom inspect-views --dir .mdloom\views --strict
 ```
 
-`proof index` should render a README-style source table. `proof toc` can start as
+`mdloom index` should render a README-style source table. `mdloom toc` can start as
 an alias or narrower rendering of the same CROP `MarkdownIndex` report, then
-later grow heading-depth options. `proof inspect-views` should surface CROP view
-inspection for CI before PROOF compiles or publishes a large corpus.
+later grow heading-depth options. `mdloom inspect-views` should surface CROP view
+inspection for CI before MDLOOM compiles or publishes a large corpus.
 
-## PROOF directives
+## MDLOOM directives
 
 After the command surface lands, wire generated indexes into source compilation:
 
 ```markdown
-proof:index root="docs" extensions="md,html" exclude="target" title="Documentation Index"
-proof:toc root="docs/guides" extensions="md" depth=2
-proof:view-index file=".proof/views/docs.json"
+mdloom:index root="docs" extensions="md,html" exclude="target" title="Documentation Index"
+mdloom:toc root="docs/guides" extensions="md" depth=2
+mdloom:view-index file=".mdloom/views/docs.json"
 ```
 
 The directive renderer should call CROP APIs and insert Markdown tables into the
@@ -86,20 +86,20 @@ Also include:
 
 - Do not overwrite existing `README.md`, `INDEX.md`, or `TOC.md` unless the user
   passes `--output` explicitly.
-- Honor PROOF's existing include/exclude configuration where possible, translating
+- Honor MDLOOM's existing include/exclude configuration where possible, translating
   it into CROP `IngestOptions`.
 - Keep generated artifacts deterministic for stable diffs.
-- For HTML output, PROOF should render the Markdown table through its existing
+- For HTML output, MDLOOM should render the Markdown table through its existing
   HTML target rather than asking CROP to emit HTML.
-- Treat CROP errors as PROOF diagnostics with file/path context.
+- Treat CROP errors as MDLOOM diagnostics with file/path context.
 
 ## Validation
 
 ```powershell
 cargo fmt
 cargo test
-proof index --root . --extension md --extension html --exclude-dir target
-proof inspect-views --dir .proof\views --strict
+mdloom index --root . --extension md --extension html --exclude-dir target
+mdloom inspect-views --dir .mdloom\views --strict
 ```
 
 Add tests for:

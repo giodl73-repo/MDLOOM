@@ -3,18 +3,18 @@
 ## Mission
 
 Continue the command-module split by extracting the self-contained
-`proof init` command.
+`mdloom init` command.
 
 ## Changes
 
 - Added `src/cmd_init.rs`.
-- Moved default `proof.toml` creation out of `main.rs`.
+- Moved default `mdloom.toml` creation out of `main.rs`.
 - Updated dispatch to call `cmd_init::run`.
 - Reused the existing init E2E regression.
 
 ## Validation
 
-- `cargo test binary_init_creates_default_proof_toml`
+- `cargo test binary_init_creates_default_mdloom_toml`
 - `cargo test`
 - `cargo build`
 - `git diff --check`

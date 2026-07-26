@@ -6,7 +6,7 @@ include `%` so they don't parse as plain f64; this scenario substitutes a
 hypothetical numeric `score` column to demonstrate the composition syntax.
 
 ```text
-proof:chart kind=bar width=50 label-field=model value-field=score
+mdloom:chart kind=bar width=50 label-field=model value-field=score
             source=md://stats.md#:table:0?filter=status!=baseline&top=2
 ```
 

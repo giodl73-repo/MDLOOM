@@ -1,4 +1,4 @@
-# MATH-IMPL-PLAN — LaTeX Math Rendering for proof
+# MATH-IMPL-PLAN — LaTeX Math Rendering for mdloom
 
 > **Spec**: `design/MATH-SPEC.md`
 > **Status**: Ready to implement
@@ -35,7 +35,7 @@ mod       ← render, tier2, superscript, symbols  [public API]
 ```
 
 Wired into compile pipeline in `src/compile.rs`:
-- `proof:math` fenced block → `render_display_math(body, opts)`
+- `mdloom:math` fenced block → `render_display_math(body, opts)`
 - Inline `$...$` in `render_body_lines()`, slide text paths, bullet labels
 
 ---
@@ -293,17 +293,17 @@ All L0 tests live inline in `src/math/fraction.rs`, `integral.rs`, `matrix.rs`.
 
 ---
 
-## Wave 4 — proof:math directive + inline expansion wiring
+## Wave 4 — mdloom:math directive + inline expansion wiring
 
 **Scope**: ~200 LOC  
 **Files**: `src/compile.rs` (new match arm), `src/slide/layout.rs` (inline expansion), `src/math/mod.rs` (finalization)
 
-### `proof:math` compile directive
+### `mdloom:math` compile directive
 
-In `compile.rs`, add match arm for `"proof:math"` info string:
+In `compile.rs`, add match arm for `"mdloom:math"` info string:
 
 ```rust
-"proof:math" => {
+"mdloom:math" => {
     let attrs = parse_directive_attrs(info);
     let width = attrs.get("width").map(|s| s.parse().ok()).flatten().unwrap_or(0);
     let align = attrs.get("align").map(Align::from_str).unwrap_or(Align::Center);
@@ -313,9 +313,9 @@ In `compile.rs`, add match arm for `"proof:math"` info string:
     if no_chrome {
         out.extend(lines);
     } else {
-        out.push(format!("<!-- proof:math -->"));
+        out.push(format!("<!-- mdloom:math -->"));
         out.extend(lines);
-        out.push(format!("<!-- /proof:math -->"));
+        out.push(format!("<!-- /mdloom:math -->"));
     }
 }
 ```
@@ -339,17 +339,17 @@ Bullet labels: `render_bullets()` calls `expand_inline_math()` on each label str
 ### Tests (Wave 4) — 15+ L1 tests
 
 L1 integration tests in `tests/math_integration.rs` (new file, separate from `integration_tests.rs`):
-- `proof:math` block with `\frac{n(n+1)}{2}` → 3-line stacked output
-- `proof:math` block with `\sum_{i=1}^{n}` → lines with upper/lower bounds
-- `proof:math` with `width=40 align=center` → each output line is exactly 40 visual columns
-- `proof:math` with `no-chrome=true` → no comment wrapper lines
+- `mdloom:math` block with `\frac{n(n+1)}{2}` → 3-line stacked output
+- `mdloom:math` block with `\sum_{i=1}^{n}` → lines with upper/lower bounds
+- `mdloom:math` with `width=40 align=center` → each output line is exactly 40 visual columns
+- `mdloom:math` with `no-chrome=true` → no comment wrapper lines
 - Inline `$\alpha + \beta$` in slide body → `α + β`
 - Inline `$x^2 + y^2 = z^2$` → `x² + y² = z²`
 - MATH-005 on inline `$\frac{a}{b}$` → downgraded to `a/b`, warning emitted
 - Inline math not expanded inside `` `code span` ``
 - Symbol and math both expand in same line: `[sym:checkmark] $\alpha$` → `✓ α`
 - Unmatched `$` passes through unchanged
-- `proof:math` block with ragged matrix → padded output, no panic
+- `mdloom:math` block with ragged matrix → padded output, no panic
 - MATH-001 on unknown command in block math
 
 ---
@@ -367,7 +367,7 @@ L1 integration tests in `tests/math_integration.rs` (new file, separate from `in
 | `src/math/fraction.rs` | 3 | 120 | Stacked fraction, `RenderedExpr` |
 | `src/math/integral.rs` | 3 | 140 | Integral/sum/product with bounds |
 | `src/math/matrix.rs` | 3 | 180 | Matrix/cases environments |
-| `src/compile.rs` | 4 | +40 | `proof:math` directive match arm |
+| `src/compile.rs` | 4 | +40 | `mdloom:math` directive match arm |
 | `src/slide/layout.rs` | 4 | +20 | Inline expansion in `render_body_lines` |
 
 **Total**: ~1,130 LOC new code + ~60 LOC modifications
@@ -404,7 +404,7 @@ L1 integration tests in `tests/math_integration.rs` (new file, separate from `in
 
 - `cargo test` passes with all 95 new tests green
 - `$\alpha + \beta = \gamma$` in a slide body renders as `α + β = γ`
-- `proof:math` block with `\frac{n(n+1)}{2}` renders the 3-line stacked form
-- `proof:math` block with `\sum_{i=1}^{n}` renders with upper/lower bounds
+- `mdloom:math` block with `\frac{n(n+1)}{2}` renders the 3-line stacked form
+- `mdloom:math` block with `\sum_{i=1}^{n}` renders with upper/lower bounds
 - Inline `$\frac{a}{b}$` triggers MATH-005 and renders as `a/b`
 - Unknown `\command` triggers MATH-001 and passes through

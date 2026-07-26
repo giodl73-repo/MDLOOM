@@ -3,10 +3,10 @@
 Edge case: every value is zero. The bar area should render empty (no fill
 characters); chart should not panic on division-by-zero.
 
-<!-- proof:compiled from="proof:chart" -->
+<!-- mdloom:compiled from="mdloom:chart" -->
 ```
 A  │                                    0
 B  │                                    0
 C  │                                    0
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

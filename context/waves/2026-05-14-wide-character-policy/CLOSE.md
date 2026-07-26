@@ -17,7 +17,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before wave | After |
 |---|---:|---:|
@@ -30,4 +30,4 @@ status: complete
 1. Remaining MAXIM warning signal is now dominated by `ascii_box_col`,
    `ascii_cell_padding`, and `ascii_connector_drift`.
 2. Nested/side-by-side box detection still needs a dedicated design wave.
-3. Sibling `mdpath` warnings remain external to proof.
+3. Sibling `mdpath` warnings remain external to mdloom.

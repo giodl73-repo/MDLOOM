@@ -17,7 +17,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before | After |
 |---|---:|---:|
@@ -30,5 +30,5 @@ status: complete
 
 1. Remaining MAXIM signal is dominated by ASCII layout diagnostics:
    `ascii_cell_padding`, `ascii_box_col`, and `ascii_char_range`.
-2. Sibling `mdpath` warnings remain external to proof and should be cleaned in
+2. Sibling `mdpath` warnings remain external to mdloom and should be cleaned in
    the `C:\src\mdpath` worktree or a dedicated cross-repo wave.

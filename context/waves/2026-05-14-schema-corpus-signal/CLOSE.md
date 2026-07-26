@@ -11,13 +11,13 @@ status: complete
 | Area | Result |
 |---|---|
 | Schema disable | Child TOML can now explicitly set `[markdown] enabled = false` to disable inherited Markdown checks. |
-| Fix line endings | `proof fix` preserves CRLF files when applying line edits. |
+| Fix line endings | `mdloom fix` preserves CRLF files when applying line edits. |
 | MAXIM signal | Current MAXIM run is warning-only; largest code is `md_unexpected_section`. |
-| mdpath warnings | Sibling `mdpath` warnings are explicitly carried forward instead of hidden in proof. |
+| mdpath warnings | Sibling `mdpath` warnings are explicitly carried forward instead of hidden in mdloom. |
 
 ## MAXIM Diagnostic Snapshot
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Count |
 |---|---:|

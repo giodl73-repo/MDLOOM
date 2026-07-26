@@ -1,6 +1,6 @@
 # Large Corpus Scan — maxim Reference Library
 
-This document demonstrates `proof check` on the maxim reference library:
+This document demonstrates `mdloom check` on the maxim reference library:
 2,703 markdown files across 13 sections and 217 directories. The goal is
 to verify that the baseline is clean — zero errors — before any new
 authoring session.
@@ -9,14 +9,14 @@ authoring session.
 
 ```bash
 # From the maxim repo root:
-proof check . --errors-only
+mdloom check . --errors-only
 
 # Expected output when clean:
 #   Checked 2703 files — 0 errors, 0 warnings
 
 # If errors exist, scope to the failing section:
-proof check computing/ --errors-only
-proof check mathematics/ --errors-only
+mdloom check computing/ --errors-only
+mdloom check mathematics/ --errors-only
 ```
 
 ## Interpreting results
@@ -24,7 +24,7 @@ proof check mathematics/ --errors-only
 | Output | Meaning |
 |--------|---------|
 | `0 errors, 0 warnings` | Baseline clean — safe to author |
-| `N errors` | Broken boxes or structural issues — run `proof fix` before authoring |
+| `N errors` | Broken boxes or structural issues — run `mdloom fix` before authoring |
 | `ascii_box_width` errors | Box rows differ in visual width — most common in Unicode-heavy files |
 | `md_missing_section` | A required H2 section is absent from a guide |
 | `md_table_col_count` | A table has fewer columns in a body row than the header declares |
@@ -33,13 +33,13 @@ proof check mathematics/ --errors-only
 
 ```bash
 # Preview auto-fixes
-proof fix . --min-confidence high --dry-run
+mdloom fix . --min-confidence high --dry-run
 
 # Apply high-confidence fixes only
-proof fix . --min-confidence high
+mdloom fix . --min-confidence high
 
 # Verify clean
-proof check . --errors-only
+mdloom check . --errors-only
 ```
 
 ## Baseline status

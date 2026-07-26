@@ -12,12 +12,12 @@ into the check command module.
 - Added `cmd_check::run_with_globals` so both explicit and default check routes
   can call the check module directly.
 - Removed the `run_check` helper from `main.rs`.
-- Kept explicit `proof check`, implicit default check, and global flag behavior
+- Kept explicit `mdloom check`, implicit default check, and global flag behavior
   unchanged.
 
 ## Validation
 
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_help_documents_progress_only_for_compile`
 - `cargo test binary_check_summary_file_count_honors_include_exclude`
 - `cargo test`

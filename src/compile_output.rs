@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 pub(crate) fn atomic_write(output_path: &Path, text: &str) -> anyhow::Result<()> {
-    let tmp = output_path.with_extension("proof_tmp");
+    let tmp = output_path.with_extension("mdloom_tmp");
     std::fs::write(&tmp, text)
         .map_err(|e| anyhow::anyhow!("writing temp output {}: {}", tmp.display(), e))?;
     std::fs::rename(&tmp, output_path)
@@ -48,7 +48,7 @@ pub(crate) fn source_fallback(
     }
 }
 
-/// Split a proof source into (frontmatter_yaml, body, body_offset_in_lines).
+/// Split a mdloom source into (frontmatter_yaml, body, body_offset_in_lines).
 /// Frontmatter is the block between the opening `---` on line 0 and the next `---`.
 /// If no frontmatter is present, returns ("", source, 0).
 pub(crate) fn split_frontmatter(source: &str) -> (String, &str, usize) {
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn apply_replacements_single() {
-        let lines = vec!["line0", "```proof:include", "md://x", "```", "line4"];
+        let lines = vec!["line0", "```mdloom:include", "md://x", "```", "line4"];
         let replacements = vec![(1, 3, "REPLACED".to_string())];
         let out = apply_replacements(&lines, &replacements);
         assert_eq!(out, "line0\nREPLACED\nline4");
@@ -138,11 +138,11 @@ mod tests {
     fn apply_replacements_multiple() {
         let lines = vec![
             "before",
-            "```proof:include",
+            "```mdloom:include",
             "md://a",
             "```",
             "middle",
-            "```proof:include",
+            "```mdloom:include",
             "md://b",
             "```",
             "after",

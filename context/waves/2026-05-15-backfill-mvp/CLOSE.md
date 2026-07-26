@@ -2,13 +2,13 @@
 
 ## Mission
 
-Give existing markdown projects a safe first-day adoption bridge into proof
+Give existing markdown projects a safe first-day adoption bridge into mdloom
 source ownership.
 
 ## Changes
 
-- Added `proof backfill`.
-- Added `proof_lib::backfill` with report types and literal-first source
+- Added `mdloom backfill`.
+- Added `mdloom_lib::backfill` with report types and literal-first source
   generation.
 - Mirrors existing `.md` files to `.source.md` candidates under
   `--output-source`.
@@ -16,7 +16,7 @@ source ownership.
   - `tags: [backfill]`
   - `ops: [backfill]`
   - `content_tags: [markdown]`
-  - `proof_original: "..."`
+  - `mdloom_original: "..."`
 - Writes `backfill-report.json` with scan/generation/round-trip summary and
   per-file entries.
 - Supports `--literal-first`, `--report`, `--output-source`, and
@@ -28,7 +28,7 @@ source ownership.
 ## Validation
 
 - `cargo test binary_backfill_literal_generates_source_and_report`
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_help_documents_progress_only_for_compile`
 
 The sibling `mdpath` crate still emits its known warning set during workspace

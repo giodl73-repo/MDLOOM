@@ -4,7 +4,7 @@ Negative test: a typo'd column name in `?select` should produce a clear
 COMPILE-002 error naming the bad column rather than silently rendering an
 empty table.
 
-```proof:table
+```mdloom:table
 md://src/user-scenarios/data/models.md#:table:0?select=model,bogus
 ```
 

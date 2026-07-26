@@ -47,7 +47,7 @@ existing compile graph.
 ## Non-goals
 
 - Do not implement a backend in this pulse.
-- Do not change `proof compile` behavior in this pulse.
+- Do not change `mdloom compile` behavior in this pulse.
 - Do not add LaTeX to the wave.
 
 ## Evidence

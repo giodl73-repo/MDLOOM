@@ -8,7 +8,7 @@ use crate::compile_symbol;
 use crate::compile_tree;
 use crate::compile_types::{CompileViolation, ViolationSeverity};
 use crate::compile_validation::{lint_figure, validate_davinci};
-use crate::config::GlintConfig;
+use crate::config::MdloomConfig;
 use crate::layout::extract_content_lines;
 use crate::runner::Runner;
 
@@ -27,7 +27,7 @@ pub(crate) fn compile_invalid_region(
         figure_id: None,
         invariant: String::new(),
         message: format!(
-            "proof:region {:?} is only valid in .dashboard.source.md files",
+            "mdloom:region {:?} is only valid in .dashboard.source.md files",
             name
         ),
         source_line: line_start + 1 + source_line_offset,
@@ -35,13 +35,13 @@ pub(crate) fn compile_invalid_region(
     crate::compile_output::source_fallback(source_lines, line_start, line_end)
 }
 
-/// Render the body of a proof:region directive: literal lines kept verbatim,
+/// Render the body of a mdloom:region directive: literal lines kept verbatim,
 /// directive lines dispatched through per-directive renderers with no-chrome
 /// implied so the canvas paste sees raw glyphs only.
 pub(crate) fn render_region_body(
     body: &[String],
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     abs_line: usize,
     violations: &mut Vec<CompileViolation>,
@@ -96,15 +96,15 @@ fn top_level_region_directive_header(line: &str) -> Option<&str> {
         return None;
     }
     const HEADERS: &[&str] = &[
-        "proof:element",
-        "proof:tree",
-        "proof:chart",
-        "proof:row",
-        "proof:symbol",
-        "proof:shape",
-        "proof:bullets",
-        "proof:centered",
-        "proof:stat",
+        "mdloom:element",
+        "mdloom:tree",
+        "mdloom:chart",
+        "mdloom:row",
+        "mdloom:symbol",
+        "mdloom:shape",
+        "mdloom:bullets",
+        "mdloom:centered",
+        "mdloom:stat",
     ];
     for h in HEADERS {
         if line.starts_with(h) {
@@ -123,7 +123,7 @@ fn top_level_region_directive_header(line: &str) -> Option<&str> {
 pub(crate) fn render_one_directive_no_chrome(
     directive: &Directive,
     root: &Path,
-    config: &GlintConfig,
+    config: &MdloomConfig,
     runner: &Runner,
     abs_line: usize,
     violations: &mut Vec<CompileViolation>,
@@ -369,22 +369,22 @@ pub(crate) fn render_one_directive_no_chrome(
     }
 }
 
-/// Strip `<!-- proof:compiled ... -->` HTML chrome and outer ``` fence from
+/// Strip `<!-- mdloom:compiled ... -->` HTML chrome and outer ``` fence from
 /// a rendered block, returning only the inner text rows.
 pub(crate) fn strip_compiled_chrome(block: &str) -> String {
     let mut lines: Vec<&str> = block.lines().collect();
-    // Drop leading "<!-- proof:compiled ... -->" lines
+    // Drop leading "<!-- mdloom:compiled ... -->" lines
     while lines
         .first()
-        .map(|l| l.trim_start().starts_with("<!-- proof:compiled"))
+        .map(|l| l.trim_start().starts_with("<!-- mdloom:compiled"))
         .unwrap_or(false)
     {
         lines.remove(0);
     }
-    // Drop trailing "<!-- /proof:compiled -->" lines
+    // Drop trailing "<!-- /mdloom:compiled -->" lines
     while lines
         .last()
-        .map(|l| l.trim_start().starts_with("<!-- /proof:compiled"))
+        .map(|l| l.trim_start().starts_with("<!-- /mdloom:compiled"))
         .unwrap_or(false)
     {
         lines.pop();
@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn strip_compiled_chrome_removes_html_and_fence() {
-        let block = "<!-- proof:compiled from=\"x\" -->\n```\ninner content\nrow 2\n```\n<!-- /proof:compiled -->";
+        let block = "<!-- mdloom:compiled from=\"x\" -->\n```\ninner content\nrow 2\n```\n<!-- /mdloom:compiled -->";
         assert_eq!(strip_compiled_chrome(block), "inner content\nrow 2");
     }
 }

@@ -3,7 +3,7 @@
 Body syntax for heatmap cells is `row|col: value`. Rows and columns appear
 in first-seen order. Five shading levels (` ░▒▓█`) bucket the values.
 
-```proof:chart kind=heatmap width=60 title="Availability by day × time"
+```mdloom:chart kind=heatmap width=60 title="Availability by day × time"
 Mon|9am: 4
 Mon|11am: 8
 Mon|1pm: 6

@@ -1,5 +1,5 @@
-# proof.toml — default schema
-# Run `proof init` to copy this into your project.
+# mdloom.toml — default schema
+# Run `mdloom init` to copy this into your project.
 
 [meta]
 name = "My Project"

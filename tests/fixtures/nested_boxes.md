@@ -8,7 +8,7 @@ don't align with the outer box's expected `|` positions).
 This is EXPECTED behavior for nested diagrams. The test verifies:
 1. The outer box itself is detected correctly (no panic)
 2. Inner border lines generate warnings (not silently ignored)
-3. proof does not panic or infinite-loop on complex nested diagrams
+3. mdloom does not panic or infinite-loop on complex nested diagrams
 
 ```
 +------------------------------------------+

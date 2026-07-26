@@ -3,15 +3,15 @@
 ## Mission
 
 Continue the command-module split by extracting the small, stabilized
-`proof config` command.
+`mdloom config` command.
 
 ## Changes
 
 - Added `src/cmd_config.rs`.
 - Moved effective-config printing out of `main.rs`.
-- Preserved automatic cascade behavior for `proof config [PATH]`.
+- Preserved automatic cascade behavior for `mdloom config [PATH]`.
 - Preserved explicit `--config` behavior through
-  `proof_lib::lint::load_config_for_path`.
+  `mdloom_lib::lint::load_config_for_path`.
 
 ## Validation
 

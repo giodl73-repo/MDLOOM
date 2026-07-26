@@ -61,9 +61,9 @@ and DOCX support landed, before starting PPTX.
   content types, relationships, core/app properties, `word/document.xml`, styles,
   numbering, headings, links, tables, code text, and bullet/decimal numbering.
 - Added L0 static-site helper coverage that verifies page sorting, generated
-  `proof-site.json`, generated `index.html`, and HTML escaping in navigation.
+  `mdloom-site.json`, generated `index.html`, and HTML escaping in navigation.
 - Added L1 compile-pipeline coverage proving publish helpers consume resolved
-  Markdown from `compile_file`, after a `proof:toc` directive has been expanded,
+  Markdown from `compile_file`, after a `mdloom:toc` directive has been expanded,
   across HTML, JSON report, PDF, and DOCX helpers.
 - Existing L2 CLI backend tests remain in place for `html`, `pebble`,
   `json-report`, `site`, `pdf`, and `docx`.

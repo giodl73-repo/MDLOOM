@@ -10,7 +10,7 @@ Closed residual low-volume Markdown false positives:
 
 ## Corpus Result
 
-MAXIM (`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`):
+MAXIM (`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`):
 
 - Before wave: 1053 warnings, 0 errors.
 - After wave: 1036 warnings, 0 errors.

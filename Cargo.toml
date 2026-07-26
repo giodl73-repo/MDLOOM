@@ -1,19 +1,23 @@
 [package]
-name = "proof"
-version = "0.7.1"
+name = "mdloom"
+version = "0.8.0"
 edition = "2021"
-description = "Document quality assurance for markdown — figures, tables, links, ASCII art, and source compilation via the md:// URI scheme."
+rust-version = "1.82"
+description = "Weave Markdown into checked, cross-referenced, multi-format documents."
 license = "MIT"
-repository = "https://github.com/giodl73-repo/PROOF"
+repository = "https://github.com/giodl73-repo/MDLOOM"
+homepage = "https://github.com/giodl73-repo/MDLOOM"
+documentation = "https://docs.rs/mdloom"
+readme = "README.md"
 keywords = ["markdown", "figures", "ascii-art", "validation", "documentation"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "proof"
+name = "mdloom"
 path = "src/main.rs"
 
 [lib]
-name = "proof_lib"
+name = "mdloom_lib"
 path = "src/lib.rs"
 
 [dependencies]
@@ -33,16 +37,14 @@ notify = { version = "6", features = ["macos_fsevent"] }
 regex = "1"
 zip = { version = "0.6", default-features = false }
 # Workspace sub-crates
-proof-canvas = { path = "crates/proof-canvas" }
-proof-math   = { path = "crates/proof-math" }
+mdloom-canvas = { version = "0.1.0", path = "crates/mdloom-canvas" }
+mdloom-math   = { version = "0.1.0", path = "crates/mdloom-math" }
 # Pinned by SHA so downstream consumers (e.g. icelines) can build from
 # git without needing the mdpath repo as a sibling on disk. Local dev
 # overrides this via `.cargo/config.toml` with `[patch."https://...MDPATH"]`
 # pointing at `../mdpath` — see README for the snippet. Once mdpath
 # publishes to crates.io we'll switch to a version constraint.
-mdpath = { git = "https://github.com/giodl73-repo/MDPATH", rev = "6666cb4368ebc4b1b7ec8d77169b524821e90e9c" }
-pebble = { git = "https://github.com/giodl73-repo/PEBBLE", rev = "80c6e104f99b316f0d8bca5f87a1999feee0d520" }
-slice-core = { git = "https://github.com/giodl73-repo/SLICE", package = "slice-core", rev = "9e4e52eb42c0415c5a2eacb83e909c313986e868" }
+mdpath = { version = "0.5.0", git = "https://github.com/giodl73-repo/MDPATH", rev = "6666cb4368ebc4b1b7ec8d77169b524821e90e9c" }
 # Figure import — image-to-ASCII conversion
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"], optional = true }
 # SVG rasterization (optional — enable with --features svg)

@@ -16,7 +16,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before wave | After |
 |---|---:|---:|
@@ -29,4 +29,4 @@ status: complete
 1. Remaining MAXIM signal is dominated by `ascii_box_col`.
 2. `ascii_connector_drift` still needs classification; many samples look like
    alternating or decorative connector columns.
-3. Sibling `mdpath` warnings remain external to proof.
+3. Sibling `mdpath` warnings remain external to mdloom.

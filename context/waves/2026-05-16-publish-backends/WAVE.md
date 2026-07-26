@@ -9,7 +9,7 @@ source_request: "Make a spec and plan for PPTX, PDF, DOCX, static site, and JSON
 
 ## Mission
 
-Extend PROOF's compile graph from Markdown, HTML, and Pebble into a planned
+Extend MDLOOM's compile graph from Markdown, HTML, and Pebble into a planned
 publish backend family: JSON report bundle, static site, PDF, DOCX, and PPTX.
 Keep every backend behind the same source-resolution pipeline so target-specific
 renderers never bypass directive compilation, diagnostics, manifests, or cache
@@ -17,16 +17,16 @@ policy.
 
 ## Claim boundary
 
-PROOF owns source compilation, resolved Markdown, publish target dispatch,
+MDLOOM owns source compilation, resolved Markdown, publish target dispatch,
 artifact manifests, backend diagnostics, and target-specific output generation.
-PROOF does not own hosting/deployment, browser pixel equivalence, office-suite
+MDLOOM does not own hosting/deployment, browser pixel equivalence, office-suite
 round-trip fidelity, corporate templates, slide animation systems, search
 ranking, or LaTeX in this wave.
 
 ## Inputs
 
-- Existing `proof compile --target md|html|pebble`.
-- Existing artifact manifest `.proof/artifacts.json`.
+- Existing `mdloom compile --target md|html|pebble`.
+- Existing artifact manifest `.mdloom/artifacts.json`.
 - Existing publish helpers in `src/publish.rs`.
 - Existing slide source concepts for future PPTX grounding.
 - `docs/specs/publish-backends.md`.
@@ -37,8 +37,8 @@ ranking, or LaTeX in this wave.
 | Pulse | Title | Status | Outcome |
 |------:|-------|--------|---------|
 | 01 | Backend spec and sequence | done | Captured supported targets, planned target contracts, invariants, and pulse sequence. |
-| 02 | JSON report bundle | done | Added `proof.publish.json_report.v1` as a machine-readable compile/report target for CI and agents. |
-| 03 | Static site backend | done | Added multi-page HTML site generation with navigation index and `proof-site.json` manifest. |
+| 02 | JSON report bundle | done | Added `mdloom.publish.json_report.v1` as a machine-readable compile/report target for CI and agents. |
+| 03 | Static site backend | done | Added multi-page HTML site generation with navigation index and `mdloom-site.json` manifest. |
 | 04 | PDF backend | done | Rendered existing HTML publish output to deterministic PDF artifacts with manifest integration. |
 | 05 | DOCX backend | done | Added native editable OOXML Word documents with package/XML inspection and manifest integration. |
 | 05a | Backend coverage hardening | done | Added L0 DOCX/static-site helper tests and an L1 resolved-output publish helper contract. |
@@ -77,7 +77,7 @@ ranking, or LaTeX in this wave.
 ## Closeout/lessons
 
 - Closed in `CLOSE.md`.
-- PROOF now supports scoped `json-report`, `site`, `pdf`, `docx`, and `pptx`
+- MDLOOM now supports scoped `json-report`, `site`, `pdf`, `docx`, and `pptx`
   publish targets in addition to `md`, `html`, and `pebble`.
 - LaTeX remains deferred, and richer Office/PDF fidelity work is carried forward
   explicitly rather than implied by first-scope support.

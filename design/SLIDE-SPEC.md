@@ -1,12 +1,12 @@
-# proof slide — ASCII Presentation Composer
+# mdloom slide — ASCII Presentation Composer
 
-> **Status**: ✅ Implemented — `src/slide/`. All 8 layouts live: title, title-content, two-column, section, content-caption (title + body + caption strip from `subtitle:`), comparison (2×2 quadrant grid via `## q:tl/tr/bl/br` markers; axis labels deferred), stats, blank + agenda. proof:bullets, proof:ol, proof:columns, proof:quote, proof:centered, proof:right, proof:stat, proof:callout, proof:divider, proof:notes, proof:reveal all wired. Footer, progress-bar, show-numbers in front-matter. Default two-column ratio 60:40.
+> **Status**: ✅ Implemented — `src/slide/`. All 8 layouts live: title, title-content, two-column, section, content-caption (title + body + caption strip from `subtitle:`), comparison (2×2 quadrant grid via `## q:tl/tr/bl/br` markers; axis labels deferred), stats, blank + agenda. mdloom:bullets, mdloom:ol, mdloom:columns, mdloom:quote, mdloom:centered, mdloom:right, mdloom:stat, mdloom:callout, mdloom:divider, mdloom:notes, mdloom:reveal all wired. Footer, progress-bar, show-numbers in front-matter. Default two-column ratio 60:40.
 
 ---
 
 ## What it is
 
-`proof slide` compiles `.slides.source.md` files into fixed-width ASCII slide
+`mdloom slide` compiles `.slides.source.md` files into fixed-width ASCII slide
 decks. Each slide is a `width × height` canvas with **flow layout** — not
 absolute positioning. Unlike dashboards (spatial, data-dense), slides are
 **semantic and presentation-oriented**: they have titles, bodies, bullets,
@@ -20,9 +20,9 @@ quotes, and speaker notes.
 |--|-----------|-------|
 | Layout model | Absolute x/y positions | Flow (title → body → footer) |
 | Primary use | Data display, TUI screens | Presentations, reports |
-| Key primitives | `proof:element`, `proof:row` | `proof:bullets`, `proof:columns`, `proof:quote` |
+| Key primitives | `mdloom:element`, `mdloom:row` | `mdloom:bullets`, `mdloom:columns`, `mdloom:quote` |
 | Multiple pages | No | Yes — `---` separates slides |
-| Speaker notes | No | Yes — `proof:notes` excluded from output |
+| Speaker notes | No | Yes — `mdloom:notes` excluded from output |
 | Centering | Per-element | First-class layout concept |
 | Orientation | Any ratio | Landscape (16:9 typical) |
 
@@ -87,7 +87,7 @@ Body split into two columns. Configurable ratio (default 60:40).
 
 Large title, optional subtitle. Used as a visual break between presentation sections.
 
-**Compositor-driven:** The `section` layout automatically centers the `title` and (if provided) `subtitle` both vertically and horizontally. Authors do not use `proof:centered` — the layout renderer applies centering. This cannot be overridden within a section layout; use `blank` layout with `proof:centered` for custom alignment.
+**Compositor-driven:** The `section` layout automatically centers the `title` and (if provided) `subtitle` both vertically and horizontally. Authors do not use `mdloom:centered` — the layout renderer applies centering. This cannot be overridden within a section layout; use `blank` layout with `mdloom:centered` for custom alignment.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -113,7 +113,7 @@ Four quadrants with labels on axes. Used for strategic matrices (2×2 grids).
 
 One or more large statistics with labels, centered. Used for impact statements.
 
-**Renderer:** `stats` layout uses its own dedicated renderer (not `proof:columns`). It does not support `ratio=` or `divider=` attributes. SL-3 does not apply — column widths are computed as `floor(content_width / stat_count)` with remainders distributed to the rightmost stat. Each stat block is independently centered within its allocated width.
+**Renderer:** `stats` layout uses its own dedicated renderer (not `mdloom:columns`). It does not support `ratio=` or `divider=` attributes. SL-3 does not apply — column widths are computed as `floor(content_width / stat_count)` with remainders distributed to the rightmost stat. Each stat block is independently centered within its allocated width.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -130,7 +130,7 @@ One or more large statistics with labels, centered. Used for impact statements.
 
 ### 8. `blank` — No structure
 
-Full canvas, author places all content manually using proof: directives.
+Full canvas, author places all content manually using mdloom: directives.
 
 ---
 
@@ -155,7 +155,7 @@ slides:
   font-width: 1           # 1 = ASCII, 2 = wide-char
 ---
 
-```proof:slide layout=title
+```mdloom:slide layout=title
 title: "EDM 2025-26 Season Preview"
 subtitle: "A data-driven look at the Oilers"
 author: "Gio Della-Libera"
@@ -164,8 +164,8 @@ date: "April 2026"
 
 ---
 
-```proof:slide layout=title-content title="McDavid: By the Numbers"
-proof:bullets
+```mdloom:slide layout=title-content title="McDavid: By the Numbers"
+mdloom:bullets
 - Career points per 82: 138.0 — highest in NHL history
   - Previous record: Gretzky 89.9 (1985-86)
   - Active comparison: Kucherov 130.2 (2024-25)
@@ -175,18 +175,18 @@ proof:bullets
 
 ---
 
-```proof:slide layout=two-column title="McDavid vs Kucherov"
+```mdloom:slide layout=two-column title="McDavid vs Kucherov"
 ## col:left
-proof:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#mcdavid[row=0]
-proof:mini-bar field=pts_82 max=200 width=30
+mdloom:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#mcdavid[row=0]
+mdloom:mini-bar field=pts_82 max=200 width=30
 ## col:right
-proof:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#kucherov[row=0]
-proof:mini-bar field=pts_82 max=200 width=30
+mdloom:stat field=pts_82 format="{:.1}" label="Pts/82" source=md://stats.md#kucherov[row=0]
+mdloom:mini-bar field=pts_82 max=200 width=30
 ```
 
 ---
 
-```proof:slide layout=section
+```mdloom:slide layout=section
 title: "Part 2 — Defensive Corps"
 ```
 
@@ -197,12 +197,12 @@ title: "Part 2 — Defensive Corps"
 
 ## Slide-specific directives
 
-### `proof:bullets`
+### `mdloom:bullets`
 
 Hierarchical bullet list. Indent with 2 spaces per level.
 
 ```
-proof:bullets
+mdloom:bullets
 - Top-level point
   - Second level (◦)
     - Third level (▸)
@@ -222,7 +222,7 @@ slides:
 ---
 ```
 
-When a `proof:bullets` block exceeds `max-bullets`, the compiler emits **SLIDE-001** as a warning and prepends an HTML comment to the compiled output:
+When a `mdloom:bullets` block exceeds `max-bullets`, the compiler emits **SLIDE-001** as a warning and prepends an HTML comment to the compiled output:
 
 ```
 <!-- SLIDE-WARN SLIDE-001 slide=3: bullet 5 exceeds max_bullets 4 -->
@@ -230,38 +230,38 @@ SLIDE 3 ────────────────────────
 ...
 ```
 
-This makes the warning visible to readers of the compiled deck, not just to authors who run `proof compile` in a terminal. SLIDE-001 is non-blocking — the deck still compiles and writes successfully.
+This makes the warning visible to readers of the compiled deck, not just to authors who run `mdloom compile` in a terminal. SLIDE-001 is non-blocking — the deck still compiles and writes successfully.
 
-**Counter scope:** the bullet counter is per-`proof:bullets` block, not per-slide. A two-column slide with 3 bullets in each column does not trigger SLIDE-001 at threshold 4 — each column's `proof:bullets` is counted independently.
+**Counter scope:** the bullet counter is per-`mdloom:bullets` block, not per-slide. A two-column slide with 3 bullets in each column does not trigger SLIDE-001 at threshold 4 — each column's `mdloom:bullets` is counted independently.
 
 **Depth limit:** `max-depth=4` (configurable) limits nesting. Levels beyond `max-depth` are rendered at the deepest defined bullet char. `SLIDE-007: bullet depth exceeds max-depth` (planned warning).
 
-### `proof:quote`
+### `mdloom:quote`
 
 Centered block quote with attribution.
 
 ```
-proof:quote attribution="Connor McDavid"
+mdloom:quote attribution="Connor McDavid"
 I want to win. Everything else is secondary.
 ```
 
 Rendered with `"` and `"` (curly quotes) and a `—` attribution line, centered in the content area.
 
-### `proof:columns`
+### `mdloom:columns`
 
 Splits the content area into N columns. Column bodies are written under `## col:` prefixed headings.
 
-**Note:** Column sections use `## col:` prefix (H2 level, not H1) to avoid triggering `md_h1_count` checks. The compiler recognizes `## col:` inside a `proof:columns` or `proof:slide layout=two-column` fence as a structural delimiter, not a document heading — heading rules are suppressed for these markers.
+**Note:** Column sections use `## col:` prefix (H2 level, not H1) to avoid triggering `md_h1_count` checks. The compiler recognizes `## col:` inside a `mdloom:columns` or `mdloom:slide layout=two-column` fence as a structural delimiter, not a document heading — heading rules are suppressed for these markers.
 
 ```
-```proof:slide layout=blank title="Comparison"
-proof:columns cols=2 ratio=60:40 divider=true
+```mdloom:slide layout=blank title="Comparison"
+mdloom:columns cols=2 ratio=60:40 divider=true
 ## col:left
-proof:bullets
+mdloom:bullets
 - Strengths
 - More strengths
 ## col:right
-proof:tree kind=org source=md://team.md#:table:0
+mdloom:tree kind=org source=md://team.md#:table:0
 ```
 ```
 
@@ -270,85 +270,85 @@ proof:tree kind=org source=md://team.md#:table:0
 
 **Rounding rule:** Column widths are computed as `floor(content_width × ratio_fraction)`. Any remaining columns (due to integer rounding) are added to the **first** column. Example: 119 cols at 60:40 → floor(71.4)=71, floor(47.6)=47, remainder 1 → first column gets 72, second gets 47. This is consistent with the principle that the primary (left) column is the anchor.
 
-### `proof:centered`
+### `mdloom:centered`
 
 Centers content horizontally within the current region. Used for impact text.
 
 ```
-proof:centered
+mdloom:centered
 THE BEST PLAYER IN THE WORLD
 ```
 
-### `proof:stat`
+### `mdloom:stat`
 
-Renders a large number with a label below. Can be used standalone or in a `proof:columns` for multi-stat layouts.
+Renders a large number with a label below. Can be used standalone or in a `mdloom:columns` for multi-stat layouts.
 
 ```
-proof:stat value=138.0 label="Pts per 82" sublabel="#1 all-time" width=20
+mdloom:stat value=138.0 label="Pts per 82" sublabel="#1 all-time" width=20
 ```
 
-### `proof:callout`
+### `mdloom:callout`
 
 Highlighted box with a style indicator. Useful for key takeaways or warnings.
 
 ```
-proof:callout style=key
+mdloom:callout style=key
 McDavid's contract expires June 2026 — largest free agent in NHL history.
 ```
 
 Styles: `key` (`★`), `info` (`ℹ`), `warning` (`⚠`), `tip` (`→`), `note` (`◆`).
 
-### `proof:divider`
+### `mdloom:divider`
 
 Horizontal rule across the content width.
 
 ```
-proof:divider style=thin    # ─────────────────────
-proof:divider style=double  # ═════════════════════
-proof:divider style=dotted  # ·····················
-proof:divider style=wave    # ~~~~~~~~~~~~~~~~~~~~ (see note)
+mdloom:divider style=thin    # ─────────────────────
+mdloom:divider style=double  # ═════════════════════
+mdloom:divider style=dotted  # ·····················
+mdloom:divider style=wave    # ~~~~~~~~~~~~~~~~~~~~ (see note)
 ```
 
 **Note:** `style=wave` uses `~` chars which may render as strikethrough delimiters in some markdown previewers (GFM extensions). Source files should not be previewed as raw markdown; the compiled `.slides.md` output is the canonical form. Alternative: `style=approx` uses `≈≈≈` (U+2248) instead.
 
-### `proof:notes`
+### `mdloom:notes`
 
 Speaker notes — rendered in a separate `notes:` section, excluded from slide output.
 
 ```
-proof:notes
+mdloom:notes
 Talk about the contract situation here. Mention that his agent is Pat Brisson.
 The comparison to Gretzky is the key talking point — use it.
 ```
 
-**Check-time behavior:** When `proof check` runs on `.slides.source.md`, notes content IS linted — it passes through the full check pipeline including line-length and heading rules. This ensures notes quality for `proof compile --format notes` output. To suppress linting on notes, use `proof check --no-notes` (planned).
+**Check-time behavior:** When `mdloom check` runs on `.slides.source.md`, notes content IS linted — it passes through the full check pipeline including line-length and heading rules. This ensures notes quality for `mdloom compile --format notes` output. To suppress linting on notes, use `mdloom check --no-notes` (planned).
 
 ---
 
 ## Compilation
 
 ```bash
-proof compile deck.slides.source.md
+mdloom compile deck.slides.source.md
 # → deck.slides.md  (all slides in one file, separated by ─── dividers)
 
-proof compile deck.slides.source.md --slide 3
+mdloom compile deck.slides.source.md --slide 3
 # → render only slide 3
 # --slide is 1-indexed: --slide 1 is the first slide, --slide N where N > slide count emits SLIDE-006
 
-proof compile deck.slides.source.md --width 80 --height 24
+mdloom compile deck.slides.source.md --width 80 --height 24
 # → terminal-sized output (override front-matter dimensions)
 
-proof compile deck.slides.source.md --format notes
+mdloom compile deck.slides.source.md --format notes
 # → output speaker notes only (one per slide)
 
-proof compile deck.slides.source.md --format json
+mdloom compile deck.slides.source.md --format json
 # → slides as JSON array (for programmatic consumption)
 ```
 
 Output format (single compiled file with slide separators):
 
 ````markdown
-<!-- proof:compiled from="proof:slides" count=5 title="EDM Preview" -->
+<!-- mdloom:compiled from="mdloom:slides" count=5 title="EDM Preview" -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────── 1/5
 
@@ -367,7 +367,7 @@ McDavid: By the Numbers
   • 2025-26 pace: 0.94 points per shift
   ...
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ````
 
 ---
@@ -403,11 +403,11 @@ Slide navigation in the TUI: `→`/`←` advances slides. `n` opens speaker note
 | Invariant | Claim |
 |-----------|-------|
 | SL-1 | Each slide output is exactly `width × height` characters |
-| SL-2 | `proof:bullets` level N uses the declared bullet char for that level |
-| SL-3 | `proof:columns ratio=A:B` column widths sum to content width (minus divider if present) |
-| SL-4 | `proof:stat` value is right-aligned within `width` |
-| SL-5 | `proof:notes` content is never present in non-notes output |
-| SL-6 | `proof:centered` output is horizontally centered (tie-break: extra space on right) |
+| SL-2 | `mdloom:bullets` level N uses the declared bullet char for that level |
+| SL-3 | `mdloom:columns ratio=A:B` column widths sum to content width (minus divider if present) |
+| SL-4 | `mdloom:stat` value is right-aligned within `width` |
+| SL-5 | `mdloom:notes` content is never present in non-notes output |
+| SL-6 | `mdloom:centered` output is horizontally centered (tie-break: extra space on right) |
 | SL-7 | Slide count matches the number of `---` separators + 1 |
 
 ---
@@ -420,27 +420,27 @@ Slide navigation in the TUI: `→`/`←` advances slides. `n` opens speaker note
 | `SLIDE-002` | error | Column ratios don't sum to 100 (e.g. `ratio=60:50`) |
 | `SLIDE-003` | warning | Content overflows slide height — lines clipped |
 | `SLIDE-004` | error | `layout=two-column` has only one `# Column` section |
-| `SLIDE-005` | warning | `proof:stat` value is non-numeric |
+| `SLIDE-005` | warning | `mdloom:stat` value is non-numeric |
 | `SLIDE-006` | error | `--slide N` references a slide that doesn't exist |
 | `SLIDE-007` | warning | Bullet depth exceeds `max-depth` (planned) |
 
 ---
 
-## What proof needs to implement this
+## What mdloom needs to implement this
 
 | Component | Status |
 |-----------|--------|
 | Slide parser (front-matter + `---` separators) | Planned |
 | Flow layout engine (title bar + body) | Planned |
-| `proof:bullets` renderer | Planned |
-| `proof:columns` compositor | Planned |
-| `proof:quote`, `proof:centered`, `proof:stat` | Planned |
-| `proof:callout`, `proof:divider` | Planned |
-| `proof:notes` extraction | Planned |
+| `mdloom:bullets` renderer | Planned |
+| `mdloom:columns` compositor | Planned |
+| `mdloom:quote`, `mdloom:centered`, `mdloom:stat` | Planned |
+| `mdloom:callout`, `mdloom:divider` | Planned |
+| `mdloom:notes` extraction | Planned |
 | Canvas per-slide (reuse dashboard Canvas) | Planned |
-| `proof compile --slide N --format notes` flags | Planned |
+| `mdloom compile --slide N --format notes` flags | Planned |
 | Field mapping (per MAPPING-SPEC.md) | ✅ Designed |
-| `proof:chart`, `proof:tree` inside slides | ✅ Done (reuse) |
+| `mdloom:chart`, `mdloom:tree` inside slides | ✅ Done (reuse) |
 
 ---
 
@@ -453,7 +453,7 @@ Slide navigation in the TUI: `→`/`←` advances slides. `n` opens speaker note
 | `src/slide/bullets.rs` | Hierarchical bullet rendering |
 | `src/slide/columns.rs` | N-column compositor |
 | `src/slide/inline.rs` | quote, centered, stat, callout, divider |
-| `src/compile.rs` | proof:slide directive handling |
+| `src/compile.rs` | mdloom:slide directive handling |
 
 ---
 
@@ -496,7 +496,7 @@ slides:
 ---
 ```
 
-`indent-width` is a slide-deck-level setting only — it is **not** currently configurable in `proof.toml`. Each level adds `indent_width` spaces of leading whitespace before the bullet character.
+`indent-width` is a slide-deck-level setting only — it is **not** currently configurable in `mdloom.toml`. Each level adds `indent_width` spaces of leading whitespace before the bullet character.
 
 ### F50 — Tabs in bullet source
 
@@ -506,7 +506,7 @@ This normalization happens in the parser; downstream code never sees tabs in bul
 
 ### F51 — Two-column remainder distribution
 
-For a `proof:columns` block with `ratio=N:M` at total content width `width`:
+For a `mdloom:columns` block with `ratio=N:M` at total content width `width`:
 
 ```
 left_w  = floor(width × N / (N + M))
@@ -515,7 +515,7 @@ right_w = width - left_w
 
 The remainder column always goes to the **right** column.
 
-> **Note:** This supersedes the earlier "Rounding rule" stated under `proof:columns` ("remainder added to the first column"). F51 is the canonical behavior — remainder lands on the right column. The two-column compositor and SL-3 conform to this rule.
+> **Note:** This supersedes the earlier "Rounding rule" stated under `mdloom:columns` ("remainder added to the first column"). F51 is the canonical behavior — remainder lands on the right column. The two-column compositor and SL-3 conform to this rule.
 
 ### F52 — `---` disambiguation: column separator vs. slide separator
 
@@ -523,7 +523,7 @@ A literal `---` line has two meanings, distinguished by lexical context:
 
 | Context | Meaning |
 |---------|---------|
-| Inside a `proof:slide` fenced block body (and the slide is `layout=two-column` or contains a `proof:columns`) | **Column separator** — splits the body into left/right columns |
+| Inside a `mdloom:slide` fenced block body (and the slide is `layout=two-column` or contains a `mdloom:columns`) | **Column separator** — splits the body into left/right columns |
 | Outside any fenced block (top-level of the source file, after front-matter) | **Slide separator** — ends the current slide, starts the next |
 
 There is no ambiguity at parse time: the parser tracks fence depth, so the same character sequence resolves deterministically by where it appears.
@@ -549,7 +549,7 @@ This also applies to stat sublabels.
 
 ### F56 — Unknown callout style fallback
 
-`proof:callout style=<unknown>` falls back silently to `CalloutStyle::Note` (the `◆` style). No diagnostic is emitted — callout style parsing is permissive by design.
+`mdloom:callout style=<unknown>` falls back silently to `CalloutStyle::Note` (the `◆` style). No diagnostic is emitted — callout style parsing is permissive by design.
 
 Authors who want strict validation can lint callout styles externally; the renderer will not fail or warn on unknown values.
 
@@ -563,12 +563,12 @@ The slide-file parser reads YAML front-matter from the **first** `---` line to t
 
 ### F61 — Speaker notes have no sidecar output
 
-Per SL-5, `proof:notes` blocks are excluded from compiled slide output. The current implementation **silently drops notes** during normal compile — no `.notes.md` sidecar is written.
+Per SL-5, `mdloom:notes` blocks are excluded from compiled slide output. The current implementation **silently drops notes** during normal compile — no `.notes.md` sidecar is written.
 
-To extract notes, use `proof compile --format notes` (already specified). A future flag `--notes-output <path>` is **planned** to write a sidecar file alongside the compiled deck; until shipped, notes exist only in the source file or in `--format notes` output.
+To extract notes, use `mdloom compile --format notes` (already specified). A future flag `--notes-output <path>` is **planned** to write a sidecar file alongside the compiled deck; until shipped, notes exist only in the source file or in `--format notes` output.
 
-### F62 — `proof check` does not currently verify SL-5
+### F62 — `mdloom check` does not currently verify SL-5
 
-`proof check` does **not** scan compiled `.slides.md` output for leaked `proof:notes` content. SL-5 is enforced at compile time (notes are dropped before output) but there is no post-compile verification rule.
+`mdloom check` does **not** scan compiled `.slides.md` output for leaked `mdloom:notes` content. SL-5 is enforced at compile time (notes are dropped before output) but there is no post-compile verification rule.
 
-This is a known gap. A future check rule `slide_notes_leaked` would scan compiled output for any `proof:notes` markers or content blocks and emit a diagnostic. Until that rule ships, SL-5 violations would only surface as a compile-time bug, not a check-time finding.
+This is a known gap. A future check rule `slide_notes_leaked` would scan compiled output for any `mdloom:notes` markers or content blocks and emit a diagnostic. Until that rule ships, SL-5 violations would only surface as a compile-time bug, not a check-time finding.

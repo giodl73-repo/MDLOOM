@@ -1,12 +1,12 @@
-# proof symbol — Named Symbol and Shape Library
+# mdloom symbol — Named Symbol and Shape Library
 
-> **Status**: ✅ Implemented — `src/symbol/`. `[sym:name]` inline expansion, `proof:symbol` and `proof:shape` directives, built-in library (Core + Extended + Domain tiers), custom symbols via proof.toml. Did-you-mean suggestions for unknown names.
+> **Status**: ✅ Implemented — `src/symbol/`. `[sym:name]` inline expansion, `mdloom:symbol` and `mdloom:shape` directives, built-in library (Core + Extended + Domain tiers), custom symbols via mdloom.toml. Did-you-mean suggestions for unknown names.
 
 ---
 
 ## What it is
 
-proof provides a named symbol system for decorative and semantic characters
+mdloom provides a named symbol system for decorative and semantic characters
 that appear throughout slides, dashboards, documents, and element directives.
 Symbols are the ASCII/Unicode equivalent of presentation clipart.
 
@@ -48,7 +48,7 @@ Jinja/Handlebars templates, shell variables, or URL bracket syntax.
 labels, callout text, slide titles/subtitles, element label values. It is NOT
 expanded in: fenced code blocks (` ``` ` delimited), inline code spans
 (`` `backtick` ``), URL paths, or YAML/TOML values. When a file contains
-Jinja/Handlebars templates, proof will not conflict because `[sym:]` is not a
+Jinja/Handlebars templates, mdloom will not conflict because `[sym:]` is not a
 template delimiter in any common system.
 
 **Width measurement:** `[sym:name]` is expanded to its Unicode character(s)
@@ -57,12 +57,12 @@ layout budget is always measured on the rendered result, not the template.
 
 ---
 
-## `proof:symbol` directive
+## `mdloom:symbol` directive
 
 Block form — renders a symbol at a declared size:
 
 ```
-proof:symbol name=star size=3 align=center
+mdloom:symbol name=star size=3 align=center
 ```
 
 Sizes:
@@ -73,19 +73,19 @@ Sizes:
 
 ---
 
-## `proof:shape` directive
+## `mdloom:shape` directive
 
 Multi-line ASCII art block. Shapes are named templates with optional text slots.
 
 Currently supported: `banner`, `badge`, `ribbon`. The geometric image-import
 shapes (circle, heart, star, octagon, hexagon, etc.) listed in FIGURE-SPEC
-are exposed via `proof figure import --shape <name>`, not via `proof:shape`
+are exposed via `mdloom figure import --shape <name>`, not via `mdloom:shape`
 in source documents.
 
 ```
-proof:shape name=banner title="Section 2 — Defense" style=double
-proof:shape name=badge label="MVP" style=star
-proof:shape name=ribbon text="WINNER" direction=diagonal
+mdloom:shape name=banner title="Section 2 — Defense" style=double
+mdloom:shape name=badge label="MVP" style=star
+mdloom:shape name=ribbon text="WINNER" direction=diagonal
 ```
 
 ---
@@ -180,9 +180,9 @@ symbols are guaranteed in the built-in library.
 
 ### Sports (IceLines domain)
 
-These symbols are in the **domain** tier — they are not part of proof's core
+These symbols are in the **domain** tier — they are not part of mdloom's core
 built-in library. IceLines ships them as a `[[symbol]]` extension package. To
-use them in non-IceLines projects, copy the definitions into your `proof.toml`.
+use them in non-IceLines projects, copy the definitions into your `mdloom.toml`.
 
 | Name | Char | Width | Use | Tier |
 |------|------|-------|-----|------|
@@ -280,7 +280,7 @@ monospace fonts (Cascadia Mono, JetBrains Mono, Courier). For portability, use
 
 ### `checkmark-large` (size=3)
 
-A large checkmark is better rendered as `proof:symbol name=checkmark size=3`
+A large checkmark is better rendered as `mdloom:symbol name=checkmark size=3`
 which scales the character, not as a multi-line block shape. The block-art
 form is removed — multi-line `✓` tiling does not produce a recognizable
 checkmark glyph at any size.
@@ -289,7 +289,7 @@ checkmark glyph at any size.
 
 ## Custom symbols
 
-Define domain-specific symbols in `proof.toml`:
+Define domain-specific symbols in `mdloom.toml`:
 
 ```toml
 [[symbol]]
@@ -303,7 +303,7 @@ char = "UFA"     # multi-char label treated as a unit
 width = 3
 style = "badge"  # rendered in badge frame when size > 1
                  # NOTE: style="badge" uses the same badge renderer as
-                 # proof:element kind=label style=badge (see ELEMENT-SPEC.md)
+                 # mdloom:element kind=label style=badge (see ELEMENT-SPEC.md)
                  # — same frame, same width budget, same right-padding behavior.
                  # This is intentional coupling, not coincidence.
 
@@ -328,7 +328,7 @@ art = '''
 # Trailing spaces are preserved. Width × height is computed after TOML parsing.
 ```
 
-Custom symbols are then usable everywhere: `[sym:oilers-logo]`, `[sym:ufa]`, `proof:symbol name=crossed-sticks size=1`.
+Custom symbols are then usable everywhere: `[sym:oilers-logo]`, `[sym:ufa]`, `mdloom:symbol name=crossed-sticks size=1`.
 
 ---
 
@@ -337,7 +337,7 @@ Custom symbols are then usable everywhere: `[sym:oilers-logo]`, `[sym:ufa]`, `pr
 ### Bullets with symbols
 
 ```
-proof:bullets bullet-1="★" bullet-2="◦" bullet-3="▸"
+mdloom:bullets bullet-1="★" bullet-2="◦" bullet-3="▸"
 - McDavid leads all forwards in points
   - 138.0 pts/82 — highest in NHL history
     - Previous record was Gretzky in 1985-86
@@ -346,14 +346,14 @@ proof:bullets bullet-1="★" bullet-2="◦" bullet-3="▸"
 ### Callouts with symbol
 
 ```
-proof:callout style=key symbol=trophy
+mdloom:callout style=key symbol=trophy
 McDavid is the frontrunner for the Hart Trophy.
 ```
 
 ### Element badges
 
 ```
-proof:element kind=label style=badge symbol=circle-green field=status width=12
+mdloom:element kind=label style=badge symbol=circle-green field=status width=12
 ```
 
 Rendered: `🟢 Active    `
@@ -361,7 +361,7 @@ Rendered: `🟢 Active    `
 ### Slide stats with symbol
 
 ```
-proof:stat value=138.0 label="Pts/82" symbol=chart-up sublabel="#1 all-time"
+mdloom:stat value=138.0 label="Pts/82" symbol=chart-up sublabel="#1 all-time"
 ```
 
 Rendered:
@@ -376,7 +376,7 @@ Rendered:
 ## Emoji handling
 
 Emoji are width-2 by default (East Asian Width = W or emoji presentation).
-proof measures them correctly via `visual_width()` (already implemented in
+mdloom measures them correctly via `visual_width()` (already implemented in
 `layout.rs`). In tight spaces, emoji fall back to their text description:
 
 ```toml
@@ -395,7 +395,7 @@ fallback abbreviation is padded/truncated to `width`. Authors may override:
 
 ## Symbol resolution order
 
-1. Check `proof.toml` custom `[[symbol]]` entries (name match)
+1. Check `mdloom.toml` custom `[[symbol]]` entries (name match)
 2. Check built-in library (exact name match)
 3. Check built-in library (alias match — e.g. `cross` = `x`)
 4. Emit `SYMBOL-001` warning if not found
@@ -414,8 +414,8 @@ if needed.
 |------|----------|---------|
 | `SYMBOL-001` | warning | Symbol name not found in library or custom definitions |
 | `SYMBOL-002` | warning | Emoji `[sym:name]` in width-1 budget — using text fallback |
-| `SYMBOL-003` | error | `proof:shape name=X` shape not found |
-| `SYMBOL-004` | warning | `proof:shape` content exceeds declared `width × height` |
+| `SYMBOL-003` | error | `mdloom:shape name=X` shape not found |
+| `SYMBOL-004` | warning | `mdloom:shape` content exceeds declared `width × height` |
 
 ---
 
@@ -427,7 +427,7 @@ if needed.
 | `src/symbol/library.rs` | Built-in symbol definitions |
 | `src/symbol/shape.rs` | Multi-line ASCII shape renderer |
 | `src/symbol/emoji.rs` | Emoji width handling and fallback |
-| `src/compile.rs` | `[sym:name]` inline expansion, `proof:symbol` / `proof:shape` directives |
+| `src/compile.rs` | `[sym:name]` inline expansion, `mdloom:symbol` / `mdloom:shape` directives |
 | `src/config.rs` | `[[symbol]]` custom definition parsing |
 
 ---
@@ -435,7 +435,7 @@ if needed.
 ## See also
 
 - [Element Spec](./element-spec.md) — `kind=label style=badge` uses symbols
-- [Slide Spec](./slide-spec.md) — `proof:callout`, `proof:bullets` use symbols
+- [Slide Spec](./slide-spec.md) — `mdloom:callout`, `mdloom:bullets` use symbols
 - [Dashboard Spec](./dashboard-spec.md) — status indicators use symbols
 - [Mapping Spec](./mapping-spec.md) — field values can resolve to symbol names
 
@@ -443,8 +443,8 @@ if needed.
 
 ## Spec Clarifications (from scenario findings)
 
-- **F95** (sym in YAML): `[sym:name]` inside YAML string values must be quoted: `title: "[sym:star] proof"`. Unquoted values starting with `[` may be parsed as YAML arrays by some parsers.
+- **F95** (sym in YAML): `[sym:name]` inside YAML string values must be quoted: `title: "[sym:star] mdloom"`. Unquoted values starting with `[` may be parsed as YAML arrays by some parsers.
 - **F96** (case rule): Symbol names are case-insensitive. `[sym:CheckMark]` resolves the same as `[sym:checkmark]`. Lookup normalizes to lowercase before matching.
-- **F97** (size units): The `size` attribute in `proof:symbol` is in glyph-count units, not display columns. A size-3 symbol renders as a 3×N character block where N is the glyph height.
+- **F97** (size units): The `size` attribute in `mdloom:symbol` is in glyph-count units, not display columns. A size-3 symbol renders as a 3×N character block where N is the glyph height.
 - **F101** (sym inside math): `[sym:name]` tags inside `$...$` math spans are NOT expanded. The math tokenizer treats `[` as a literal character. Symbol expansion runs before math expansion, but only in prose contexts — not inside already-tokenized math spans.
 

@@ -2,13 +2,13 @@
 
 ## Mission
 
-Prove that proof's compiler/typesetter model can publish beyond markdown without
+Prove that mdloom's compiler/typesetter model can publish beyond markdown without
 forking the source workflow.
 
 ## Changes
 
-- Added `proof compile --target md|html`, with `md` as the default.
-- Added `proof_lib::publish` with a deterministic markdown-to-HTML document
+- Added `mdloom compile --target md|html`, with `md` as the default.
+- Added `mdloom_lib::publish` with a deterministic markdown-to-HTML document
   renderer for headings, paragraphs, and fenced code blocks.
 - HTML compilation resolves `.source.md` through the existing markdown compiler
   first, so source frontmatter stripping and directive expansion stay shared.

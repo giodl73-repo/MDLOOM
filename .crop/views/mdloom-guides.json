@@ -1,0 +1,11 @@
+{
+  "schema_version": "crop.view.v1",
+  "name": "mdloom-guides",
+  "root": "..\\..\\src\\guides",
+  "task": "mdloom-guides corpus",
+  "token_budget": 12000,
+  "seed": 0,
+  "include_extensions": [
+    "md"
+  ]
+}

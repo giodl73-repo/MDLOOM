@@ -1,5 +1,5 @@
 /target
-/.proof/cache/
+/.mdloom/cache/
 /src/user-scenarios/*-out.md
 /src/user-scenarios/*-out.slides.md
 .cargo/config.toml

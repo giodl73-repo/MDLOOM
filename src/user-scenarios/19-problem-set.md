@@ -4,26 +4,26 @@
 
 Evaluate the following integral using the substitution $u = x^2 + 1$:
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
      2     
      ⌠     
 ⌡ \frac  dx
      0     
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 **Solution:** Let $u = x^2 + 1$, so $du = 2x\, dx$.
 When $x=0$, $u=1$; when $x=2$, $u=5$.
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
                 5                
                 ⌠                
 ⌡ \frac  du = \left15 = \sqrt - 1
                 1                
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
@@ -43,14 +43,14 @@ Find the area enclosed by $y = \sin x$ and $y = \cos x$ on $[0, \pi]$.
 
 The curves intersect at $x = \pi/4$. The area is:
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
                        π/4                       
                         ⌠                        
 ⌡ (\cos x - \sin x)  dx + ∫ (\sin x - \cos x)  dx
                         0                        
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Evaluating: $(\sqrt{2} - 1) + (1 + \sqrt{2}) = 2\sqrt{2}$
 
@@ -61,13 +61,13 @@ Evaluating: $(\sqrt{2} - 1) + (1 + \sqrt{2}) = 2\sqrt{2}$
 Prove that $\int_0^{\infty} e^{-x^2}\, dx = \frac{\sqrt{\pi}}{2}$ using the
 Gaussian integral result:
 
-<!-- proof:compiled from="proof:math" -->
+<!-- mdloom:compiled from="mdloom:math" -->
 ```
        ∞       
        ⌠       
 ⌡ e  dx = \sqrt
       -∞       
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 **Hint:** By symmetry, $\int_0^{\infty} e^{-x^2}\, dx = \frac{1}{2}\int_{-\infty}^{\infty} e^{-x^2}\, dx$.

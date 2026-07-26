@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=3 -->
+<!-- mdloom:compiled from="mdloom:slides" count=3 -->
 ```slides
 SLIDE 1 ─────────────────────────────────────────────────────────────────────── 1/3
 
@@ -76,4 +76,4 @@ Test results
 *All 793 tests green; zero build warnings*
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

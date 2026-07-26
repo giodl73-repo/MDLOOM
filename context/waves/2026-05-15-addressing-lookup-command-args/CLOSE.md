@@ -2,15 +2,15 @@
 
 ## Mission
 
-Continue modularizing the CLI shell by moving the related `proof resolve` and
-`proof depends` argument shapes into their command modules.
+Continue modularizing the CLI shell by moving the related `mdloom resolve` and
+`mdloom depends` argument shapes into their command modules.
 
 ## Changes
 
 - Added `cmd_resolve::Args` with the clap argument definitions for
-  `proof resolve`.
+  `mdloom resolve`.
 - Added `cmd_depends::Args` with the clap argument definitions for
-  `proof depends`.
+  `mdloom depends`.
 - Replaced the inline `Command::Resolve { ... }` and `Command::Depends { ... }`
   fields in `main.rs` with tuple variants that reference their command-module
   argument types.

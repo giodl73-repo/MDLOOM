@@ -17,7 +17,7 @@ delegates.
 
 ## Validation
 
-- `cargo test cli_proof_version_exits_zero`
+- `cargo test cli_mdloom_version_exits_zero`
 - `cargo test binary_check_summary_file_count_honors_include_exclude`
 - `cargo test binary_draft_command_writes_plan`
 - `cargo test`

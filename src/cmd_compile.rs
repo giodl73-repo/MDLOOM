@@ -3,10 +3,10 @@ use crate::cmd_paths::paths_or_cwd;
 use anyhow::Result;
 use clap::ValueEnum;
 use colored::Colorize;
-use proof_lib::artifact::{self, ArtifactDiagnostic, ArtifactRecord, ArtifactStatus};
-use proof_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
-use proof_lib::frontmatter::FrontmatterFilter;
-use proof_lib::lint::load_config_for_path as load_config;
+use mdloom_lib::artifact::{self, ArtifactDiagnostic, ArtifactRecord, ArtifactStatus};
+use mdloom_lib::compile::{compile_file, derive_output_path, ViolationSeverity};
+use mdloom_lib::frontmatter::FrontmatterFilter;
+use mdloom_lib::lint::load_config_for_path as load_config;
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -32,7 +32,7 @@ pub(crate) struct Args {
     /// Show running count instead of one line per file (useful for 50+ source files)
     #[arg(long)]
     progress: bool,
-    /// Root directory for md:// URI resolution (default: proof.toml location or cwd)
+    /// Root directory for md:// URI resolution (default: mdloom.toml location or cwd)
     #[arg(long)]
     root: Option<PathBuf>,
     /// Output target format
@@ -149,7 +149,7 @@ fn run_once(
     let config = load_config(&root, config_override)?;
 
     // Build a list of (source_path, output_dir) pairs.
-    // When using [[compile]] targets from proof.toml (and no explicit paths/output-dir),
+    // When using [[compile]] targets from mdloom.toml (and no explicit paths/output-dir),
     // route each source file to the correct target's output_dir.
     let using_defaults = paths.iter().any(|p| p == &std::env::current_dir().unwrap());
     let _has_multi_targets = config.compile.len() > 1;
@@ -159,7 +159,7 @@ fn run_once(
         && output_dir.is_none()
         && output_override.is_none()
     {
-        // Per-target routing from proof.toml
+        // Per-target routing from mdloom.toml
         let mut pairs = Vec::new();
         for target in &config.compile {
             let src_dir = target
@@ -236,7 +236,7 @@ fn run_once(
     let source_files: Vec<PathBuf> = source_dir_pairs.iter().map(|(p, _)| p.clone()).collect();
 
     if source_files.is_empty() {
-        eprintln!("{} no .source.md files found", "proof compile:".yellow());
+        eprintln!("{} no .source.md files found", "mdloom compile:".yellow());
         return Ok(());
     }
 
@@ -456,7 +456,7 @@ fn derive_target_output_path(source: &Path, target: CompileTarget) -> Option<Pat
             output.set_extension("pebble.json");
         }
         CompileTarget::JsonReport => {
-            output.set_extension("proof-report.json");
+            output.set_extension("mdloom-report.json");
         }
         CompileTarget::Site => {
             output.set_extension("html");
@@ -478,9 +478,9 @@ fn compile_target_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
+    config: &mdloom_lib::MdloomConfig,
     target: CompileTarget,
-) -> Result<proof_lib::compile::CompileResult> {
+) -> Result<mdloom_lib::compile::CompileResult> {
     match target {
         CompileTarget::Md => compile_file(source_path, output_path, root, config),
         CompileTarget::Html => compile_html_file(source_path, output_path, root, config),
@@ -499,8 +499,8 @@ fn compile_html_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     let temp_dir = unique_temp_dir()?;
     let markdown_path = temp_dir.join("compiled.md");
     let mut result = compile_file(source_path, &markdown_path, root, config)?;
@@ -518,12 +518,12 @@ fn compile_html_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof document");
-    let html = proof_lib::publish::markdown_to_html_document(&markdown, title);
+        .unwrap_or("mdloom document");
+    let html = mdloom_lib::publish::markdown_to_html_document(&markdown, title);
     let current = std::fs::read_to_string(output_path).unwrap_or_default();
     result.written = current != html;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, html)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -536,8 +536,8 @@ fn compile_pebble_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     let temp_dir = unique_temp_dir()?;
     let markdown_path = temp_dir.join("compiled.md");
     let mut result = compile_file(source_path, &markdown_path, root, config)?;
@@ -555,8 +555,8 @@ fn compile_pebble_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof document");
-    let pebble = proof_lib::publish::markdown_to_pebble_document(
+        .unwrap_or("mdloom document");
+    let pebble = mdloom_lib::publish::markdown_to_pebble_document(
         &markdown,
         title,
         source_path,
@@ -565,7 +565,7 @@ fn compile_pebble_file(
     let current = std::fs::read_to_string(output_path).unwrap_or_default();
     result.written = current != pebble;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, pebble)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -578,8 +578,8 @@ fn compile_json_report_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     let temp_dir = unique_temp_dir()?;
     let markdown_path = temp_dir.join("compiled.md");
     let mut result = compile_file(source_path, &markdown_path, root, config)?;
@@ -597,12 +597,12 @@ fn compile_json_report_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof document");
-    let frontmatter = proof_lib::frontmatter::read(source_path)?.unwrap_or_default();
+        .unwrap_or("mdloom document");
+    let frontmatter = mdloom_lib::frontmatter::read(source_path)?.unwrap_or_default();
     let diagnostics = result
         .violations
         .iter()
-        .map(|violation| proof_lib::publish::JsonReportDiagnostic {
+        .map(|violation| mdloom_lib::publish::JsonReportDiagnostic {
             code: violation.code.to_string(),
             severity: match violation.severity {
                 ViolationSeverity::Error => "error",
@@ -613,14 +613,14 @@ fn compile_json_report_file(
             message: violation.message.clone(),
         })
         .collect::<Vec<_>>();
-    let report = proof_lib::publish::markdown_to_json_report_bundle(
+    let report = mdloom_lib::publish::markdown_to_json_report_bundle(
         &markdown,
         title,
         source_path,
         output_path,
         &result.resolved_files,
         frontmatter,
-        proof_lib::publish::JsonReportCompile {
+        mdloom_lib::publish::JsonReportCompile {
             directives_resolved: result.directives_resolved,
             diagnostics_count: diagnostics.len(),
             diagnostics,
@@ -629,7 +629,7 @@ fn compile_json_report_file(
     let current = std::fs::read_to_string(output_path).unwrap_or_default();
     result.written = current != report;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, report)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -642,8 +642,8 @@ fn compile_pdf_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     let temp_dir = unique_temp_dir()?;
     let markdown_path = temp_dir.join("compiled.md");
     let mut result = compile_file(source_path, &markdown_path, root, config)?;
@@ -661,13 +661,13 @@ fn compile_pdf_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof document");
-    let html = proof_lib::publish::markdown_to_html_document(&markdown, title);
-    let pdf = proof_lib::publish::html_to_pdf_document(&html, title);
+        .unwrap_or("mdloom document");
+    let html = mdloom_lib::publish::markdown_to_html_document(&markdown, title);
+    let pdf = mdloom_lib::publish::html_to_pdf_document(&html, title);
     let current = std::fs::read(output_path).unwrap_or_default();
     result.written = current != pdf;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, pdf)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -680,8 +680,8 @@ fn compile_docx_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     let temp_dir = unique_temp_dir()?;
     let markdown_path = temp_dir.join("compiled.md");
     let mut result = compile_file(source_path, &markdown_path, root, config)?;
@@ -699,12 +699,12 @@ fn compile_docx_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof document");
-    let docx = proof_lib::publish::markdown_to_docx_document(&markdown, title);
+        .unwrap_or("mdloom document");
+    let docx = mdloom_lib::publish::markdown_to_docx_document(&markdown, title);
     let current = std::fs::read(output_path).unwrap_or_default();
     result.written = current != docx;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, docx)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -717,18 +717,18 @@ fn compile_pptx_file(
     source_path: &Path,
     output_path: &Path,
     root: &Path,
-    config: &proof_lib::GlintConfig,
-) -> Result<proof_lib::compile::CompileResult> {
+    config: &mdloom_lib::MdloomConfig,
+) -> Result<mdloom_lib::compile::CompileResult> {
     if !source_path
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.ends_with(".slides.source.md"))
         .unwrap_or(false)
     {
-        return Ok(proof_lib::compile::CompileResult {
+        return Ok(mdloom_lib::compile::CompileResult {
             output_path: output_path.to_path_buf(),
             directives_resolved: 0,
-            violations: vec![proof_lib::compile::CompileViolation {
+            violations: vec![mdloom_lib::compile::CompileViolation {
                 code: "PPTX-001",
                 severity: ViolationSeverity::Error,
                 uri: String::new(),
@@ -760,12 +760,12 @@ fn compile_pptx_file(
     let title = source_path
         .file_stem()
         .and_then(|stem| stem.to_str())
-        .unwrap_or("proof deck");
-    let pptx = match proof_lib::publish::slides_source_to_pptx_document(&source, title) {
+        .unwrap_or("mdloom deck");
+    let pptx = match mdloom_lib::publish::slides_source_to_pptx_document(&source, title) {
         Ok(pptx) => pptx,
         Err(errors) => {
             result.violations.extend(errors.into_iter().map(|message| {
-                proof_lib::compile::CompileViolation {
+                mdloom_lib::compile::CompileViolation {
                     code: "PPTX-002",
                     severity: ViolationSeverity::Error,
                     uri: String::new(),
@@ -783,7 +783,7 @@ fn compile_pptx_file(
     let current = std::fs::read(output_path).unwrap_or_default();
     result.written = current != pptx;
     if result.written {
-        let tmp = output_path.with_extension("proof_tmp");
+        let tmp = output_path.with_extension("mdloom_tmp");
         std::fs::write(&tmp, pptx)?;
         std::fs::rename(&tmp, output_path)?;
     }
@@ -799,9 +799,9 @@ fn write_static_site(artifacts: &[ArtifactRecord], root: &Path) -> Result<()> {
         .map(|artifact| {
             let title = std::fs::read_to_string(&artifact.output_path)
                 .ok()
-                .and_then(|html| proof_lib::publish::html_document_title(&html))
+                .and_then(|html| mdloom_lib::publish::html_document_title(&html))
                 .unwrap_or_else(|| title_from_path(&artifact.source_path));
-            proof_lib::publish::SitePage {
+            mdloom_lib::publish::SitePage {
                 title,
                 source_path: artifact.source_path.display().to_string(),
                 output_path: artifact.output_path.display().to_string(),
@@ -811,7 +811,7 @@ fn write_static_site(artifacts: &[ArtifactRecord], root: &Path) -> Result<()> {
             }
         })
         .collect::<Vec<_>>();
-    proof_lib::publish::write_static_site(&site_root, pages)?;
+    mdloom_lib::publish::write_static_site(&site_root, pages)?;
     Ok(())
 }
 
@@ -858,7 +858,7 @@ fn unique_temp_dir() -> Result<PathBuf> {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("proof-compile-{}-{}", std::process::id(), nanos));
+    let dir = std::env::temp_dir().join(format!("mdloom-compile-{}-{}", std::process::id(), nanos));
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -883,7 +883,7 @@ fn run_watch(
 
     let watch_targets: Vec<(PathBuf, Option<PathBuf>)> =
         if !config.compile.is_empty() && using_default_paths {
-            // Use all [[compile]] targets from proof.toml
+            // Use all [[compile]] targets from mdloom.toml
             config
                 .compile
                 .iter()
@@ -922,7 +922,7 @@ fn run_watch(
 
     eprintln!(
         "{} watching for changes (Ctrl-C to stop)",
-        "proof compile --watch:".cyan().bold()
+        "mdloom compile --watch:".cyan().bold()
     );
     for (src, out) in &watch_targets {
         if let Some(out) = out {
@@ -1146,7 +1146,7 @@ fn compile_watch_pass(
     watch_paths: &[PathBuf],
     output_dir: &Option<PathBuf>,
     root: &Path,
-    config: &proof_lib::GlintConfig,
+    config: &mdloom_lib::MdloomConfig,
 ) -> Result<Vec<PathBuf>> {
     let mut sources: Vec<PathBuf> = Vec::new();
     for watch_path in watch_paths {
@@ -1173,7 +1173,7 @@ fn compile_one_watch(
     source_path: &PathBuf,
     output_dir: &Option<PathBuf>,
     root: &Path,
-    config: &proof_lib::GlintConfig,
+    config: &mdloom_lib::MdloomConfig,
 ) {
     let output_path = if let Some(dir) = output_dir {
         if let Some(derived) = derive_output_path(source_path) {

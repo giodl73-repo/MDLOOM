@@ -25,14 +25,14 @@ for CI, agents, and integrations.
   - `docs/specs/publish-backends.md`
   - `tests/integration_tests.rs`
 - Generated/user artifacts:
-  - `*.proof-report.json`
-  - `.proof/artifacts.json` entries with `target = "json-report"`
+  - `*.mdloom-report.json`
+  - `.mdloom/artifacts.json` entries with `target = "json-report"`
 
 ## Pre-implementation scout
 
 - Inspect compile result fields available after Markdown resolution.
 - Compare with Pebble output to avoid duplicating its retrieval-focused schema.
-- Define `proof.publish.json_report.v1` before writing code.
+- Define `mdloom.publish.json_report.v1` before writing code.
 
 ## Deliverables checklist
 
@@ -48,7 +48,7 @@ for CI, agents, and integrations.
 - `cargo fmt --check`
 - `cargo test binary_compile_target_json_report_writes_bundle`
 - `cargo test --test integration_tests`
-- `proof compile <fixture>.source.md --target json-report -o <out>.proof-report.json`
+- `mdloom compile <fixture>.source.md --target json-report -o <out>.mdloom-report.json`
 - `git diff --check`
 
 ## Non-goals
@@ -59,13 +59,13 @@ for CI, agents, and integrations.
 
 ## Evidence
 
-- Added `proof compile --target json-report`.
-- Added `proof.publish.json_report.v1` with source path, title, frontmatter,
+- Added `mdloom compile --target json-report`.
+- Added `mdloom.publish.json_report.v1` with source path, title, frontmatter,
   resolved Markdown, sections, refs, diagnostics, and compile counts.
 - Added integration coverage for output shape and manifest target.
 - Validation passed:
   - `cargo fmt --check`
   - `cargo test binary_compile_target_json_report_writes_bundle`
   - `cargo test --test integration_tests`
-  - `proof compile <fixture>.source.md --target json-report -o <out>.proof-report.json`
+  - `mdloom compile <fixture>.source.md --target json-report -o <out>.mdloom-report.json`
   - `git diff --check`

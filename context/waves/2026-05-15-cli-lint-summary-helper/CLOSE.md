@@ -11,7 +11,7 @@ file-vs-directory summary behavior.
 - The helper loads the effective config for each input, builds the appropriate
   runner, calls `Runner::run_path_summary`, and aggregates diagnostics plus
   file counts into one `RunSummary`.
-- Updated `proof check`, `proof stats`, and `proof draft` to use the helper.
+- Updated `mdloom check`, `mdloom stats`, and `mdloom draft` to use the helper.
 
 ## Validation
 

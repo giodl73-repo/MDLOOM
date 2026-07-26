@@ -1,8 +1,8 @@
-# proof Codebase Architecture
+# mdloom Codebase Architecture
 
 ## Repository structure
 
-<!-- proof:compiled from="proof:tree kind=dirtree" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dirtree" uri="" -->
 ```dirtree
 src/
 ├── checks/
@@ -71,7 +71,7 @@ src/
 │   └── schema.rs
 ├── user-scenarios/
 │   ├── 07-canvas-tui/
-│   ├── 21-proof-math-demo/
+│   ├── 21-mdloom-math-demo/
 │   ├── data/
 │   │   └── models.md
 │   ├── 02-math-api.source.md
@@ -89,7 +89,7 @@ src/
 │   ├── 22-status-board.dashboard.source.md
 │   ├── 23-adr-with-toc.source.md
 │   ├── 25-wip-guide.source.md
-│   └── proof.toml
+│   └── mdloom.toml
 ├── baseline.rs
 ├── compile.rs
 ├── config.rs
@@ -103,25 +103,25 @@ src/
 ├── runner.rs
 └── spec_gen.rs
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ## Team organization
 
-proof:bullets
+mdloom:bullets
 - Core: compile pipeline, lint checks, fix system
-  - proof-math: LaTeX renderer crate
-  - proof-canvas: char grid crate
+  - mdloom-math: LaTeX renderer crate
+  - mdloom-canvas: char grid crate
 - Integrations: mdpath URI scheme and resolver
 - Documentation: guides, scenarios, spec clarifications
 
 ## Module dependency graph
 
-proof:bullets
-- proof binary
+mdloom:bullets
+- mdloom binary
   - compile.rs: math, symbol, element, slide, dashboard, tree, layout
   - runner.rs: checks, config
   - checks: ascii_box, ascii_flow, ascii_tree, markdown, markdown_table, source_links
-  - dashboard: canvas (proof-canvas), region
+  - dashboard: canvas (mdloom-canvas), region
   - slide: parser, canvas, layout, bullets, inline
   - element: value, delta, sparkline, mini_bar, row
   - symbol: library, shape

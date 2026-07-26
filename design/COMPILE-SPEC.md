@@ -1,4 +1,4 @@
-# proof compile — Markdown Compilation Specification v0.2
+# mdloom compile — Markdown Compilation Specification v0.2
 
 **Status:** ✅ Implemented — `src/compile.rs`. All directives wired: include, layout, table, tree, element, row, symbol, shape, region, math, toc, xref, blockquote, chart, ol/numbered-list. Watch mode, --progress, --delete-on-error, multi-target [[compile]] routing all live.
 
@@ -6,9 +6,9 @@
 
 ## What it is
 
-`proof compile` is a markdown compiler that resolves **include directives** in source
-markdown files and produces rendered output markdown. Source files use `proof:include`
-and `proof:layout` fenced blocks to reference figures, tables, and charts by `md://`
+`mdloom compile` is a markdown compiler that resolves **include directives** in source
+markdown files and produces rendered output markdown. Source files use `mdloom:include`
+and `mdloom:layout` fenced blocks to reference figures, tables, and charts by `md://`
 URI. The compiler resolves each reference, applies layout composition, validates
 DaVinci invariants, and writes the final compiled document.
 
@@ -27,33 +27,33 @@ and paste text. A compiler:
 - **Snapshots** — compile states can be named and restored (see Cache Snapshots below)
 - **Incremental** — only recompile when inputs change (causal cache chain)
 - **Addressable** — the compiled output carries `md://` addresses for each embedded figure
-  so proof check can still validate the output
+  so mdloom check can still validate the output
 
 ---
 
 ## Source document format
 
-Source documents use `proof:` info strings on fenced blocks:
+Source documents use `mdloom:` info strings on fenced blocks:
 
 ````markdown
 ## Concurrency Model
 
 Intro text here.
 
-```proof:include
+```mdloom:include
 md://languages/10-GO.md#concurrency-model:figure.flowchart:goroutine-scheduler
 ```
 
 Compare Go and Rust concurrency:
 
-```proof:layout gap=4 align=top
+```mdloom:layout gap=4 align=top
 md://languages/10-GO.md#concurrency-model:0
 md://languages/09-RUST.md#ownership-model:0
 ```
 
 The type system at a glance:
 
-```proof:table
+```mdloom:table
 md://languages/10-GO.md#type-system-snapshot:table.key-value:0
 ?select=Axis,Value&filter=Axis contains runtime
 ```
@@ -64,19 +64,19 @@ md://languages/10-GO.md#type-system-snapshot:table.key-value:0
 
 | Directive | Purpose |
 |-----------|---------|
-| `proof:include` | Embed a single figure, table, or text element |
-| `proof:layout` | Compose N figures side-by-side (see LAYOUT-SPEC.md) |
-| `proof:table` | Embed a table with optional column selection and filtering |
-| `proof:blockquote` | Prose-document block quote with optional attribution (see below) |
+| `mdloom:include` | Embed a single figure, table, or text element |
+| `mdloom:layout` | Compose N figures side-by-side (see LAYOUT-SPEC.md) |
+| `mdloom:table` | Embed a table with optional column selection and filtering |
+| `mdloom:blockquote` | Prose-document block quote with optional attribution (see below) |
 
-### `proof:blockquote` — prose-document block quote
+### `mdloom:blockquote` — prose-document block quote
 
 Prose documents need a first-class block-quote primitive distinct from slides'
-`proof:quote` (which centers content and uses curly quotes — wrong for prose).
-`proof:blockquote` is left-aligned, indented, and emits one of two shapes:
+`mdloom:quote` (which centers content and uses curly quotes — wrong for prose).
+`mdloom:blockquote` is left-aligned, indented, and emits one of two shapes:
 
 ```markdown
-` ` `proof:blockquote attribution="Ada Lovelace" style=indent
+` ` `mdloom:blockquote attribution="Ada Lovelace" style=indent
 The Analytical Engine has no pretensions whatever to originate anything.
 ` ` `
 ```
@@ -102,15 +102,15 @@ Body content is the directive's fenced block body. Leading and trailing blank
 lines in the body are trimmed; inner blank lines render as bare `>` lines so
 the rendered markdown stays one contiguous quote (not two adjacent ones).
 This directive is prose-only — it has no per-slide centering or width-fitting
-logic. For slides, use `proof:quote`.
+logic. For slides, use `mdloom:quote`.
 
 ### Figure files
 
 A figure file is a standalone `.md` file whose figures are marked with
-`<!-- proof:figure -->` HTML comments immediately preceding each code fence:
+`<!-- mdloom:figure -->` HTML comments immediately preceding each code fence:
 
 ```markdown
-<!-- proof:figure id="goroutine-scheduler" kind="figure.flowchart" -->
+<!-- mdloom:figure id="goroutine-scheduler" kind="figure.flowchart" -->
 ```
 GOROUTINE SCHEDULER — M:N multiplexing
 ┌─────────────────────────────────────┐
@@ -120,8 +120,8 @@ GOROUTINE SCHEDULER — M:N multiplexing
 ```
 
 The HTML comment is **outside** the code fence — markdown renderers hide it, but
-proof indexes it to give the following code block a stable named identity. A figure
-file may contain multiple `<!-- proof:figure -->` markers, one before each code block.
+mdloom indexes it to give the following code block a stable named identity. A figure
+file may contain multiple `<!-- mdloom:figure -->` markers, one before each code block.
 
 Figure files live in a `figures/` directory (or anywhere) and are addressed by
 `md://` URI. See [URI Resolution](#uri-resolution) for how named IDs map to selectors.
@@ -132,12 +132,12 @@ Figure files live in a `figures/` directory (or anywhere) and are addressed by
 
 ### Base path
 
-All `md://` URIs are resolved relative to the **proof.toml root directory** — the
-directory containing the `proof.toml` file, or the current working directory if no
-`proof.toml` is found. The source file's own directory is NOT the base.
+All `md://` URIs are resolved relative to the **mdloom.toml root directory** — the
+directory containing the `mdloom.toml` file, or the current working directory if no
+`mdloom.toml` is found. The source file's own directory is NOT the base.
 
 ```
-proof.toml root: /project/
+mdloom.toml root: /project/
 source file:     /project/languages/10-GO.source.md
 URI:             md://figures/goroutine-scheduler.md#goroutine-scheduler:0
 resolves to:     /project/figures/goroutine-scheduler.md  ← from project root
@@ -146,20 +146,20 @@ resolves to:     /project/figures/goroutine-scheduler.md  ← from project root
 ### Named figure ID selector
 
 The URI fragment `#goroutine-scheduler:0` is a named figure selector. It resolves to
-the code block immediately following the `<!-- proof:figure id="goroutine-scheduler" -->` marker in the target file. The `:0` ordinal selects the first (and usually only) code block following that marker.
+the code block immediately following the `<!-- mdloom:figure id="goroutine-scheduler" -->` marker in the target file. The `:0` ordinal selects the first (and usually only) code block following that marker.
 
-Proof indexes all `proof:figure id=` markers in a file during the parse step. The
+Mdloom indexes all `mdloom:figure id=` markers in a file during the parse step. The
 parse cache stores this index as part of the `ParsedDocument`. The mdpath URI scheme's
 `#heading:kind:ordinal` form also works — named figure IDs are an additional selector
 shortcut layered on top.
 
-### What `proof:include` embeds
+### What `mdloom:include` embeds
 
-`proof:include` embeds the **content inside the code fence**, not the raw fence
+`mdloom:include` embeds the **content inside the code fence**, not the raw fence
 delimiter lines. Given this figure:
 
 ```
-<!-- proof:figure id="foo" kind="figure.flowchart" -->
+<!-- mdloom:figure id="foo" kind="figure.flowchart" -->
 ` ` `
 BOX CONTENT
 └────────┘
@@ -181,28 +181,28 @@ files are never copied verbatim into compiled output.
 ## CLI commands
 
 ```bash
-proof compile input.source.md             # compile to input.md (drops .source.)
-proof compile input.source.md -o out.md   # explicit output path
-proof compile src/*.source.md             # batch compile all source files
-proof compile . --watch                   # watch mode: recompile on change
-proof compile . --check                   # validate without writing output
-proof compile . --cache-status            # show per-file cache tier hits/misses
-proof compile . --no-cache                # bypass all cache tiers
+mdloom compile input.source.md             # compile to input.md (drops .source.)
+mdloom compile input.source.md -o out.md   # explicit output path
+mdloom compile src/*.source.md             # batch compile all source files
+mdloom compile . --watch                   # watch mode: recompile on change
+mdloom compile . --check                   # validate without writing output
+mdloom compile . --cache-status            # show per-file cache tier hits/misses
+mdloom compile . --no-cache                # bypass all cache tiers
 
 # Cache snapshot management
-proof cache snapshot save "production"
-proof cache snapshot restore "production"
-proof cache snapshot diff "before" "after"
-proof cache snapshot diff "before" --vs-current
-proof cache snapshot list
-proof cache snapshot prune --keep 5
-proof cache snapshot deploy "production" --to ./dist/
+mdloom cache snapshot save "production"
+mdloom cache snapshot restore "production"
+mdloom cache snapshot diff "before" "after"
+mdloom cache snapshot diff "before" --vs-current
+mdloom cache snapshot list
+mdloom cache snapshot prune --keep 5
+mdloom cache snapshot deploy "production" --to ./dist/
 ```
 
 ### Output path convention
 
 When compiling `foo.source.md`, the default output is `foo.md` (dropping `.source.`),
-in the same directory as the source file. All paths are relative to the proof.toml
+in the same directory as the source file. All paths are relative to the mdloom.toml
 root:
 
 ```
@@ -230,7 +230,7 @@ source change
 └──────────────┘     └──────────────┘     └──────────────┘
   file content          parse key +         resolve keys[] +
   hash +                URI string +        layout config hash +
-  proof version         proof version       proof version
+  mdloom version         mdloom version       mdloom version
 ```
 
 ### Tier 1: Parse Cache
@@ -240,7 +240,7 @@ Caches the `ParsedDocument` for each `.md` file.
 ```
 parse_key = SHA-256(
     file_content_hash,
-    proof_version
+    mdloom_version
 )
 ```
 
@@ -258,7 +258,7 @@ re-hashing the file. To support efficient compile_key computation (step 3 of the
 pipeline), the compiler maintains a **path index** alongside the cache:
 
 ```
-.proof/cache/parse-index.json   ← maps file path → (parse_key, mtime)
+.mdloom/cache/parse-index.json   ← maps file path → (parse_key, mtime)
 ```
 
 On startup, any entry whose stored mtime differs from the actual file mtime is treated
@@ -273,7 +273,7 @@ Caches the resolved content of each `md://` URI.
 resolve_key = SHA-256(
     parse_key,      ← Tier 1 of the TARGET file (not the source document)
     uri_string,
-    proof_version
+    mdloom_version
 )
 ```
 
@@ -289,7 +289,7 @@ compile_key = SHA-256(
     source_parse_key,       ← Tier 1 of the source document
     sorted_resolve_keys[],  ← Tier 2 of ALL included figures, in order, NOT deduplicated
     layout_config_hash,     ← SHA-256 of normalized layout config (see note)
-    proof_version
+    mdloom_version
 )
 ```
 
@@ -298,7 +298,7 @@ in a source document, its resolve_key appears twice in this list. Deduplication 
 cause two documents with different include counts to share the same compile_key, which
 is a silent correctness bug.
 
-**`layout_config_hash`**: When a source document has no `proof:layout` directives,
+**`layout_config_hash`**: When a source document has no `mdloom:layout` directives,
 use `SHA-256("")` (hash of empty string) as the sentinel value. When layout directives
 are present, hash the normalized attribute set — with all defaults filled in before
 hashing, so that `gap=3` (explicit) and `gap` (omitted, default 3) produce the
@@ -317,7 +317,7 @@ mode). Done.
 | Source document content | MISS | MISS | MISS |
 | Included figure content | HIT | MISS | MISS |
 | Layout config (gap, align, labels) | HIT | HIT | MISS |
-| proof version | MISS | MISS | MISS |
+| mdloom version | MISS | MISS | MISS |
 | DaVinci invariants only | HIT | HIT | MISS (re-validate) |
 
 The causal chain means you never manually invalidate. Content-addressed keys
@@ -325,16 +325,16 @@ automatically miss when inputs change.
 
 ### Compile cache entry schema
 
-Each `.proof/cache/compile/{key}.json` stores:
+Each `.mdloom/cache/compile/{key}.json` stores:
 
 ```rust
 struct CompileCacheEntry {
     compile_key: String,
-    source_path: String,        // relative to proof.toml root
-    output_path: String,        // relative to proof.toml root
+    source_path: String,        // relative to mdloom.toml root
+    output_path: String,        // relative to mdloom.toml root
     compiled_text: String,      // the full compiled markdown
     resolved_uris: Vec<String>, // all md:// URIs that were embedded
-    proof_version: String,
+    mdloom_version: String,
     created_at: u64,            // epoch ms
 }
 ```
@@ -342,7 +342,7 @@ struct CompileCacheEntry {
 ### Storage layout
 
 ```
-.proof/cache/
+.mdloom/cache/
   parse/           ← Tier 1: ParsedDocument per .md file
     {key}.json
   parse-index.json ← path → (parse_key, mtime) for efficient lookup
@@ -366,39 +366,39 @@ Named snapshots let you save and restore compile states — useful before risky 
 edits. See [CACHE-SNAPSHOTS.md](./cache-snapshots.md) for the full spec.
 
 ```bash
-proof cache snapshot save "before-redesign"          # capture current state
-proof cache snapshot restore "before-redesign"        # restore cache state (not files)
-proof cache snapshot diff "v1" "v2"                  # which files changed?
-proof cache snapshot diff "before-redesign" --vs-current   # diff vs live cache
-proof cache snapshot deploy "production" --to ./dist/ # materialize without recompile
+mdloom cache snapshot save "before-redesign"          # capture current state
+mdloom cache snapshot restore "before-redesign"        # restore cache state (not files)
+mdloom cache snapshot diff "v1" "v2"                  # which files changed?
+mdloom cache snapshot diff "before-redesign" --vs-current   # diff vs live cache
+mdloom cache snapshot deploy "production" --to ./dist/ # materialize without recompile
 ```
 
 **Important:** `restore` is a cache operation — it restores cached compiled artifacts,
 not the working files. After restore, source documents and figure files remain in their
 current edited state on disk. Files that were edited since the snapshot was saved will
-naturally miss the restored cache and recompile on the next `proof compile .`.
+naturally miss the restored cache and recompile on the next `mdloom compile .`.
 
 ---
 
 ## Compilation pipeline
 
 ```
-proof compile source.md
+mdloom compile source.md
     │
     ├── 1. Parse source.md → ParsedDocument (Tier 1 cache check via path index)
     │       └── HIT: use cached ParsedDocument for all directive extraction below
     │
-    ├── 2. Extract all proof: directives from ParsedDocument
-    │       (proof:include, proof:layout, proof:table)
+    ├── 2. Extract all mdloom: directives from ParsedDocument
+    │       (mdloom:include, mdloom:layout, mdloom:table)
     │
     ├── 3. Compute resolve_keys for all directive URIs
     │       ├── Look up parse_key of each target file via path index
-    │       ├── resolve_key = SHA-256(target_parse_key, uri_string, proof_version)
+    │       ├── resolve_key = SHA-256(target_parse_key, uri_string, mdloom_version)
     │       └── Collect as sorted_resolve_keys[] — preserve duplicates, do not deduplicate
     │
     ├── 4. Compute compile_key, check Tier 3 cache
     │       ├── compile_key = SHA-256(source_parse_key, sorted_resolve_keys[],
-    │       │       layout_config_hash, proof_version)
+    │       │       layout_config_hash, mdloom_version)
     │       ├── HIT → write cached output (skip if identical), done
     │       └── MISS → continue
     │
@@ -409,7 +409,7 @@ proof compile source.md
     │       │     Collect ALL violations before aborting (fail-all, not fail-fast)
     │       └── If any violation at protection=error → COMPILE-001, abort (see below)
     │
-    ├── 6. For proof:layout directives:
+    ├── 6. For mdloom:layout directives:
     │       └── Apply layout engine with resolved content (see LAYOUT-SPEC.md)
     │
     ├── 7. Compose final document:
@@ -452,7 +452,7 @@ protection=warn figures are embedded with a warning — compile still succeeds.
 ## Watch mode
 
 ```bash
-proof compile . --watch
+mdloom compile . --watch
 ```
 
 Watch mode watches **both** source documents (`.source.md`) and all figure files
@@ -460,11 +460,11 @@ referenced by any `md://` URI in any source document. When a figure file changes
 the source documents that include it are recompiled.
 
 ```
-[proof] watching . for changes (12 source files, 8 figure files)...
-[proof] detected change: figures/goroutine-scheduler.md
+[mdloom] watching . for changes (12 source files, 8 figure files)...
+[mdloom] detected change: figures/goroutine-scheduler.md
   → recompiling: languages/10-GO.source.md (includes this figure)
   → ✓ compiled in 43ms
-[proof] watching...
+[mdloom] watching...
 ```
 
 Content-addressed keys naturally miss for changed files — watch mode does **not**
@@ -477,12 +477,12 @@ To efficiently determine which source documents include a changed figure, watch 
 builds an inverse index on startup:
 
 ```
-.proof/cache/watch-index.json  ← maps figure_path → [source_paths that include it]
+.mdloom/cache/watch-index.json  ← maps figure_path → [source_paths that include it]
 ```
 
 This index is rebuilt when source documents are compiled or recompiled. A new source
 document that has never been compiled is not yet in the index and will not be
-automatically recompiled when its figures change — run `proof compile .` once to
+automatically recompiled when its figures change — run `mdloom compile .` once to
 build the index, then watch mode is fully responsive.
 
 ---
@@ -490,31 +490,31 @@ build the index, then watch mode is fully responsive.
 ## Traceability in compiled output
 
 Compiled output embeds HTML comments that trace each embedded element back to its
-source URI. This lets `proof check` on the compiled output emit errors with stable
+source URI. This lets `mdloom check` on the compiled output emit errors with stable
 `md://` addresses rather than just file:line:col.
 
 ```markdown
-<!-- proof:compiled from="md://figures/goroutine-scheduler.md#goroutine-scheduler:0" -->
+<!-- mdloom:compiled from="md://figures/goroutine-scheduler.md#goroutine-scheduler:0" -->
 ```
 GOROUTINE SCHEDULER — M:N multiplexing
 ┌─────────────────────────────────────┐
 ...
 └─────────────────────────────────────┘
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ```
 
-For `proof:layout`, the traceability comment lists all composed URIs:
+For `mdloom:layout`, the traceability comment lists all composed URIs:
 
 ```markdown
-<!-- proof:compiled from="proof:layout"
+<!-- mdloom:compiled from="mdloom:layout"
      uris="md://figures/go-types.md#go-type-system:0,md://figures/rust-types.md#rust-type-system:0" -->
 ```
       Go                         Rust
 Axis         | Value        Axis         | Value
 ...
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 ```
 
 ---
@@ -535,7 +535,7 @@ Axis         | Value        Axis         | Value
 
 ## New roles needed
 
-This compilation system expands proof's scope significantly. Three new roles:
+This compilation system expands mdloom's scope significantly. Three new roles:
 
 **SOURCE** — source/output document model expert. Understands the include system,
 directive syntax, traceability comments, and the relationship between `.source.md`
@@ -554,7 +554,7 @@ SOURCE and COMPOSE (more correctness, less throughput).
 ## Spec Clarifications (from scenario findings)
 
 The following clarifications resolve ambiguities surfaced during scenario walkthroughs
-of `proof compile`, `proof check`, watch mode, and the math/canvas helpers. Each item
+of `mdloom compile`, `mdloom check`, watch mode, and the math/canvas helpers. Each item
 is keyed to its finding ID for traceability.
 
 ### Compile errors and stale output
@@ -568,7 +568,7 @@ last compile failed). A future `--delete-on-error` flag may change this.
 **F119 — Stale output policy rationale.** Leaving stale output on disk is the
 current behavior. The reasoning: better a stale correct file than a fresh broken
 file. Mid-edit failures should not blow away the last-known-good artifact. Authors
-who want clean failure semantics in CI should use `proof compile --check`, which
+who want clean failure semantics in CI should use `mdloom compile --check`, which
 validates without writing and returns a non-zero exit code on error.
 
 **F120 — Error summary on stderr.** When compile has errors, stderr prints the
@@ -584,15 +584,15 @@ stale output in place.
 
 ### TOC scanning
 
-**F102 — TOC scan start.** The `proof:toc` heading scan starts from the beginning
-of the current file. The `proof:toc` fence itself is inside a fenced code block and
+**F102 — TOC scan start.** The `mdloom:toc` heading scan starts from the beginning
+of the current file. The `mdloom:toc` fence itself is inside a fenced code block and
 is therefore skipped by the heading scanner — headings inside fences are not real
 headings. This means a TOC directive placed anywhere in the document produces the
 same output, and the directive's own location does not appear as a heading entry.
 
 ### Watch mode
 
-**F107 — Watch set includes md:// deps.** In `proof compile --watch`, the initial
+**F107 — Watch set includes md:// deps.** In `mdloom compile --watch`, the initial
 watch set covers all `source_dir` paths from active `[[compile]]` targets. Future
 improvement: after the initial compile pass, also watch all `md://` files resolved
 during compilation so that figure file edits trigger recompile of the source
@@ -606,7 +606,7 @@ watcher recompiles without needing to restart. This is the correct behavior: wat
 is a development tool, not a CI gate. Errors during watch never terminate the
 process; they only suppress writes for the failing files (per F93).
 
-**F112 — Watch + output-dir.** When `proof compile --watch --output-dir path` is
+**F112 — Watch + output-dir.** When `mdloom compile --watch --output-dir path` is
 used, the `--output-dir` override applies for the entire watch session including
 all subsequent recompiles triggered by file changes. The override is captured at
 session start and is not re-read from CLI on each recompile.
@@ -621,8 +621,8 @@ targets producing the same output path (same directory + same filename) is a
 configuration error and should emit COMPILE-002.
 
 **F110 — `source_dir` base.** `source_dir` in `[[compile]]` is relative to the
-directory containing `proof.toml` (the proof root). This is the same base as all
-other relative paths in `proof.toml`. Source paths are not relative to the
+directory containing `mdloom.toml` (the mdloom root). This is the same base as all
+other relative paths in `mdloom.toml`. Source paths are not relative to the
 `[[compile]]` block's position in the file or to any parent table.
 
 **F111 — Filename collision across targets.** If two source files in different
@@ -635,11 +635,11 @@ output directories distinct.
 
 ### Check command
 
-**F113 — `proof check` exit code.** `proof check` exits non-zero if any
+**F113 — `mdloom check` exit code.** `mdloom check` exits non-zero if any
 `error`-severity diagnostics are found and `--fail-on-error` is set. Warnings
 alone do not trigger non-zero exit. `md_broken_uri` is severity `error` — it
 triggers non-zero exit under `--fail-on-error`. The default mode (without the
-flag) always exits zero so that `proof check` can be used informationally without
+flag) always exits zero so that `mdloom check` can be used informationally without
 breaking pipelines that haven't opted in to strict mode.
 
 ### Diagnostic codes
@@ -650,10 +650,10 @@ distinguishes them at runtime, but the code is shared. Future: may split into
 COMPILE-002 (file not found) and COMPILE-005 (directive missing required
 attribute) to allow distinct CI suppression rules.
 
-**F122 — `source=` required for `proof:row`.** `source=md://...` is a required
-attribute for `proof:row`. If absent, the directive is collected with an empty
+**F122 — `source=` required for `mdloom:row`.** `source=md://...` is a required
+attribute for `mdloom:row`. If absent, the directive is collected with an empty
 source URI and fails at compile time with COMPILE-002 ("directive has no source").
-Future: `proof check` should catch this at lint time via a `source_links` check
+Future: `mdloom check` should catch this at lint time via a `source_links` check
 extension, so authors get the error before invoking compile.
 
 ### Math rendering

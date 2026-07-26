@@ -7,14 +7,14 @@ Failure modes in the schema loading, config composition, and rule interpretation
 ## SC-01: Schema silently ignored when config file not found
 
 **Pattern:** If `load_or_default()` falls through all candidate config paths and returns a default
-config, the user gets no feedback. They believe their `proof.toml` is being applied when it isn't
+config, the user gets no feedback. They believe their `mdloom.toml` is being applied when it isn't
 (wrong file name, wrong directory, typo). All checks run with default settings, not schema settings.
 
 **Domain:** CI pipelines and pre-commit hooks where the config path is assumed correct.
 
 **Structural solution:** Add a `--config` flag that is required-or-explicit. When `--config` is
 given but the file doesn't exist, fail immediately with a clear error. When auto-detection is used
-and no config is found, emit a `note:` line on stderr: `"no proof.toml found — using defaults"`.
+and no config is found, emit a `note:` line on stderr: `"no mdloom.toml found — using defaults"`.
 This makes silent fallback visible.
 
 **Status:** PARTIAL — `--config` flag exists and errors on missing file; auto-detection is silent.
@@ -29,7 +29,7 @@ passed to `Runner::run()`. If the caller passes an absolute path as root but the
 expecting a relative path from the project directory, no files match and `run()` returns zero
 diagnostics — silently.
 
-**Domain:** Integration scenarios where `proof` is invoked from a different working directory
+**Domain:** Integration scenarios where `mdloom` is invoked from a different working directory
 than the project root.
 
 **Structural solution:** Always strip the root prefix before globbing: `path.strip_prefix(root)`.
@@ -43,7 +43,7 @@ with their include patterns.
 
 ## SC-04: `paths_exclude` not prefixed alongside `paths` in directory configs
 
-**Pattern:** When a directory-level `proof.toml` defines a `section_schema` with both
+**Pattern:** When a directory-level `mdloom.toml` defines a `section_schema` with both
 `paths` and `paths_exclude`, the path-prefix logic (which makes `languages/*.md` from `*.md`)
 applies to `paths` but forgets to apply the same prefix to `paths_exclude`. The result:
 `paths_exclude = ["00-OVERVIEW.md"]` stays as-is while `paths` becomes `"languages/*.md"`.
@@ -51,7 +51,7 @@ When matching `languages/00-OVERVIEW.md`, include fires (it matches `languages/*
 exclude misses (its pattern is still bare `"00-OVERVIEW.md"`, not `"languages/00-OVERVIEW.md"`).
 The section schema applies to the overview file when it should be excluded.
 
-**Domain:** Any directory-level `proof.toml` that uses `paths_exclude` to carve out special
+**Domain:** Any directory-level `mdloom.toml` that uses `paths_exclude` to carve out special
 files from a generic `paths = ["*.md"]` rule.
 
 **Structural solution:** The prefix loop must iterate over both `schema.paths` and

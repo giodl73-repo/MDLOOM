@@ -1,4 +1,4 @@
-/// proof:bullets renderer — hierarchical bullet list with configurable chars.
+/// mdloom:bullets renderer — hierarchical bullet list with configurable chars.
 ///
 /// Bullet chars by level (configurable via slide front-matter):
 ///   Level 1: ● (default), Level 2: ◦, Level 3: ▸, Level 4+: –
@@ -13,7 +13,7 @@
 /// Bullets prefixed with `[N]` (where N ≥ 1) are assigned to reveal step N.
 /// Unmarked bullets implicitly belong to step 1.
 ///
-///   proof:bullets
+///   mdloom:bullets
 ///   - Always visible
 ///   [2] - Appears on step 2
 ///   [3] - Appears on step 3

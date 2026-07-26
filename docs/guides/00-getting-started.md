@@ -1,67 +1,67 @@
-# Getting Started with proof
+# Getting Started with mdloom
 
-proof is a markdown quality-assurance and compilation system for terminal-first
+mdloom is a markdown quality-assurance and compilation system for terminal-first
 documentation. It does two things: it **lints** markdown (catches alignment
 errors in ASCII art, broken links, missing sections) and it **compiles** source
-documents (resolves `proof:` directives into rendered output). Think of it as a
+documents (resolves `mdloom:` directives into rendered output). Think of it as a
 type-checker for your documentation — catching structural errors before they reach
 readers, and doing the mechanical rendering work for you.
 
-The two modes are independent. You can use `proof check` on any existing markdown
-repository with no setup beyond a `proof.toml`. Compilation requires `.source.md`
-files with `proof:` directives, but you adopt it incrementally — one file at a time.
+The two modes are independent. You can use `mdloom check` on any existing markdown
+repository with no setup beyond a `mdloom.toml`. Compilation requires `.source.md`
+files with `mdloom:` directives, but you adopt it incrementally — one file at a time.
 
 ---
 
-## What proof does
+## What mdloom does
 
-<!-- proof:compiled from="proof:tree kind=org" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=org" uri="" -->
 ```org
-proof CLI
-├── proof check: Lint markdown and ASCII art
+mdloom CLI
+├── mdloom check: Lint markdown and ASCII art
 ├── AsciiBoxCheck: Box border alignment
 ├── AsciiFlowCheck: Flow diagram nodes
 ├── MarkdownCheck: Headings and links
 ├── MarkdownTableCheck: Column alignment
 ├── SourceLinkCheck: Broken md:// references in source files
-├── proof compile: Resolve directives
-├── proof:math: LaTeX → Unicode/ASCII art
-├── proof:symbol: Named glyphs
-├── proof:element: Numeric cells (sparklines, bars, values)
-├── proof:row: Data rows from tables
-├── proof:tree: Tree diagrams from data
-├── proof:slide: Presentation slides
-├── proof:region: Dashboard canvas regions
-├── proof fix: Auto-patch lint errors
-└── proof pin: Register figure invariants (DaVinci protection)
+├── mdloom compile: Resolve directives
+├── mdloom:math: LaTeX → Unicode/ASCII art
+├── mdloom:symbol: Named glyphs
+├── mdloom:element: Numeric cells (sparklines, bars, values)
+├── mdloom:row: Data rows from tables
+├── mdloom:tree: Tree diagrams from data
+├── mdloom:slide: Presentation slides
+├── mdloom:region: Dashboard canvas regions
+├── mdloom fix: Auto-patch lint errors
+└── mdloom pin: Register figure invariants (DaVinci protection)
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
 ## Install
 
-proof and its URI library (`mdpath`) live in a Cargo workspace. Clone both into
+mdloom and its URI library (`mdpath`) live in a Cargo workspace. Clone both into
 sibling directories, then build from the workspace root:
 
 ```bash
-git clone https://github.com/giodl73-repo/PROOF
+git clone https://github.com/giodl73-repo/MDLOOM
 git clone https://github.com/giodl73-repo/MDPATH
 cd ..                              # go to the parent directory
 cargo build                        # builds both crates together
 ```
 
-The binary is at `C:/src/target/debug/proof` (or `release/proof` for production).
+The binary is at `C:/src/target/debug/mdloom` (or `release/mdloom` for production).
 On Windows: the same paths with `.exe`.
 
 ---
 
 ## First scan
 
-Run `proof check` on any directory to see what proof finds:
+Run `mdloom check` on any directory to see what mdloom finds:
 
 ```bash
-proof check .
+mdloom check .
 ```
 
 For a new repository this typically surfaces ASCII art alignment errors, missing
@@ -79,7 +79,7 @@ Start with errors (structural failures) before addressing warnings (style issues
 
 ## Configuration
 
-proof reads `proof.toml` from the directory being checked, cascading up to the
+mdloom reads `mdloom.toml` from the directory being checked, cascading up to the
 nearest file with `root = true`. A minimal root config:
 
 ```toml
@@ -98,51 +98,51 @@ source_dir = "src/guides"
 output_dir = "docs/guides"
 ```
 
-The `[[compile]]` section tells proof where to find source files and where to
-write compiled output — so `proof compile` and `proof compile --watch` work
+The `[[compile]]` section tells mdloom where to find source files and where to
+write compiled output — so `mdloom compile` and `mdloom compile --watch` work
 without any extra flags.
 
 ---
 
 ## The source → output pipeline
 
-Source files (`.source.md`) contain `proof:` directives that get resolved into
+Source files (`.source.md`) contain `mdloom:` directives that get resolved into
 rendered markdown. The mental model: source is code, compiled output is the
 artifact. Never edit the compiled `.md` files directly — edit the `.source.md`
 and recompile.
 
-<!-- proof:compiled from="proof:tree kind=dependency" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dependency" uri="" -->
 ```dependency
 docs/guides/05-trees.md
-├── src/guides/05-trees.source.md: proof:tree directives resolved
+├── src/guides/05-trees.source.md: mdloom:tree directives resolved
 ├── src/data/features.md: taxonomy source table
 └── src/data/diagnostic-codes.md: second taxonomy source
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Compile a single file:
 
 ```bash
-proof compile src/guides/math.source.md
+mdloom compile src/guides/math.source.md
 ```
 
 Compile a whole directory to a separate output location:
 
 ```bash
-proof compile src/guides/ --output-dir docs/guides/
+mdloom compile src/guides/ --output-dir docs/guides/
 ```
 
 Watch for changes and recompile automatically on save:
 
 ```bash
-proof compile --watch   # reads [[compile]] targets from proof.toml
+mdloom compile --watch   # reads [[compile]] targets from mdloom.toml
 ```
 
 ---
 
 ## Feature coverage
 
-<!-- proof:compiled from="proof:tree kind=taxonomy" uri="md://src/data/features.md" -->
+<!-- mdloom:compiled from="mdloom:tree kind=taxonomy" uri="md://src/data/features.md" -->
 ```taxonomy
 math
 ├── LaTeX math inline
@@ -188,7 +188,7 @@ linting
 compile
 └── Compile pipeline
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
@@ -200,4 +200,4 @@ compile
 - [Slides guide](slides.md) — ASCII presentation layouts
 - [Trees guide](trees.md) — org charts, taxonomies, and dirtrees
 - [Compile guide](compile.md) — full directive reference
-- [Lint guide](lint.md) — check rules and proof.toml options
+- [Lint guide](lint.md) — check rules and mdloom.toml options

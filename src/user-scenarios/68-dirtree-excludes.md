@@ -1,9 +1,9 @@
 # US-68 — Directory tree with excludes
 
-Render the proof source tree, hiding compiled artifacts and the cache
+Render the mdloom source tree, hiding compiled artifacts and the cache
 directory. Demonstrates the `exclude` glob list.
 
-<!-- proof:compiled from="proof:tree kind=dirtree" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dirtree" uri="" -->
 ```dirtree
 src/
 ├── chart/
@@ -89,11 +89,11 @@ src/
 ├── user-scenarios/
 │   ├── 26-canvas-tui/
 │   │   └── main.rs
-│   ├── 27-proof-math-binary/
+│   ├── 27-mdloom-math-binary/
 │   │   └── main.rs
 │   ├── 29-fix-pipeline/
 │   │   ├── before.md
-│   │   └── proof.toml
+│   │   └── mdloom.toml
 │   ├── data/
 │   │   └── models.md
 │   ├── 02-math-api.source.md
@@ -250,7 +250,7 @@ src/
 │   ├── 98-include-pin.source.md
 │   ├── 99-layout-collage.md
 │   ├── 99-layout-collage.source.md
-│   └── proof.toml
+│   └── mdloom.toml
 ├── ai.rs
 ├── baseline.rs
 ├── cache.rs
@@ -268,4 +268,4 @@ src/
 ├── spec_gen.rs
 └── unused.rs
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

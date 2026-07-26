@@ -4,7 +4,7 @@ When a package appears under multiple parents, the second occurrence is
 marked `(deduped ↑ N)` pointing at the first appearance — keeping the
 output bounded for diamond-shaped graphs.
 
-<!-- proof:compiled from="proof:tree kind=dependency" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dependency" uri="" -->
 ```dependency
 | package | depends_on | version |
 ├── |---------|------------|---------|
@@ -13,7 +13,7 @@ output bounded for diamond-shaped graphs.
 ├── | utils | core | 1.0 |
 └── | core | — | 1.0 |
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 `core` is depended on by both `app` and `utils`, but only renders once;
 the second occurrence shows the dedup marker.

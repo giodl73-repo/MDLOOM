@@ -2,14 +2,14 @@
 
 ## Repository structure
 
-<!-- proof:compiled from="proof:tree kind=dirtree" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=dirtree" uri="" -->
 ```dirtree
 user-scenarios/
 ├── 07-canvas-tui/
-├── 21-proof-math-demo/
+├── 21-mdloom-math-demo/
 ├── 26-canvas-tui/
 │   └── main.rs
-├── 27-proof-math-binary/
+├── 27-mdloom-math-binary/
 │   └── main.rs
 ├── 29-fix-pipeline/
 ├── data/
@@ -33,13 +33,13 @@ user-scenarios/
 ├── 22-status-board.dashboard.source.md
 ├── 23-adr-with-toc.source.md
 ├── 25-wip-guide.source.md
-└── proof.toml
+└── mdloom.toml
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ## Architecture hierarchy
 
-proof:bullets
+mdloom:bullets
 - platform
   - auth-service: user-db, cache, jwt-lib
   - api-gateway: auth-service, rate-limiter, router
@@ -49,10 +49,10 @@ proof:bullets
 
 ## Crate dependencies
 
-proof:bullets
-- proof (CLI + lib)
-  - proof-canvas: unicode-width
-  - proof-math: unicode-width
+mdloom:bullets
+- mdloom (CLI + lib)
+  - mdloom-canvas: unicode-width
+  - mdloom-math: unicode-width
   - mdpath: thiserror
 - icelines
   - icelines-core: (no deps)

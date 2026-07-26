@@ -4,14 +4,14 @@
 
 Evaluate the following integral using the substitution $u = x^2 + 1$:
 
-```proof:math
+```mdloom:math
 \int_0^2 \frac{x}{\sqrt{x^2 + 1}}\, dx
 ```
 
 **Solution:** Let $u = x^2 + 1$, so $du = 2x\, dx$.
 When $x=0$, $u=1$; when $x=2$, $u=5$.
 
-```proof:math
+```mdloom:math
 \int_1^5 \frac{1}{2\sqrt{u}}\, du = \left[\sqrt{u}\right]_1^5 = \sqrt{5} - 1
 ```
 
@@ -33,7 +33,7 @@ Find the area enclosed by $y = \sin x$ and $y = \cos x$ on $[0, \pi]$.
 
 The curves intersect at $x = \pi/4$. The area is:
 
-```proof:math
+```mdloom:math
 \int_0^{\pi/4} (\cos x - \sin x)\, dx + \int_{\pi/4}^{\pi} (\sin x - \cos x)\, dx
 ```
 
@@ -46,7 +46,7 @@ Evaluating: $(\sqrt{2} - 1) + (1 + \sqrt{2}) = 2\sqrt{2}$
 Prove that $\int_0^{\infty} e^{-x^2}\, dx = \frac{\sqrt{\pi}}{2}$ using the
 Gaussian integral result:
 
-```proof:math
+```mdloom:math
 \int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}
 ```
 

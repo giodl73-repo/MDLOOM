@@ -63,7 +63,7 @@ pub(crate) fn store_compile_cache(
             .iter()
             .map(|path| path.display().to_string())
             .collect(),
-        proof_version: env!("CARGO_PKG_VERSION").to_string(),
+        mdloom_version: env!("CARGO_PKG_VERSION").to_string(),
         created_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

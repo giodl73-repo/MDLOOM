@@ -60,7 +60,7 @@ to support existing publish backend claims.
   `heading_path.<id>`.
 - Added L0 coverage with `publication_markdown_extracts_common_blocks`.
 - Added L1 coverage with `publication_ast_uses_resolved_compile_output`,
-  proving AST extraction consumes compiled Markdown after `proof:toc`
+  proving AST extraction consumes compiled Markdown after `mdloom:toc`
   resolution rather than raw source directives.
 - Validation:
   - `cargo fmt --check`

@@ -12,7 +12,7 @@ operation, and content tagging.
   list, scalar, and block-list forms.
 - Stripped frontmatter from ordinary `.source.md` compile output while preserving
   the source body.
-- Added `proof stats --by-tag` to summarize tag, op, and content-tag counts
+- Added `mdloom stats --by-tag` to summarize tag, op, and content-tag counts
   across the same files selected for stats.
 - Added status surface for source frontmatter/tag coverage.
 - Documented source frontmatter in README and the CLI spec.

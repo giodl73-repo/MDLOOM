@@ -4,7 +4,7 @@ Closed: 2026-05-16
 
 ## Outcome
 
-PROOF now supports a scoped publish backend family behind `proof compile`:
+MDLOOM now supports a scoped publish backend family behind `mdloom compile`:
 
 - `json-report` for machine-readable compile/report bundles.
 - `site` for local static HTML sites with page navigation and site manifests.
@@ -21,8 +21,8 @@ deferred.
 | Pulse | Result |
 |---:|---|
 | 01 | Captured backend contracts, sequencing, invariants, and non-goals. |
-| 02 | Added `proof.publish.json_report.v1` with resolved Markdown, sections, refs, diagnostics, metadata, and compile counts. |
-| 03 | Added static site generation: pages, `index.html`, `proof-site.json`, and manifest entries. |
+| 02 | Added `mdloom.publish.json_report.v1` with resolved Markdown, sections, refs, diagnostics, metadata, and compile counts. |
+| 03 | Added static site generation: pages, `index.html`, `mdloom-site.json`, and manifest entries. |
 | 04 | Added deterministic dependency-free PDF generation from resolved HTML output. |
 | 05 | Added native DOCX generation with OOXML package/content tests. |
 | 05a | Hardened L0/L1 coverage for DOCX, static site, and resolved-output publish contracts. |

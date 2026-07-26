@@ -1,4 +1,4 @@
-# proof Dashboard — Fixed-Canvas Terminal UIs
+# mdloom Dashboard — Fixed-Canvas Terminal UIs
 
 A dashboard is a fixed-size ASCII canvas composed from named regions. Unlike
 slides (which flow top-to-bottom) or prose (which wraps), a dashboard gives
@@ -17,7 +17,7 @@ context.
 ## Basic dashboard structure
 
 A dashboard source file is a `.dashboard.source.md` file with two parts:
-YAML front-matter declaring the canvas and regions, and `proof:region` blocks
+YAML front-matter declaring the canvas and regions, and `mdloom:region` blocks
 providing content for each region.
 
 The front-matter declares the canvas dimensions and names every region with
@@ -43,15 +43,15 @@ dashboard:
 
 ## Region content
 
-Each `proof:region` block fills one named region. The body of the block is a
+Each `mdloom:region` block fills one named region. The body of the block is a
 mini-document that supports the same directives as any compiled source file:
-`proof:element`, `proof:tree`, `proof:symbol`, `proof:shape`, `proof:bullets`,
+`mdloom:element`, `mdloom:tree`, `mdloom:symbol`, `mdloom:shape`, `mdloom:bullets`,
 and literal text lines. Content is clipped to the region's declared width and
 height — if your content is taller than the region, it's truncated.
 
 ---
 
-## Example: proof stats dashboard
+## Example: mdloom stats dashboard
 
 This shows a typical 60-column stats board with a title header, three metric
 columns, and a footer.
@@ -61,7 +61,7 @@ columns, and a footer.
 dashboard:
   width: 60
   height: 14
-  title: "proof stats"
+  title: "mdloom stats"
   regions:
     title:  { x: 0, y: 0,  width: 60, height: 2  }
     tests:  { x: 0, y: 2,  width: 20, height: 5  }
@@ -96,7 +96,7 @@ are zero-indexed.
 
 When positioning regions, think of `x` as the left edge and `y` as the top
 edge of the region rectangle. Two regions overlap if their rectangles
-intersect — proof reports this as a `DASHBOARD-003` error.
+intersect — mdloom reports this as a `DASHBOARD-003` error.
 
 ---
 
@@ -104,7 +104,7 @@ intersect — proof reports this as a `DASHBOARD-003` error.
 
 | Code | Meaning |
 |------|---------|
-| `DASHBOARD-001` | Region declared in front-matter but no `proof:region` block provides content |
+| `DASHBOARD-001` | Region declared in front-matter but no `mdloom:region` block provides content |
 | `DASHBOARD-002` | Region content exceeds its bounding box (clipped) |
 | `DASHBOARD-003` | Two regions overlap — adjust positions or sizes |
 
@@ -112,14 +112,14 @@ intersect — proof reports this as a `DASHBOARD-003` error.
 
 ## Region attributes
 
-The `proof:region name=X` directive takes one required attribute:
+The `mdloom:region name=X` directive takes one required attribute:
 
 | Attribute | Required | Description |
 |-----------|----------|-------------|
 | `name` | yes | Must match a key declared in the YAML `regions:` map |
 
 The region's position and size are entirely determined by the front-matter
-declaration — you can't override them in the `proof:region` block.
+declaration — you can't override them in the `mdloom:region` block.
 
 ---
 
@@ -131,7 +131,7 @@ different problems:
 | | Dashboard | Slide |
 |-|-----------|-------|
 | Layout | Pixel-precise x/y coordinates | Flow-based zones (title + body) |
-| Content | Any proof: directives | Slide body directives |
+| Content | Any mdloom: directives | Slide body directives |
 | File suffix | `.dashboard.source.md` | `.slides.source.md` |
 | Use case | Terminal UIs, status boards | Presentations, decks |
 | Output | Single canvas | Sequence of slides with separators |

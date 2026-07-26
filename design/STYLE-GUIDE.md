@@ -1,8 +1,8 @@
 # ASCII Art Style Guide for Markdown Documents
 
-**Version:** 1.0 — 2026-04-25  
-**Applies to:** All fenced code block diagrams in markdown documents  
-**Enforced by:** proof (see constraint IDs below — e.g. S-01)  
+**Version:** 1.0 — 2026-04-25
+**Applies to:** All fenced code block diagrams in markdown documents
+**Enforced by:** mdloom (see constraint IDs below — e.g. S-01)
 **Specs:** `specs/commonmark-code-blocks.md` · `specs/gfm-code-blocks.md` ·
            `specs/unicode-east-asian-width.md` · `specs/mkdocs-rendering.md`
 
@@ -17,7 +17,7 @@ character wider than its border, a `|` at column 8 when column 9 is expected
 invisible to authors and accumulate silently.
 
 This style guide establishes the rules that make diagrams render correctly
-across CommonMark, GitHub GFM, and MkDocs Material. proof enforces them.
+across CommonMark, GitHub GFM, and MkDocs Material. mdloom enforces them.
 
 ---
 
@@ -45,7 +45,7 @@ every supported renderer.
 CJK and fullwidth characters. A `─` at the wrong position offsets every character
 to its right.
 
-**proof check:** Future — `ascii_char_range` warning when prohibited characters
+**mdloom check:** Future — `ascii_char_range` warning when prohibited characters
 appear in diagram lines.
 
 ---
@@ -75,7 +75,7 @@ Usually introduced when editing cell content without adjusting padding.
 **Fix:** Count characters. Top border defines the expected width. Every other
 row must match exactly.
 
-**proof check:** `ascii_box_width` (error) — already enforced.
+**mdloom check:** `ascii_box_width` (error) — already enforced.
 
 ---
 
@@ -98,7 +98,7 @@ WRONG:
 **Fix:** Add or remove exactly one character in the cell that ends before the
 misaligned `|`. The arithmetic: expected_col − actual_col = chars to add.
 
-**proof check:** `ascii_box_col` (error) — already enforced.
+**mdloom check:** `ascii_box_col` (error) — already enforced.
 
 ---
 
@@ -120,7 +120,7 @@ WRONG:
 **Rationale:** Zero-padding makes diagrams hard to read and is a common editing
 artifact (cell content copied in without surrounding spaces).
 
-**proof check:** `ascii_cell_padding` (warning) — already enforced.
+**mdloom check:** `ascii_cell_padding` (warning) — already enforced.
 
 ---
 
@@ -149,7 +149,7 @@ cell, not the prose after it.
 **Fix:** Move the annotation to a line outside the code block, or create a
 second cell column with a proper border.
 
-**proof check:** `ascii_box_width` (error) — caught by width mismatch.
+**mdloom check:** `ascii_box_width` (error) — caught by width mismatch.
 
 ---
 
@@ -179,15 +179,15 @@ WRONG:
 └──────┘
 ```
 
-**Why:** Even with the `can_open_box()` guard (proof won't detect a phantom box),
+**Why:** Even with the `can_open_box()` guard (mdloom won't detect a phantom box),
 the visual appearance without a connector is ambiguous — readers can't tell where
 one box ends and another begins.
 
-**Note:** proof no longer generates false errors for the correct (connector)
+**Note:** mdloom no longer generates false errors for the correct (connector)
 pattern after the Pattern C fix. The wrong (adjacent) pattern is also handled
 cleanly — it's just hard to read.
 
-**proof check:** No error currently — this is a visual quality rule.
+**mdloom check:** No error currently — this is a visual quality rule.
 
 ---
 
@@ -213,7 +213,7 @@ composite must have the same width. This is Pattern F.
 **Fix:** Verify total width of each content row. Add/remove trailing spaces in
 the last cell to match the border width.
 
-**proof check:** `ascii_box_width` (error) — already enforced.
+**mdloom check:** `ascii_box_width` (error) — already enforced.
 
 ---
 
@@ -226,7 +226,7 @@ increase detection complexity and false positive risk.
 **Exception:** Flowcharts with multiple stacked or side-by-side boxes are the
 natural use case for this library. They are expected and supported.
 
-**proof check:** Not enforced — recommendation only.
+**mdloom check:** Not enforced — recommendation only.
 
 ---
 
@@ -261,7 +261,7 @@ WRONG (no separator):
 | x    | y     |   ← second row is body, not separator → not a GFM table
 ```
 
-**proof check:** `md_table_separator_invalid` (warning)
+**mdloom check:** `md_table_separator_invalid` (warning)
 
 ---
 
@@ -283,7 +283,7 @@ WRONG:
 | x | y | extra |   ← 3 cols in body, 2 in header
 ```
 
-**proof check:** `md_table_col_mismatch` (error)
+**mdloom check:** `md_table_col_mismatch` (error)
 
 ---
 
@@ -298,7 +298,7 @@ WRONG:    |content|     ← no padding
 WRONG:    | content|    ← missing right padding
 ```
 
-**proof check:** `md_table_cell_padding` (warning)
+**mdloom check:** `md_table_cell_padding` (warning)
 
 ---
 
@@ -312,7 +312,7 @@ The style contract requires tables for comparisons and cheat sheets.
 required_tables = 1
 ```
 
-**proof check:** `md_missing_table` (warning)
+**mdloom check:** `md_missing_table` (warning)
 
 ---
 
@@ -320,7 +320,7 @@ required_tables = 1
 
 **Constraint:** When a table schema specifies `heading = "## Section Name"`,
 that section must contain a pipe table. If the heading exists but has no table,
-proof warns.
+mdloom warns.
 
 ```toml
 [[markdown_table.table_schemas]]
@@ -328,7 +328,7 @@ heading = "## Decision Cheat Sheet"
 min_body_rows = 2
 ```
 
-**proof check:** `md_missing_table` (warning)
+**mdloom check:** `md_missing_table` (warning)
 
 ---
 
@@ -349,13 +349,13 @@ min_body_rows = 4
 # Future: constrain what values are valid for specific columns
 ```
 
-**proof check:** `md_table_schema` (warning)
+**mdloom check:** `md_table_schema` (warning)
 
 ---
 
 ## Enforcement Summary
 
-| Rule | proof Code | Severity | Status |
+| Rule | mdloom Code | Severity | Status |
 |------|-----------|----------|--------|
 | S-01: alignment-safe chars only | `ascii_char_range` | error/warn | ✅ Enforced |
 | S-02: consistent border width | `ascii_box_width` | error | ✅ Enforced |
@@ -386,5 +386,5 @@ min_body_rows = 4
 7. Use only chars from U+0020-U+007E, U+2500-U+257F, U+2190-U+21FF
 ```
 
-Run `proof check --format rich myfile.md` to get precise line:col locations
+Run `mdloom check --format rich myfile.md` to get precise line:col locations
 with surrounding context for every violation.

@@ -18,7 +18,7 @@ pub(crate) enum Directive {
     Include {
         uri: String,
         /// Optional DaVinci pin ID declared inline. Compile warns if no matching
-        /// [[davinci]] entry with this ID exists in proof.toml.
+        /// [[davinci]] entry with this ID exists in mdloom.toml.
         pin: Option<String>,
         line_start: usize,
         line_end: usize,
@@ -99,7 +99,7 @@ pub(crate) enum Directive {
         line_start: usize,
         line_end: usize,
     },
-    /// proof:xref — cross-reference to a heading in another document.
+    /// mdloom:xref — cross-reference to a heading in another document.
     /// Renders as "See: [Heading Text](relative-path.md#slug)".
     Xref {
         /// Target URI: `md://path.md#heading-slug` or `md://path.md`
@@ -111,10 +111,10 @@ pub(crate) enum Directive {
         line_start: usize,
         line_end: usize,
     },
-    /// proof:blockquote — prose-document block quote.
+    /// mdloom:blockquote — prose-document block quote.
     ///
-    /// Distinct from `proof:quote`, which is slide-only (centered, curly-quoted).
-    /// `proof:blockquote` is for prose documents: left-aligned, indented, with
+    /// Distinct from `mdloom:quote`, which is slide-only (centered, curly-quoted).
+    /// `mdloom:blockquote` is for prose documents: left-aligned, indented, with
     /// optional attribution on its own trailing line.
     Blockquote {
         /// Body text — multi-line. Blank lines separate paragraphs within the quote.
@@ -157,7 +157,7 @@ pub(crate) enum Directive {
         line_start: usize,
         line_end: usize,
     },
-    /// proof:chart — full bar or line chart (distinct from sparkline elements).
+    /// mdloom:chart — full bar or line chart (distinct from sparkline elements).
     Chart {
         attrs: crate::chart::ChartAttrs,
         /// md:// URI of a data table when source-driven; None for inline body data.
@@ -449,13 +449,13 @@ pub fn parse_directives(source: &str) -> Vec<(usize, usize, String, String)> {
 
 pub(crate) fn directive_header_attrs<'a>(info_after_backticks: &'a str, kind: &str) -> &'a str {
     info_after_backticks
-        .strip_prefix("proof:")
+        .strip_prefix("mdloom:")
         .and_then(|rest| rest.strip_prefix(kind))
         .unwrap_or("")
         .trim()
 }
 
-/// Parsed attributes from a proof:element directive.
+/// Parsed attributes from a mdloom:element directive.
 #[derive(Debug, Default)]
 pub struct ElementAttrs {
     pub width: Option<usize>,
@@ -547,7 +547,7 @@ pub(crate) fn parse_element_directive(attrs_str: &str, body: &[&str]) -> Element
     }
 }
 
-/// Parsed attributes from a proof:tree directive.
+/// Parsed attributes from a mdloom:tree directive.
 #[derive(Debug, Default)]
 pub struct TreeAttrs {
     pub name: Option<String>,
@@ -1168,7 +1168,7 @@ pub fn scan_directive_spans(source: &str) -> Vec<DirectiveSpan<'_>> {
     let mut i = 0;
     while i < lines.len() {
         let trimmed = lines[i].trim_start();
-        if let Some(kind) = proof_directive_kind(trimmed) {
+        if let Some(kind) = mdloom_directive_kind(trimmed) {
             let line_start = i;
             let info_after_backticks = trimmed[3..].to_string();
             let attrs = directive_header_attrs(&info_after_backticks, kind).to_string();
@@ -1196,12 +1196,9 @@ pub fn scan_directive_spans(source: &str) -> Vec<DirectiveSpan<'_>> {
     spans
 }
 
-pub fn proof_directive_kind(line: &str) -> Option<&'static str> {
+pub fn mdloom_directive_kind(line: &str) -> Option<&'static str> {
     let line = line.trim_start();
-    if !line.starts_with("```proof:") {
-        return None;
-    }
-    let rest = &line[9..]; // after "```proof:"
+    let rest = line.strip_prefix("```mdloom:")?;
     if rest.starts_with("include") {
         Some("include")
     } else if rest.starts_with("layout") {
@@ -1280,7 +1277,7 @@ pub fn extract_attr_value(attrs: &str, key: &str) -> Option<String> {
     None
 }
 
-/// Parse `foreach=VAR in URI` from the info string after `proof:row`.
+/// Parse `foreach=VAR in URI` from the info string after `mdloom:row`.
 /// Returns (var_name, source_uri). Both empty strings on parse failure.
 pub(crate) fn parse_foreach(info: &str) -> (String, String) {
     let mut var_name = String::new();
@@ -1302,9 +1299,9 @@ pub(crate) fn parse_foreach(info: &str) -> (String, String) {
     (var_name, source_uri)
 }
 
-/// Parse a body line of the form `proof:element kind=X field=Y width=N ...`.
+/// Parse a body line of the form `mdloom:element kind=X field=Y width=N ...`.
 pub(crate) fn parse_row_element_line(line: &str) -> Option<RowElement> {
-    let rest = line.strip_prefix("proof:element")?.trim();
+    let rest = line.strip_prefix("mdloom:element")?.trim();
     let attrs = ElementAttrs::parse(rest);
     let kind_str = extract_attr_value(rest, "kind").unwrap_or_else(|| "value".to_string());
     let kind = ElementKind::parse(&kind_str)?;
@@ -1331,42 +1328,42 @@ mod tests {
 
     #[test]
     fn classifies_known_directive_kinds() {
-        assert_eq!(proof_directive_kind("```proof:include"), Some("include"));
+        assert_eq!(mdloom_directive_kind("```mdloom:include"), Some("include"));
         assert_eq!(
-            proof_directive_kind("```proof:layout gap=4"),
+            mdloom_directive_kind("```mdloom:layout gap=4"),
             Some("layout")
         );
-        assert_eq!(proof_directive_kind("```proof:numbered-list"), Some("ol"));
-        assert_eq!(proof_directive_kind("```proof:ol"), Some("ol"));
+        assert_eq!(mdloom_directive_kind("```mdloom:numbered-list"), Some("ol"));
+        assert_eq!(mdloom_directive_kind("```mdloom:ol"), Some("ol"));
         assert_eq!(
-            proof_directive_kind("  ```proof:chart kind=bar"),
+            mdloom_directive_kind("  ```mdloom:chart kind=bar"),
             Some("chart")
         );
-        assert_eq!(proof_directive_kind("```proof:links"), Some("links"));
+        assert_eq!(mdloom_directive_kind("```mdloom:links"), Some("links"));
         assert_eq!(
-            proof_directive_kind("```proof:backlinks target=README.md"),
+            mdloom_directive_kind("```mdloom:backlinks target=README.md"),
             Some("backlinks")
         );
         assert_eq!(
-            proof_directive_kind("```proof:headings source=README.md"),
+            mdloom_directive_kind("```mdloom:headings source=README.md"),
             Some("headings")
         );
         assert_eq!(
-            proof_directive_kind("```proof:frontmatter field=tags"),
+            mdloom_directive_kind("```mdloom:frontmatter field=tags"),
             Some("frontmatter")
         );
     }
 
     #[test]
-    fn ignores_unknown_or_non_proof_fences() {
-        assert_eq!(proof_directive_kind("```rust"), None);
-        assert_eq!(proof_directive_kind("```proof:unknown"), None);
-        assert_eq!(proof_directive_kind("~~~proof:include"), None);
+    fn ignores_unknown_or_non_mdloom_fences() {
+        assert_eq!(mdloom_directive_kind("```rust"), None);
+        assert_eq!(mdloom_directive_kind("```mdloom:unknown"), None);
+        assert_eq!(mdloom_directive_kind("~~~mdloom:include"), None);
     }
 
     #[test]
     fn scans_directive_spans_with_body_and_closing_line() {
-        let source = "# Doc\n\n```proof:include pin=arch\nmd://figures/arch.md\n```\n\nAfter\n";
+        let source = "# Doc\n\n```mdloom:include pin=arch\nmd://figures/arch.md\n```\n\nAfter\n";
 
         let spans = scan_directive_spans(source);
 
@@ -1374,14 +1371,14 @@ mod tests {
         assert_eq!(spans[0].line_start, 2);
         assert_eq!(spans[0].line_end, 4);
         assert_eq!(spans[0].kind, "include");
-        assert_eq!(spans[0].info_after_backticks, "proof:include pin=arch");
+        assert_eq!(spans[0].info_after_backticks, "mdloom:include pin=arch");
         assert_eq!(spans[0].attrs, "pin=arch");
         assert_eq!(spans[0].body, vec!["md://figures/arch.md"]);
     }
 
     #[test]
     fn scans_multiple_directive_spans() {
-        let source = "```proof:math\nx\n```\n\n```proof:chart kind=bar\nA: 1\n```\n";
+        let source = "```mdloom:math\nx\n```\n\n```mdloom:chart kind=bar\nA: 1\n```\n";
 
         let spans = scan_directive_spans(source);
 
@@ -1407,16 +1404,16 @@ mod tests {
     #[test]
     fn slices_directive_header_attrs() {
         assert_eq!(
-            directive_header_attrs("proof:element kind=value width=4", "element"),
+            directive_header_attrs("mdloom:element kind=value width=4", "element"),
             "kind=value width=4"
         );
         assert_eq!(
-            directive_header_attrs("proof:blockquote attribution=\"Ada\"", "blockquote"),
+            directive_header_attrs("mdloom:blockquote attribution=\"Ada\"", "blockquote"),
             "attribution=\"Ada\""
         );
-        assert_eq!(directive_header_attrs("proof:table", "table"), "");
-        assert_eq!(directive_header_attrs("proof:table", "toc"), "");
-        assert_eq!(directive_header_attrs("not-proof:table", "table"), "");
+        assert_eq!(directive_header_attrs("mdloom:table", "table"), "");
+        assert_eq!(directive_header_attrs("mdloom:table", "toc"), "");
+        assert_eq!(directive_header_attrs("not-mdloom:table", "table"), "");
     }
 
     #[test]
@@ -1436,17 +1433,17 @@ mod tests {
 
     #[test]
     fn parses_crop_side_info_directives() {
-        let source = r#"```proof:links source="README.md" status=broken format=count side-info="reports/links.json"
+        let source = r#"```mdloom:links source="README.md" status=broken format=count side-info="reports/links.json"
 ```
 
-```proof:backlinks target="README.md" format=table
+```mdloom:backlinks target="README.md" format=table
 ```
 
-```proof:headings format=count
+```mdloom:headings format=count
 README.md
 ```
 
-```proof:frontmatter field=tags value=guide op=has format=table side_info="reports/frontmatter.json"
+```mdloom:frontmatter field=tags value=guide op=has format=table side_info="reports/frontmatter.json"
 ```"#;
 
         let dirs = collect_directives(source);
@@ -1830,7 +1827,7 @@ README.md
 
     #[test]
     fn parses_region_directive_name_and_body() {
-        let body = ["Header", "proof:element kind=label value=\"X\" width=5"];
+        let body = ["Header", "mdloom:element kind=label value=\"X\" width=5"];
         let region = parse_region_directive("name=\"top row\"", &body);
 
         assert_eq!(region.name, "top row");
@@ -1843,7 +1840,7 @@ README.md
 
     #[test]
     fn collect_directives_collects_region_body() {
-        let source = "```proof:region name=header\nHello world\nproof:element kind=label value=\"X\" width=5\n```";
+        let source = "```mdloom:region name=header\nHello world\nmdloom:element kind=label value=\"X\" width=5\n```";
         let dirs = collect_directives(source);
 
         assert_eq!(dirs.len(), 1);
@@ -1854,7 +1851,7 @@ README.md
                     body,
                     &vec![
                         "Hello world".to_string(),
-                        "proof:element kind=label value=\"X\" width=5".to_string(),
+                        "mdloom:element kind=label value=\"X\" width=5".to_string(),
                     ]
                 );
             }
@@ -1911,7 +1908,7 @@ README.md
     #[test]
     fn parses_row_element_lines() {
         let label = parse_row_element_line(
-            "proof:element kind=label field=name width=12 align=left fill=# empty=.",
+            "mdloom:element kind=label field=name width=12 align=left fill=# empty=.",
         )
         .unwrap();
 
@@ -1922,13 +1919,13 @@ README.md
         assert_eq!(label.empty_char, '.');
 
         let mini_bar =
-            parse_row_element_line("proof:element kind=mini-bar field=pts width=10 max=200")
+            parse_row_element_line("mdloom:element kind=mini-bar field=pts width=10 max=200")
                 .unwrap();
         assert_eq!(mini_bar.max, Some(200.0));
         assert!(matches!(mini_bar.kind, ElementKind::MiniBar));
 
         assert!(parse_row_element_line("# Comment").is_none());
-        assert!(parse_row_element_line("proof:element kind=label width=12").is_none());
+        assert!(parse_row_element_line("mdloom:element kind=label width=12").is_none());
     }
 
     #[test]
@@ -1936,8 +1933,8 @@ README.md
         let row = parse_row_directive(
             "foreach=player in md://stats.md#edm:table:0 separator=\",\" width=80 no-chrome",
             &[
-                "proof:element kind=label field=name width=12",
-                "proof:element kind=mini-bar field=pts width=10 max=200",
+                "mdloom:element kind=label field=name width=12",
+                "mdloom:element kind=mini-bar field=pts width=10 max=200",
             ],
         );
 

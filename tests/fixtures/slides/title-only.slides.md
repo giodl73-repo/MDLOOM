@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:slides" count=1 -->
+<!-- mdloom:compiled from="mdloom:slides" count=1 -->
 ```slides
 SLIDE 1 ─────────────────────────────── 1/1
                                         
@@ -8,4 +8,4 @@ SLIDE 1 ────────────────────────
                                         
                                         
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

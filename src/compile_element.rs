@@ -40,7 +40,7 @@ pub(crate) fn compile_element(
                     figure_id: None,
                     invariant: String::new(),
                     message:
-                        "proof:element requires either value=\"...\" or a source URI in the body"
+                        "mdloom:element requires either value=\"...\" or a source URI in the body"
                             .to_string(),
                     source_line: source_line + 1,
                 });
@@ -101,7 +101,7 @@ pub(crate) fn compile_element(
                     uri: src_uri.to_string(),
                     figure_id: None,
                     invariant: String::new(),
-                    message: "proof:element with a source URI requires field=\"ColumnName\""
+                    message: "mdloom:element with a source URI requires field=\"ColumnName\""
                         .to_string(),
                     source_line: source_line + 1,
                 });
@@ -167,7 +167,7 @@ pub(crate) fn compile_element(
                 uri: uri_str.to_string(),
                 figure_id: None,
                 invariant: String::new(),
-                message: "proof:element requires width=N".to_string(),
+                message: "mdloom:element requires width=N".to_string(),
                 source_line: source_line + 1,
             });
             return source_fallback(source_lines, source_line, line_end);
@@ -353,7 +353,7 @@ pub(crate) fn compile_row(
             figure_id: None,
             invariant: String::new(),
             message: format!(
-                "proof:row produced no output — source table {:?} has 0 data rows",
+                "mdloom:row produced no output — source table {:?} has 0 data rows",
                 source_uri
             ),
             source_line: source_line + 1,
@@ -429,7 +429,7 @@ mod tests {
         };
         let mut violations = Vec::new();
         let lines = vec![
-            "```proof:element kind=value value=\"42\" width=4 align=right",
+            "```mdloom:element kind=value value=\"42\" width=4 align=right",
             "```",
         ];
         let out = compile_element(
@@ -465,7 +465,7 @@ mod tests {
         };
         let mut violations = Vec::new();
         let lines = vec![
-            "```proof:element kind=label value=\"McDavid\" width=8 align=left",
+            "```mdloom:element kind=label value=\"McDavid\" width=8 align=left",
             "```",
         ];
         let out = compile_element(
@@ -503,7 +503,7 @@ mod tests {
             ..Default::default()
         };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=badge value=\"UFA\" width=5", "```"];
+        let lines = vec!["```mdloom:element kind=badge value=\"UFA\" width=5", "```"];
         let out = compile_element(
             "badge",
             None,
@@ -536,7 +536,7 @@ mod tests {
         };
         let mut violations = Vec::new();
         let lines = vec![
-            "```proof:element kind=label value=\"Hi\" width=5 no-chrome",
+            "```mdloom:element kind=label value=\"Hi\" width=5 no-chrome",
             "```",
         ];
         let out = compile_element(
@@ -579,7 +579,7 @@ mod tests {
             ..Default::default()
         };
         let mut violations = Vec::new();
-        let lines = vec!["```proof:element kind=label value=\"Hi\" width=5", "```"];
+        let lines = vec!["```mdloom:element kind=label value=\"Hi\" width=5", "```"];
         let out = compile_element(
             "label",
             None,
@@ -599,7 +599,7 @@ mod tests {
             violation_messages(&violations)
         );
         assert!(
-            out.contains("<!-- proof:compiled"),
+            out.contains("<!-- mdloom:compiled"),
             "should have traceability comment: {:?}",
             out
         );
@@ -617,7 +617,7 @@ mod tests {
         };
         let mut violations = Vec::new();
         let lines = vec![
-            "```proof:element kind=value field=absent width=6",
+            "```mdloom:element kind=value field=absent width=6",
             "md://test",
             "```",
         ];

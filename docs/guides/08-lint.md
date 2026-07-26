@@ -1,6 +1,6 @@
-# proof Lint — Markdown and ASCII Art Validation
+# mdloom Lint — Markdown and ASCII Art Validation
 
-`proof check` is the linter — it scans markdown files and reports structural
+`mdloom check` is the linter — it scans markdown files and reports structural
 errors before they accumulate into an unmaintainable corpus. The core value is
 catching problems that are invisible to human readers but break the document's
 structural guarantees: a box that's one character too wide, a required section
@@ -17,25 +17,25 @@ auto-fixable with high confidence.
 
 ```bash
 # Lint current directory
-proof check .
+mdloom check .
 
 # Lint a specific directory
-proof check docs/
+mdloom check docs/
 
 # Only show errors (suppress warnings)
-proof check . --errors-only
+mdloom check . --errors-only
 
 # Exit with error code if any findings (useful for CI)
-proof check . --fail-on-error
+mdloom check . --fail-on-error
 ```
 
 ---
 
-## What proof checks
+## What mdloom checks
 
-<!-- proof:compiled from="proof:tree kind=taxonomy" uri="" -->
+<!-- mdloom:compiled from="mdloom:tree kind=taxonomy" uri="" -->
 ```taxonomy
-proof checks
+mdloom checks
 ├── ASCII art
 ├── ascii_box: Box border width and column separator alignment
 ├── ascii_flow: Flow diagram node labels and edge connector continuity
@@ -43,7 +43,7 @@ proof checks
 ├── ascii_barchart: Bar scale consistency
 ├── Markdown structure
 ├── markdown_h1: Required H1 heading
-├── markdown_h2: Required H2 sections (configured per-path in proof.toml)
+├── markdown_h2: Required H2 sections (configured per-path in mdloom.toml)
 ├── markdown_link: Broken internal links
 ├── Tables
 ├── markdown_table: Column count consistency across rows
@@ -51,14 +51,14 @@ proof checks
 ├── Source documents
 └── source_links: Broken md:// references in .source.md files
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
-## proof.toml configuration
+## mdloom.toml configuration
 
-All check rules are configured in `proof.toml`. Rules cascade: a root
-`proof.toml` sets defaults, per-directory files inherit and add. The most
+All check rules are configured in `mdloom.toml`. Rules cascade: a root
+`mdloom.toml` sets defaults, per-directory files inherit and add. The most
 powerful configuration is section schemas — they let you require specific H2
 headings in matching files, which enforces consistent structure across a
 document corpus.
@@ -91,9 +91,9 @@ paths_exclude = ["00-OVERVIEW.md"]
 
 ## All diagnostic codes
 
-The full set of codes proof can emit during `proof check`:
+The full set of codes mdloom can emit during `mdloom check`:
 
-<!-- proof:compiled from="proof:tree kind=taxonomy" uri="md://src/data/diagnostic-codes.md" -->
+<!-- mdloom:compiled from="mdloom:tree kind=taxonomy" uri="md://src/data/diagnostic-codes.md" -->
 ```taxonomy
 ascii_box
 ├── ascii_box_width
@@ -129,7 +129,7 @@ dashboard
 ├── DASHBOARD-002
 └── DASHBOARD-003
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 ---
 
@@ -149,34 +149,34 @@ align vertically across every row:
 └────────────────────┘   ← bottom border must also be 22 chars
 ```
 
-The most common violation is an off-by-one in the top or bottom border — proof
+The most common violation is an off-by-one in the top or bottom border — mdloom
 reports the expected and actual widths with the exact line number.
 
 ---
 
-## Auto-fix with proof fix
+## Auto-fix with mdloom fix
 
-`proof fix` applies deterministic corrections to lint errors. It generates a
+`mdloom fix` applies deterministic corrections to lint errors. It generates a
 structured fix plan (JSON) that lists every proposed edit with the old and new
 string, a confidence level, and a reasoning note.
 
 ```bash
 # Preview what would change
-proof fix . --dry-run
+mdloom fix . --dry-run
 
 # Apply only high-confidence fixes (safe for CI)
-proof fix . --min-confidence high
+mdloom fix . --min-confidence high
 
 # Apply everything including medium-confidence
-proof fix . --min-confidence medium
+mdloom fix . --min-confidence medium
 ```
 
-Confidence levels reflect how certain proof is about each fix:
+Confidence levels reflect how certain mdloom is about each fix:
 - **high**: Deterministic — the correct fix follows directly from the rule. Box
   widths, trailing characters, exact column positions.
 - **medium**: Heuristic — usually correct but occasionally wrong. Column separator
   positions in complex tables, indentation adjustments.
-- **low**: Requires human judgment — proof has a suggestion but isn't confident.
+- **low**: Requires human judgment — mdloom has a suggestion but isn't confident.
 
 ---
 
@@ -209,16 +209,16 @@ required_h2_all = ["Usage", "Examples"]
 
 ## CI integration
 
-proof exits with code 0 on success and 1 when `--fail-on-error` is set and
+mdloom exits with code 0 on success and 1 when `--fail-on-error` is set and
 any errors are found. Warnings don't trigger a non-zero exit by default.
 
 ```yaml
 # GitHub Actions
-- name: proof lint
-  run: C:/src/target/release/proof check . --fail-on-error
+- name: mdloom lint
+  run: C:/src/target/release/mdloom check . --fail-on-error
 
-- name: proof compile check
-  run: C:/src/target/release/proof compile --check src/guides/
+- name: mdloom compile check
+  run: C:/src/target/release/mdloom compile --check src/guides/
 ```
 
 The compile check validates that all directives can be resolved without actually

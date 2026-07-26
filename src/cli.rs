@@ -5,7 +5,7 @@ use crate::cmd_context::GlobalOptions;
 
 #[derive(Parser)]
 #[command(
-    name = "proof",
+    name = "mdloom",
     version,
     about = "A fast, schema-driven markdown and ASCII art linter with AI-assisted fix pipeline",
     long_about = None,
@@ -17,7 +17,7 @@ pub(crate) struct Cli {
     /// Files or directories to lint (default: current directory)
     paths: Vec<PathBuf>,
 
-    /// Schema config file (default: proof.toml in target directory)
+    /// Schema config file (default: mdloom.toml in target directory)
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
 
@@ -90,7 +90,7 @@ pub(crate) enum Command {
     Fix(crate::cmd_fix::Args),
     /// Generate a pre-populated draft fix plan — AI fills in decisions inline
     Draft(crate::cmd_draft::Args),
-    /// Pin a figure as a DaVinci — registers it in proof.toml with invariants
+    /// Pin a figure as a DaVinci — registers it in mdloom.toml with invariants
     Pin(crate::cmd_pin::Args),
     /// List all pinned DaVinci figures
     PinList,
@@ -109,13 +109,13 @@ pub(crate) enum Command {
     Toc(crate::cmd_index::Args),
     /// Generate a corpus catalog page with metadata and link side-info
     Catalog(crate::cmd_index::Args),
-    /// Write a proof.toml to the current directory
+    /// Write a mdloom.toml to the current directory
     Init,
     /// Corpus health summary — source count, stale files, last compile time
     Status(crate::cmd_status::Args),
     /// Summary statistics (error/warning counts by directory and code)
     Stats(crate::cmd_stats::Args),
-    /// Compile source documents — resolve proof: directives and write output
+    /// Compile source documents — resolve mdloom: directives and write output
     Compile(crate::cmd_compile::Args),
     /// Generate or validate ASCII tree diagrams
     Tree(crate::cmd_tree::Args),

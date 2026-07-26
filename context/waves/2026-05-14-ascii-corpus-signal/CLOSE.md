@@ -17,7 +17,7 @@ status: complete
 
 ## Corpus Impact
 
-`proof stats --by-code --config C:\src\maxim\proof.toml C:\src\maxim\`:
+`mdloom stats --by-code --config C:\src\maxim\mdloom.toml C:\src\maxim\`:
 
 | Metric | Before ASCII wave | After |
 |---|---:|---:|
@@ -41,4 +41,4 @@ design because the first attempted fix surfaced real corpus errors.
    for outer borders without masking real malformed diagrams.
 2. Classify `ascii_char_range` in MAXIM; it is now the largest remaining warning
    family alongside `ascii_box_col`.
-3. Sibling `mdpath` warnings remain external to proof.
+3. Sibling `mdpath` warnings remain external to mdloom.

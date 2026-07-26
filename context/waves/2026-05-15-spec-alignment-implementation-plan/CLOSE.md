@@ -11,16 +11,16 @@ The spec, roles, and wave history are directionally aligned after the
 compiler/typesetter and BACKFILL updates. The review found small fixable drift:
 
 - `backfill` was documented like a live command even though it is planned.
-- `proof fix -o/--output` was documented but is not implemented.
-- `proof compile --root` is implemented but was missing from the CLI reference.
+- `mdloom fix -o/--output` was documented but is not implemented.
+- `mdloom compile --root` is implemented but was missing from the CLI reference.
 - The sample fix plan included `generated_at`, which is not in `FixPlan`.
 - `md_broken_link` is registered but was missing from markdown-table diagnostics.
 
 ## Changes
 
 - Marked `backfill` as planned in the CLI command list.
-- Removed undocumented `proof fix -o/--output` from the spec.
-- Added `proof compile --root` to the compile options.
+- Removed undocumented `mdloom fix -o/--output` from the spec.
+- Added `mdloom compile --root` to the compile options.
 - Removed `generated_at` from the sample fix plan.
 - Added `md_broken_link` to the markdown-table diagnostics table.
 - Created the session implementation plan at:

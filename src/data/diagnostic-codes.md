@@ -1,4 +1,4 @@
-# proof Diagnostic Codes
+# mdloom Diagnostic Codes
 
 | code | severity | module | meaning |
 |------|----------|--------|---------|

@@ -3,7 +3,7 @@
 ## Mission
 
 Continue the command-module split by extracting the figure composition command,
-`proof layout`.
+`mdloom layout`.
 
 ## Changes
 
@@ -27,5 +27,5 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof compile` is the last large command implementation remaining in `main.rs`
+`mdloom compile` is the last large command implementation remaining in `main.rs`
 and should be extracted with care because it includes normal and watch modes.

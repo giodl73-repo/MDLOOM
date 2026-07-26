@@ -1,4 +1,4 @@
-<!-- proof:compiled from="proof:dashboard" -->
+<!-- mdloom:compiled from="mdloom:dashboard" -->
 ```dashboard
 SPEC HEALTH — every "✅ Implemented" status now means it
 
@@ -15,4 +15,4 @@ Specs claimed:                          v0.5  │ ██████████
 
 
 ```
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

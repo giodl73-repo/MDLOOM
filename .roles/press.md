@@ -12,7 +12,7 @@ paragraph formatting, and layout grids that professional authors expect.
 
 PRESS doesn't care how the parser works. They care whether the author can
 discover features, whether error messages make sense to a non-programmer, and
-whether proof's conventions match the mental model a writer already has.
+whether mdloom's conventions match the mental model a writer already has.
 
 ---
 
@@ -20,19 +20,19 @@ whether proof's conventions match the mental model a writer already has.
 
 **Authoring friction**
 - Does the directive syntax make sense to someone who has never seen a fenced code block?
-- Can an author guess `proof:bullets` without reading the docs?
-- Is the `[[compile]]` section in proof.toml discoverable from the error message when it's missing?
+- Can an author guess `mdloom:bullets` without reading the docs?
+- Is the `[[compile]]` section in mdloom.toml discoverable from the error message when it's missing?
 
 **Publishing conventions**
-- Word processors have paragraph styles. proof has directive names. Are they named
+- Word processors have paragraph styles. mdloom has directive names. Are they named
   the way a document author would name them?
-- `proof:centered` — good. `proof:ol` — unfamiliar. A writer would expect `proof:numbered-list`.
-- Does `proof:quote` behave like a block quote in Word/InDesign? (Attribution, indentation, visual weight.)
+- `mdloom:centered` — good. `mdloom:ol` — unfamiliar. A writer would expect `mdloom:numbered-list`.
+- Does `mdloom:quote` behave like a block quote in Word/InDesign? (Attribution, indentation, visual weight.)
 
 **Style and consistency**
-- Are similar things named similarly? `proof:callout` and `proof:quote` — are they parallel?
-- Does `proof:bullets` read like "bulleted list"? Does `proof:ol` read like "ordered list"? (It doesn't.)
-- Is the slide body language (proof:stat, proof:divider) consistent with the slide title language?
+- Are similar things named similarly? `mdloom:callout` and `mdloom:quote` — are they parallel?
+- Does `mdloom:bullets` read like "bulleted list"? Does `mdloom:ol` read like "ordered list"? (It doesn't.)
+- Is the slide body language (mdloom:stat, mdloom:divider) consistent with the slide title language?
 
 **Output quality**
 - Would a professional document author be satisfied with the rendered output?

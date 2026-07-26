@@ -1,4 +1,4 @@
-# proof Invariants
+# mdloom Invariants
 
 Invariants are properties that must hold for all inputs, at all times.
 A change that breaks an invariant is a regression — fix the code, not the invariant.
@@ -122,10 +122,10 @@ duplicates.
 
 ### I-8: JSON output is always valid JSON
 
-**Claim:** `proof --format json` always produces output that is parseable as a JSON array,
+**Claim:** `mdloom --format json` always produces output that is parseable as a JSON array,
 even when there are zero diagnostics (in which case it produces `[]`).
 
-**Why it matters:** Any tool that consumes proof's JSON output will break if the output
+**Why it matters:** Any tool that consumes mdloom's JSON output will break if the output
 is malformed.
 
 **Test:** `tests/integration_tests.rs::binary_json_output_is_parseable`
@@ -191,7 +191,7 @@ width and is reported as `ascii_box_width`. The annotation is not silently ignor
 
 **Why it matters:** Inline annotations are a common authoring error. The rule going
 forward: annotations must appear outside the code block or in a dedicated cell with
-a proper delimiter. proof enforces this mechanically.
+a proper delimiter. mdloom enforces this mechanically.
 
 **Test:** `annotation_after_closing_bar_detected` in `tests/integration_tests.rs`
 

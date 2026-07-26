@@ -2,20 +2,20 @@
 
 Indent style (default markdown blockquote with `>` prefix):
 
-<!-- proof:compiled from="proof:blockquote" -->
+<!-- mdloom:compiled from="mdloom:blockquote" -->
 > The Analytical Engine has no pretensions whatever to originate anything.
 > It can do whatever we know how to order it to perform.
 >
 > — Ada Lovelace
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->
 
 Boxed style — same content, ASCII-framed:
 
-<!-- proof:compiled from="proof:blockquote" -->
+<!-- mdloom:compiled from="mdloom:blockquote" -->
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ The Analytical Engine has no pretensions whatever to originate anything. │
 │ It can do whatever we know how to order it to perform.                   │
 │                                                                          │
 │                                                           — Ada Lovelace │
 └──────────────────────────────────────────────────────────────────────────┘
-<!-- /proof:compiled -->
+<!-- /mdloom:compiled -->

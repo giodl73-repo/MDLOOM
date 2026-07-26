@@ -261,7 +261,7 @@ pub fn expand_symbols(text: &str, lib: &SymbolLibrary) -> (String, Vec<SymbolWar
                         code: "SYMBOL-001",
                         name: name.to_string(),
                         message: format!(
-                            "symbol {:?} not found — check spelling or add [[symbol]] to proof.toml",
+                            "symbol {:?} not found — check spelling or add [[symbol]] to mdloom.toml",
                             name
                         ),
                     });

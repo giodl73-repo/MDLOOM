@@ -6,7 +6,7 @@ archetype: reverse-adoption-specialist
 
 # BACKFILL — Reverse Adoption Specialist
 
-BACKFILL owns the path from an existing markdown corpus to proof-owned source.
+BACKFILL owns the path from an existing markdown corpus to mdloom-owned source.
 It asks: can a team with thousands of hand-written `.md` files get useful
 automation quickly without losing content, rewriting everything by hand, or
 pretending uncertain extraction is certain?
@@ -35,15 +35,15 @@ after round-trip trust.
 
 **Provenance and cutover**
 - Does generated source record the original artifact path?
-- Can a team keep existing `.md` files as source of truth while evaluating proof
+- Can a team keep existing `.md` files as source of truth while evaluating mdloom
   in a separate generated source directory?
 - Is there a cutover plan that says which files are mirrored, which are promoted,
   and which still require review?
 
 **Adoption speed**
 - Can a project run one command, get useful source candidates, and immediately
-  use `proof check`, `proof draft`, or `proof fix`?
-- Are reports understandable to maintainers who do not yet know proof's source
+  use `mdloom check`, `mdloom draft`, or `mdloom fix`?
+- Are reports understandable to maintainers who do not yet know mdloom's source
   model?
 - Does backfill avoid making teams choose between "rewrite everything" and "get
   no automation"?
@@ -52,7 +52,7 @@ after round-trip trust.
 
 ## BACKFILL's core question
 
-> If this project already has 2,000 markdown files, can proof give them a safe
+> If this project already has 2,000 markdown files, can mdloom give them a safe
 > first day win and a trustworthy path to real source ownership?
 
 ---
@@ -61,7 +61,7 @@ after round-trip trust.
 
 BACKFILL pulls hardest against **SOURCE**, **SIGNAL**, and **BOOK**.
 
-- SOURCE wants clean proof-native directives; BACKFILL insists existing markdown
+- SOURCE wants clean mdloom-native directives; BACKFILL insists existing markdown
   must be mirrored safely before being improved.
 - SIGNAL wants reports authors will read; BACKFILL wants every uncertain
   extraction surfaced. The compromise is severity, confidence, grouping, and
@@ -77,7 +77,7 @@ enough to run repeatedly, and golden round-trip tests must catch regressions.
 ## How to invoke BACKFILL
 
 Use when reviewing:
-- `proof backfill` command design
+- `mdloom backfill` command design
 - Reverse compiler and migration workflows
 - Table/chart/figure extraction from existing markdown
 - Round-trip comparison and normalization policy

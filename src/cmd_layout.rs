@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
-use proof_lib::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
+use mdloom_lib::layout::{self, extract_content_lines, Align, Direction, LayoutConfig};
 use std::path::PathBuf;
 use std::process;
 

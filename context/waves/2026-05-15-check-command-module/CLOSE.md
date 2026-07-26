@@ -3,14 +3,14 @@
 ## Mission
 
 Continue the command-module split by extracting the default lint command,
-`proof check`.
+`mdloom check`.
 
 ## Changes
 
 - Added `src/cmd_check.rs`.
 - Moved check orchestration out of `main.rs`, including DaVinci validation,
   unused-figure scanning, diagnostic filtering/sorting, output rendering,
-  deduplication, summary printing, and `.proof/last-check.json` writing.
+  deduplication, summary printing, and `.mdloom/last-check.json` writing.
 - Kept clap/default-path handling in `main.rs` and passed command/global flags
   through a focused `cmd_check::Options` struct.
 - Preserved the existing check regression that verifies selected file counts
@@ -28,6 +28,6 @@ build/test; this wave did not change sibling repository code.
 
 ## Carry-forward
 
-`proof fix`, `proof resolve`, and `proof depends` remain in `main.rs`; `fix` is
+`mdloom fix`, `mdloom resolve`, and `mdloom depends` remain in `main.rs`; `fix` is
 the next natural extraction target because its plan application is already
-encapsulated in proof_lib and has an existing CLI regression.
+encapsulated in mdloom_lib and has an existing CLI regression.
