@@ -1,7 +1,7 @@
 ---
 wave: mdloom-product-rename
 date_open: 2026-07-25
-status: active
+status: done
 source_request: "Rename the PROOF repository and tool to MDLOOM."
 ---
 

@@ -115,7 +115,7 @@ close notes, and the artifacts that changed the system.
 | 2026-05-15 | Directive Parser Boundary | Extract mdloom directive kind classification, fence/header parsing, directive collection, typed directive ownership, directive payload parsing, prose directive renderers, shared source resolution, chart data helpers, inline tree helpers, and TOC generation from the compile facade. | done |
 | 2026-05-16 | Publish Backends | Plan JSON report bundle, static site, PDF, DOCX, and native PPTX publish targets while deferring LaTeX. | done |
 | 2026-05-16 | Publication AST and Themes | Introduce a shared publication AST and theme token system for consistent professional publish output. | active |
-| 2026-07-25 | MDLOOM Product Rename | Rename PROOF to MDLOOM across the repository, package family, command surface, configuration, state, directives, documentation, and release automation. | active |
+| 2026-07-25 | MDLOOM Product Rename | Rename PROOF to MDLOOM across the repository, package family, command surface, configuration, state, directives, documentation, and release automation. | done |
 
 ## Operating Model
 
